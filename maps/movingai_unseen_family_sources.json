@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "expected_families": [
+    "dao",
+    "room"
+  ],
+  "minimum_candidates_per_family": 5,
+  "required_absent_known_family_prefixes": [
+    "dao-",
+    "room-"
+  ],
+  "selection_policy": {
+    "name": "fixed_sha256_ranked_64x64_crop",
+    "seed": 20260731,
+    "crop_width": 64,
+    "crop_height": 64,
+    "crop_stride": 16,
+    "minimum_free_cells": 800,
+    "minimum_obstacle_fraction": 0.05,
+    "maximum_obstacle_fraction": 0.65,
+    "walkable_source_symbols": [
+      ".",
+      "G",
+      "S"
+    ],
+    "blocked_source_symbols": [
+      "@",
+      "O",
+      "T",
+      "W"
+    ],
+    "component_policy": "retain_largest_4_connected_free_component",
+    "performance_outcomes_used": false
+  },
+  "license": {
+    "name": "Open Data Commons Attribution License",
+    "official_benchmark_index": "https://www.movingai.com/benchmarks/grids.html",
+    "official_license_url": "https://opendatacommons.org/licenses/by/"
+  },
+  "sources": [
+    {
+      "id": "movingai-dao-snapshot-2026-07-31",
+      "official_index_url": "https://www.movingai.com/benchmarks/dao/index.html",
+      "archive_url": "https://www.movingai.com/benchmarks/dao/dao-map.zip",
+      "archive_filename": "dao-map.zip",
+      "archive_size": 807804,
+      "archive_sha256": "229393af31caaec732e5f4fd923940845ab056e94dadfb96b8afc24da472d3af",
+      "members": [
+        {
+          "family": "dao",
+          "name": "brc000d.map",
+          "size": 67375,
+          "sha256": "c5bcb3632d83e0dffe0ebcae7e8bccc57c667006f9a2d47103f5e8de528d0245"
+        },
+        {
+          "family": "dao",
+          "name": "brc501d.map",
+          "size": 65125,
+          "sha256": "3f8cdee83a7deda9eecebc06d6da7e438194c7143f1342ee7d370d6ccb5951e0"
+        },
+        {
+          "family": "dao",
+          "name": "den000d.map",
+          "size": 176941,
+          "sha256": "42f390dfd8f424f3a80418c431b65448d47bc424a16e42117daf75c776e0f96b"
+        },
+        {
+          "family": "dao",
+          "name": "hrt000d.map",
+          "size": 358321,
+          "sha256": "25524f05bed5f1aa7aa9570e1a893ec611bb427867bd70b99e3efdcb38db04a0"
+        },
+        {
+          "family": "dao",
+          "name": "lak300d.map",
+          "size": 203317,
+          "sha256": "0a57aab9aaaf55532602fcbf2d8094f4d542c5729a7c70f70adf0a5489ee698d"
+        }
+      ]
+    },
+    {
+      "id": "movingai-room-snapshot-2026-07-31",
+      "official_index_url": "https://www.movingai.com/benchmarks/room/index.html",
+      "archive_url": "https://www.movingai.com/benchmarks/room/room-map.zip",
+      "archive_filename": "room-map.zip",
+      "archive_size": 205465,
+      "archive_sha256": "f1442dea9b6f8d828e393ea4db90a12d3d87e535c278aa392a6008e3026d5c86",
+      "members": [
+        {
+          "family": "room",
+          "name": "8room_000.map",
+          "size": 262693,
+          "sha256": "a4bb11d357f47295a07f2f57cd40fca4853fbe87dd476b9a53e3430739e07b99"
+        },
+        {
+          "family": "room",
+          "name": "8room_005.map",
+          "size": 262693,
+          "sha256": "f945e197b18411fe2343c0cda765be5e644e82e370097971287e938a4498af58"
+        },
+        {
+          "family": "room",
+          "name": "16room_000.map",
+          "size": 262693,
+          "sha256": "efe1156993b2b96df1b23ce4f0f89d4c66b77051d9484efefa93899b141458af"
+        },
+        {
+          "family": "room",
+          "name": "32room_000.map",
+          "size": 262693,
+          "sha256": "57fe06dadf5caa09c45e823521fc548398a1ebcc1c7dd89ffcee049146b88db9"
+        },
+        {
+          "family": "room",
+          "name": "64room_000.map",
+          "size": 262693,
+          "sha256": "9056bd8ecaf89863a95e27de50a5081e4f119d8870c21360bc568f83baf4b783"
+        }
+      ]
+    }
+  ]
+}

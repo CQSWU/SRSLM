@@ -1,0 +1,63 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Weights and checkpoints are versioned separately as release assets.
+*.pth
+*.pt
+weights/
+# Experiment results
+exp_result/
+results/
+single_task_logs/
+*.log
+*.pid
+*.job
+
+# Renders / animations
+renders/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sample factory
+.sample_factory/
+
+# Compiled binaries
+*.so
+*.dylib
+*.pyd
+planning/.rendered.*
+
+# Data
+data/
+
+# LaTeX build products
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+PDF/tmp/
+PDF/render_check*/
+
+# Python eggs / wheels
+*.egg-info/
+dist/
+build/
+
+# Local release-staging artifact
+release_contents.tar

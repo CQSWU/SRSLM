@@ -1,0 +1,51 @@
+[project]
+name = "srlsm"
+version = "1.0.0"
+description = "SRSLM: trace-aware switching and reweighting for lifelong POMAPF"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10,<3.12"
+dependencies = [
+    "torch==2.8.0",
+    "sample-factory==2.1.1",
+    "pogema==1.4.0",
+    "gymnasium==0.28.1",
+    "numpy==1.26.4",
+    "pyyaml>=6.0",
+    "pydantic==1.9.1",
+    "cppimport>=22.8.2",
+    "pybind11>=2.10",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8,<9",
+]
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "agents",
+    "learning",
+    "maps",
+    "planning",
+    "policy_estimation",
+    "pomapf_env",
+]
+py-modules = [
+    "run_experiments",
+    "train",
+    "train_caar",
+]
+
+[tool.setuptools.package-data]
+maps = ["*.yaml"]
+planning = ["planner.cpp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".codex_backups", ".venv", "backups", "tmp"]

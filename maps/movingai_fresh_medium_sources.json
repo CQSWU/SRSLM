@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "selection_policy": {
+    "name": "fixed_sha256_ranked_64x64_crop",
+    "seed": 20260831,
+    "crop_width": 64,
+    "crop_height": 64,
+    "crop_stride": 16,
+    "minimum_free_cells": 800,
+    "minimum_obstacle_fraction": 0.05,
+    "maximum_obstacle_fraction": 0.65,
+    "walkable_source_symbols": [
+      ".",
+      "G",
+      "S"
+    ],
+    "blocked_source_symbols": [
+      "@",
+      "O",
+      "T",
+      "W"
+    ],
+    "component_policy": "retain_largest_4_connected_free_component",
+    "performance_outcomes_used": false
+  },
+  "license": {
+    "name": "Open Data Commons Attribution License",
+    "official_benchmark_index": "https://www.movingai.com/benchmarks/",
+    "official_license_url": "https://opendatacommons.org/licenses/by/"
+  },
+  "sources": [
+    {
+      "id": "movingai-mapf-2021-08-05",
+      "official_index_url": "https://movingai.com/benchmarks/mapf/index.html",
+      "archive_url": "https://movingai.com/benchmarks/mapf/mapf-map.zip",
+      "archive_filename": "mapf-map.zip",
+      "archive_size": 75157,
+      "archive_sha256": "9da2e4c5ce03aa4e063b3a283ce874590b36cc4f31a297fe7ecb00d105abf288",
+      "members": [
+        {
+          "family": "mazes",
+          "name": "maze-128-128-1.map",
+          "size": 16549,
+          "sha256": "9ef42dc6c43a2b07364c9678b7501a6a7ff1fc7e61215abae6d34000ba8e70c9"
+        },
+        {
+          "family": "mazes",
+          "name": "maze-128-128-2.map",
+          "size": 16549,
+          "sha256": "9a22a1f6b63ac1914af03a24e4397e31000a3b4ffa85a6a4a813e04b5fa49bd1"
+        },
+        {
+          "family": "mazes",
+          "name": "maze-128-128-10.map",
+          "size": 16549,
+          "sha256": "2281ef15df0c94efc79b7c62f0c60ce4cb22c43c2cc584226d307c7676d53986"
+        },
+        {
+          "family": "random",
+          "name": "random-64-64-10.map",
+          "size": 4195,
+          "sha256": "b31c671228f884a113ca11c41b83630dc042e58e07f9b36da74ec508f82a5659"
+        },
+        {
+          "family": "random",
+          "name": "random-64-64-20.map",
+          "size": 4195,
+          "sha256": "0702bcc7df0529a819845c5d70050464c0946ae234881f27b9f4202b81f40c83"
+        }
+      ]
+    },
+    {
+      "id": "movingai-sc1-2020-10-09",
+      "official_index_url": "https://movingai.com/benchmarks/sc1/index.html",
+      "archive_url": "https://movingai.com/benchmarks/sc1/sc1-map.zip",
+      "archive_filename": "sc1-map.zip",
+      "archive_size": 1256225,
+      "archive_sha256": "81285dee93dbd7594773e7292a4984a89da6531eb45424a90c99aa2f4144e091",
+      "members": [
+        {
+          "family": "sc1",
+          "name": "Aftershock.map",
+          "size": 262693,
+          "sha256": "81802230e12e3d766ce958ef1423aedc65595c8c052c8bc0395a32e15a363a9d"
+        },
+        {
+          "family": "sc1",
+          "name": "Archipelago.map",
+          "size": 262693,
+          "sha256": "8aad1f7021b31e114c5eb684d058b6e448c19a6bd9f1969ab0486b95fda104e5"
+        },
+        {
+          "family": "sc1",
+          "name": "Brushfire.map",
+          "size": 262693,
+          "sha256": "749026d4816de61b8e53f97b2ec7b697241d04c91ee17d1b1d145d1757f59b05"
+        },
+        {
+          "family": "sc1",
+          "name": "Caldera.map",
+          "size": 262693,
+          "sha256": "a71e31fb35ef2ae3ba4a8f967758d43f71cc7b55e8de13408a3a311e7ba71c5b"
+        },
+        {
+          "family": "sc1",
+          "name": "Crossroads.map",
+          "size": 590629,
+          "sha256": "1ad1b35ed6f27c9dfc641ff960d41d281934a2c2f5e15a787154a19dfb988882"
+        }
+      ]
+    },
+    {
+      "id": "movingai-street-2020-10-09",
+      "official_index_url": "https://movingai.com/benchmarks/street/index.html",
+      "archive_url": "https://movingai.com/benchmarks/street/street-map.zip",
+      "archive_filename": "street-map.zip",
+      "archive_size": 997213,
+      "archive_sha256": "588442dee46ae99c4194831baafca2b121fe0b037de7a4c57f142e4fa55e1da8",
+      "members": [
+        {
+          "family": "street",
+          "name": "Berlin_0_256.map",
+          "size": 66087,
+          "sha256": "9fc2a576f930a7df9646969bed1e1a48d1f2e0c30574d2f72586901bc00ba1d4"
+        },
+        {
+          "family": "street",
+          "name": "Boston_1_256.map",
+          "size": 66089,
+          "sha256": "a61f532e292cd5c6a8eccc945d09a8d98a17e6a5a607532aeebeb0a1aa1b9d07"
+        },
+        {
+          "family": "street",
+          "name": "Denver_2_256.map",
+          "size": 66089,
+          "sha256": "665bf84cf2ed6626e4df277f1aa776418baae20e1912a7b6f248ed7ebd57496e"
+        },
+        {
+          "family": "street",
+          "name": "London_0_256.map",
+          "size": 66087,
+          "sha256": "2f49ec258d0d68acb3e38a089f424014e14363ad19a4c7ca5c8ddd72a2b20e47"
+        },
+        {
+          "family": "street",
+          "name": "Milan_2_256.map",
+          "size": 66089,
+          "sha256": "c59d2f8646dad53f0a0abc8fb7a7311371791156418bba3e34ba6a9b206d4591"
+        }
+      ]
+    },
+    {
+      "id": "movingai-wc3maps512-2020-10-09",
+      "official_index_url": "https://movingai.com/benchmarks/wc3maps512/",
+      "archive_url": "https://movingai.com/benchmarks/wc3maps512/wc3maps512-map.zip",
+      "archive_filename": "wc3maps512-map.zip",
+      "archive_size": 197294,
+      "archive_sha256": "12ef51dea736c0dedfd4fc0a04234751af27c7247cb4ae53e9d0ff467976c17a",
+      "members": [
+        {
+          "family": "wc3",
+          "name": "battleground.map",
+          "size": 262693,
+          "sha256": "45602db4ae46151564694d4dee5b3489a35add9e172b8222c565fcddae01c7bb"
+        },
+        {
+          "family": "wc3",
+          "name": "blastedlands.map",
+          "size": 262693,
+          "sha256": "e3160120de5208b5b221b5b3b6320991c7364cbe50142c31a48ac66d88754155"
+        },
+        {
+          "family": "wc3",
+          "name": "bloodvenomfalls.map",
+          "size": 262693,
+          "sha256": "8708aacea6ce27a0235a7a6df20397a86c4b51d83479ee6110668c50dca2f1ac"
+        },
+        {
+          "family": "wc3",
+          "name": "darkforest.map",
+          "size": 262693,
+          "sha256": "687b8df96b8e63f4854384d697afae906ec2b86c7ada8a73d1d123dc334296dd"
+        },
+        {
+          "family": "wc3",
+          "name": "divideandconquer.map",
+          "size": 262693,
+          "sha256": "aca2d757d3ba6f6a5a98ce3bab6debd22640ba84bb91343700b983e16c96cc0d"
+        }
+      ]
+    }
+  ]
+}

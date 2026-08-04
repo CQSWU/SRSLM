@@ -1,0 +1,39 @@
+MIT License
+
+Copyright (c) 2023 Alexey Skrynnik and Anton Andreychuk
+Copyright (c) 2026 Jinghu Xie
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Scope
+-----
+
+The MIT License above applies to the source code in this repository, including
+standalone RePlan and AO-RePlan, the Context and Direct CAAR variants, NoTau,
+CAAR-RS, CAAR-LS, environment adapters, training and evaluation tools, and the
+project-trained model checkpoints in the reproducibility release.
+
+Project-generated benchmark result files, manuscript figures, and documentation
+are licensed under the Creative Commons Attribution 4.0 International License
+(CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+DHC, DCC, SCRIMP, EPOM, POGEMA, Sample Factory, their checkpoints, and any
+other third-party materials retain their respective upstream licenses. The
+licenses above do not relicense those materials.
