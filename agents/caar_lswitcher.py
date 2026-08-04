@@ -12,9 +12,7 @@ calls AO-RePlan's Probe.
 
 from __future__ import annotations
 
-import hashlib
-import json
-from typing import Callable, Literal, Mapping, Sequence
+from typing import Callable, Literal, Sequence
 
 import numpy as np
 from pydantic import Extra, Field, validator
@@ -36,12 +34,6 @@ PREDICTOR_ONLY_HYBRID_MODE = (
 )
 ROAD_TOPOLOGY_PROVENANCE_VERSION = "caar_ls_road_topology_v1"
 DEFAULT_ACTION_COUNT = 5
-IDENTITY_FIELDS = (
-    "caar_checkpoint_sha256",
-    "caar_config_sha256",
-)
-
-
 def _freeze_policy_parameters(policy) -> None:
     """Freeze weights without changing CAAR's deployed normalizer mode."""
 
@@ -127,16 +119,6 @@ def _default_estimator_factory(**kwargs):
     return PolicyReturnEstimator(**kwargs)
 
 
-def _default_collection_identity_factory(*, required: bool):
-    """Resolve the collector identity helper lazily for production deploys."""
-
-    from policy_estimation.caar_ao_rollout import (
-        collection_implementation_identity,
-    )
-
-    return collection_implementation_identity(required=required)
-
-
 def select_ao_by_absolute_return(
     caar_values,
     ao_values,
@@ -200,7 +182,6 @@ class CAARLS:
         caar_factory: Callable[[CAARConfig], object] = CAAR,
         planner_factory: Callable[..., object] = _DeploymentRawAORePlanCandidates,
         estimator_factory: Callable[..., object] | None = None,
-        collection_identity_factory: Callable[..., object] | None = None,
     ):
         self.cfg = cfg
         caar_cfg = cfg.caar.copy(deep=True, update={"seed": cfg.seed})
@@ -229,13 +210,8 @@ class CAARLS:
         )
         if self.caar_estimator is self.ao_estimator:
             raise ValueError("CAAR-LS requires two independent value estimators.")
-        self._collection_identity_factory = (
-            collection_identity_factory
-            or _default_collection_identity_factory
-        )
         self._freeze_estimator(self.caar_estimator)
         self._freeze_estimator(self.ao_estimator)
-        self._validate_estimator_policy_identity()
 
         self.device = getattr(self.caar, "device", cfg.device)
         self.env = None
@@ -270,194 +246,6 @@ class CAARLS:
         if callable(parameters):
             for parameter in parameters():
                 parameter.requires_grad_(False)
-
-    @staticmethod
-    def _identity_metadata(estimator, label: str) -> dict:
-        metadata = getattr(estimator, "training_metadata", None)
-        if not isinstance(metadata, dict):
-            raise ValueError(
-                f"The {label} estimator is missing training identity metadata."
-            )
-        if metadata.get("deployable") is not True:
-            raise ValueError(
-                f"The {label} estimator is explicitly non-deployable."
-            )
-        identity = {}
-        for field in IDENTITY_FIELDS:
-            value = str(metadata.get(field, "")).lower()
-            if len(value) != 64 or any(
-                character not in "0123456789abcdef" for character in value
-            ):
-                raise ValueError(
-                    f"The {label} estimator has an invalid {field}."
-                )
-            identity[field] = value
-        contract = metadata.get("behavior_contract")
-        if not isinstance(contract, dict):
-            raise ValueError(
-                f"The {label} estimator is missing behavior_contract."
-            )
-        canonical = json.dumps(
-            contract,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        actual_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-        declared_digest = str(
-            metadata.get("behavior_contract_sha256", "")
-        ).lower()
-        if declared_digest != actual_digest:
-            raise ValueError(
-                f"The {label} estimator behavior contract hash is invalid."
-            )
-        if contract.get("schema_version") != "caar_ao_behavior_contract_v1":
-            raise ValueError(
-                f"The {label} estimator has an unsupported behavior contract."
-            )
-        raw_collection_digest = contract.get(
-            "collection_implementation_sha256"
-        )
-        collection_digest = (
-            raw_collection_digest.lower()
-            if isinstance(raw_collection_digest, str)
-            else ""
-        )
-        if len(collection_digest) != 64 or any(
-            character not in "0123456789abcdef"
-            for character in collection_digest
-        ):
-            raise ValueError(
-                f"The {label} estimator behavior contract has an invalid "
-                "collection_implementation_sha256."
-            )
-        for field in IDENTITY_FIELDS:
-            if str(contract.get(field, "")).lower() != identity[field]:
-                raise ValueError(
-                    f"The {label} estimator contract disagrees on {field}."
-                )
-        horizons = metadata.get("training_horizons")
-        if not isinstance(horizons, (list, tuple)) or not horizons:
-            raise ValueError(
-                f"The {label} estimator is missing training_horizons."
-            )
-        try:
-            horizons = tuple(sorted({int(value) for value in horizons}))
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError(
-                f"The {label} estimator has invalid training_horizons."
-            ) from exc
-        if any(value < 1 for value in horizons):
-            raise ValueError(
-                f"The {label} estimator has invalid training_horizons."
-            )
-        identity["behavior_contract"] = contract
-        identity["behavior_contract_sha256"] = declared_digest
-        identity["training_horizons"] = horizons
-        coordinate_encoding = str(
-            metadata.get("coordinate_encoding", "absolute_v1")
-        )
-        if coordinate_encoding != "absolute_v1":
-            raise ValueError(
-                f"The {label} estimator has an invalid coordinate_encoding."
-            )
-        identity["coordinate_encoding"] = coordinate_encoding
-        return identity
-
-    def _validate_estimator_policy_identity(self) -> None:
-        """Refuse value comparisons across different frozen CAAR policies."""
-
-        caar_identity = self._identity_metadata(
-            self.caar_estimator,
-            "CAAR",
-        )
-        ao_identity = self._identity_metadata(
-            self.ao_estimator,
-            "AO-safe",
-        )
-        if caar_identity != ao_identity:
-            raise ValueError(
-                "The CAAR and AO-safe estimators were trained against "
-                "different CAAR policy identities or behavior contracts."
-            )
-
-        deployed = {
-            "caar_checkpoint_sha256": str(
-                getattr(self.caar, "checkpoint_sha256", "")
-            ).lower(),
-            "caar_config_sha256": str(
-                getattr(self.caar, "config_sha256", "")
-            ).lower(),
-        }
-        for field in IDENTITY_FIELDS:
-            expected = caar_identity[field]
-            if deployed[field] != expected:
-                raise ValueError(
-                    f"Estimator/deployment CAAR identity mismatch for {field}: "
-                    f"trained={expected}, deployed={deployed[field] or 'missing'}."
-                )
-        contract = caar_identity["behavior_contract"]
-        if contract.get("plan_use_best_move") != self.cfg.plan_use_best_move:
-            raise ValueError(
-                "Estimator/deployment plan_use_best_move mismatch."
-            )
-        try:
-            trained_plan_steps = int(contract.get("plan_max_steps"))
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError(
-                "Estimator behavior contract has invalid plan_max_steps."
-            ) from exc
-        if trained_plan_steps != self.cfg.max_planning_steps:
-            raise ValueError(
-                "Estimator/deployment max_planning_steps mismatch: "
-                f"trained={trained_plan_steps}, "
-                f"deployed={self.cfg.max_planning_steps}."
-            )
-
-        # Bind deployment to the exact fixed-behavior implementation used to
-        # collect the return targets.  The rollout module remains the single
-        # owner of file selection and aggregate hashing; this class only
-        # validates and compares the aggregate recorded in the contract.
-        current_identity = self._collection_identity_factory(required=True)
-        if not isinstance(current_identity, Mapping):
-            raise ValueError(
-                "Current collection implementation identity is invalid."
-            )
-        raw_current_digest = current_identity.get(
-            "collection_implementation_sha256"
-        )
-        current_digest = (
-            raw_current_digest.lower()
-            if isinstance(raw_current_digest, str)
-            else ""
-        )
-        if len(current_digest) != 64 or any(
-            character not in "0123456789abcdef"
-            for character in current_digest
-        ):
-            raise ValueError(
-                "Current collection implementation identity has an invalid "
-                "collection_implementation_sha256."
-            )
-        trained_digest = str(
-            contract["collection_implementation_sha256"]
-        ).lower()
-        if current_digest != trained_digest:
-            raise ValueError(
-                "Estimator/deployment collection implementation mismatch: "
-                f"trained={trained_digest}, deployed={current_digest}."
-            )
-        self.estimator_policy_identity = {
-            field: caar_identity[field] for field in IDENTITY_FIELDS
-        }
-        self.estimator_behavior_contract = dict(contract)
-        self.estimator_behavior_contract_sha256 = caar_identity[
-            "behavior_contract_sha256"
-        ]
-        self.training_horizons = caar_identity["training_horizons"]
-        self.estimator_coordinate_encoding = caar_identity[
-            "coordinate_encoding"
-        ]
 
     @staticmethod
     def _static_obstacle_mask(map_value) -> np.ndarray:
@@ -615,25 +403,6 @@ class CAARLS:
         )
 
     def set_grid_config(self, grid_config):
-        horizon = int(getattr(grid_config, "max_episode_steps"))
-        if horizon not in self.training_horizons:
-            raise ValueError(
-                "CAAR-LS evaluation horizon was absent from estimator "
-                f"training: evaluation={horizon}, "
-                f"training={list(self.training_horizons)}."
-            )
-        obs_radius = int(getattr(grid_config, "obs_radius"))
-        expected_shape = tuple(
-            int(value)
-            for value in self.estimator_behavior_contract.get("obs_shape", ())
-        )
-        # Three matrix channels plus the pre-action Shared Traffic Trace.
-        actual_shape = (4, 2 * obs_radius + 1, 2 * obs_radius + 1)
-        if expected_shape != actual_shape:
-            raise ValueError(
-                "CAAR-LS observation shape differs from estimator training: "
-                f"evaluation={actual_shape}, training={expected_shape}."
-            )
         self._configure_road_topology(grid_config)
         self.caar.set_grid_config(grid_config)
 

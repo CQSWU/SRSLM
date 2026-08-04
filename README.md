@@ -77,7 +77,7 @@ uv run python run_experiments.py \
 CAAR-LS requires a frozen Context CAAR checkpoint and two independently trained
 return estimators. The collection script writes paired CAAR/AO-safe trajectories
 from identical scenarios; the trainer then writes `caar_estimator.pth` and
-`ao_estimator.pth` plus an identity manifest.
+`ao_estimator.pth` plus a provenance manifest.
 
 ```bash
 # Collect paired trajectories. Replace the small example scenario set with a
@@ -127,7 +127,10 @@ The released core algorithm modules match the runtime used for the retained
 Trace CAAR-LS formal results: `run_experiments.py`, `agents/caar.py`,
 `agents/caar_lswitcher.py`, the encoder, planner, estimator, and environment.
 The public `uv.lock` is regenerated for a clean installation and is therefore
-treated as a separate, versioned runtime artifact.
+treated as a separate, versioned runtime artifact. SHA-256 values are recorded
+in result/provenance files for auditability only: normal deployment does not
+reject a checkpoint merely because the user changed source code or a runtime
+parameter. Incompatible checkpoint schemas or tensor shapes still fail clearly.
 
 Pretrained checkpoints are intentionally not committed to Git. If they are
 released later, they should be published as versioned GitHub Release assets

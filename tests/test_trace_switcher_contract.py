@@ -1,8 +1,33 @@
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 
-from agents.caar_lswitcher import CAARLSConfig, select_ao_by_absolute_return
+from agents.caar_lswitcher import CAARLS, CAARLSConfig, select_ao_by_absolute_return
+
+
+class _PolicyStub:
+    device = "cpu"
+    ppo = SimpleNamespace(action_space=SimpleNamespace(n=5))
+
+    def after_reset(self):
+        pass
+
+    def set_grid_config(self, _grid_config):
+        pass
+
+
+class _PlannerStub:
+    def reset(self):
+        pass
+
+
+class _EstimatorStub:
+    def eval(self):
+        return self
+
+    def parameters(self):
+        return ()
 
 
 class TraceSwitcherContractTests(unittest.TestCase):
@@ -26,6 +51,15 @@ class TraceSwitcherContractTests(unittest.TestCase):
                 reverse_caar_override_enabled=False,
                 reverse_caar_cooldown_steps=4,
             )
+
+    def test_loading_does_not_require_source_or_training_hashes(self):
+        switcher = CAARLS(
+            CAARLSConfig(),
+            caar_factory=lambda _config: _PolicyStub(),
+            planner_factory=lambda **_kwargs: _PlannerStub(),
+            estimator_factory=lambda **_kwargs: _EstimatorStub(),
+        )
+        self.assertEqual(switcher.action_count, 5)
 
 
 if __name__ == "__main__":
