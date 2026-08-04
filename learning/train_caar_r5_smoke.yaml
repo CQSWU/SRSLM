@@ -1,7 +1,7 @@
-name: CAAR-Context-R5-Smoke
+name: CAAR-R5-Smoke
 
 global_settings:
-  train_dir: weights/smoke/CAAR-context-r5
+  train_dir: weights/smoke/CAAR
   device: gpu
   seed: 0
 

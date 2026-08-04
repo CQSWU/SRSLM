@@ -1,7 +1,7 @@
-name: CAAR-Context-R5
+name: CAAR-R5
 
 global_settings:
-  train_dir: weights/CAAR-learned-pressure/r5-context
+  train_dir: weights/CAAR
   device: gpu
   seed: 0
 

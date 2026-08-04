@@ -25,14 +25,14 @@ from pomapf_env.wrappers import MatrixObservationWrapper
 
 CAAR_BRANCH = 0
 AO_BRANCH = 1
-HYBRID_MODE = "per_step_absolute_return_lswitcher_reverse_to_caar_v1"
+HYBRID_MODE = "per_step_absolute_return_srlsm_reverse_to_caar_v1"
 REVERSE_COOLDOWN_HYBRID_MODE = (
-    "per_step_absolute_return_lswitcher_reverse_to_caar_cooldown_v1"
+    "per_step_absolute_return_srlsm_reverse_to_caar_cooldown_v1"
 )
 PREDICTOR_ONLY_HYBRID_MODE = (
-    "per_step_absolute_return_lswitcher_predictor_only_v1"
+    "per_step_absolute_return_srlsm_predictor_only_v1"
 )
-ROAD_TOPOLOGY_PROVENANCE_VERSION = "caar_ls_road_topology_v1"
+ROAD_TOPOLOGY_PROVENANCE_VERSION = "srlsm_road_topology_v1"
 DEFAULT_ACTION_COUNT = 5
 def _freeze_policy_parameters(policy) -> None:
     """Freeze weights without changing CAAR's deployed normalizer mode."""
@@ -44,21 +44,21 @@ def _freeze_policy_parameters(policy) -> None:
             parameter.requires_grad_(False)
 
 
-class CAARLSConfig(AlgoBase, extra=Extra.forbid):
+class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     """Deployment configuration for the absolute-return learnable switcher."""
 
-    name: Literal["CAAR-LS"] = "CAAR-LS"
+    name: Literal["SRSLM"] = "SRSLM"
     hybrid_mode: Literal[
-        "per_step_absolute_return_lswitcher_reverse_to_caar_v1",
-        "per_step_absolute_return_lswitcher_reverse_to_caar_cooldown_v1",
-        "per_step_absolute_return_lswitcher_predictor_only_v1",
+        "per_step_absolute_return_srlsm_reverse_to_caar_v1",
+        "per_step_absolute_return_srlsm_reverse_to_caar_cooldown_v1",
+        "per_step_absolute_return_srlsm_predictor_only_v1",
     ] = HYBRID_MODE
     caar: CAARConfig = CAARConfig(
-        path_to_weights="weights/CAAR/CAAR",
+        path_to_weights="weights/CAAR/CAAR-R5",
         checkpoint_kind="latest",
     )
-    caar_estimator_checkpoint_path: str = "weights/CAAR-LS/caar_estimator.pth"
-    ao_estimator_checkpoint_path: str = "weights/CAAR-LS/ao_estimator.pth"
+    caar_estimator_checkpoint_path: str = "weights/SRSLM/caar_estimator.pth"
+    ao_estimator_checkpoint_path: str = "weights/SRSLM/ao_estimator.pth"
     estimator_device: str = "auto"
     value_margin: float = 0.0
     reverse_caar_override_enabled: bool = True
@@ -144,7 +144,7 @@ def select_ao_by_absolute_return(
 
 
 class _DeploymentRawAORePlanCandidates(RawAORePlanCandidates):
-    """Allow reverse commits only for predictor-only CAAR-LS deployment.
+    """Allow reverse commits only for predictor-only SRSLM deployment.
 
     The shared candidate generator remains identical to the implementation
     used for estimator-data collection.  Keeping this adapter local prevents
@@ -172,12 +172,12 @@ class _DeploymentRawAORePlanCandidates(RawAORePlanCandidates):
         self._pending = None
 
 
-class CAARLS:
+class SRSLM:
     """Per-step absolute-return switcher over CAAR and raw AO-RePlan."""
 
     def __init__(
         self,
-        cfg: CAARLSConfig,
+        cfg: SRSLMConfig,
         *,
         caar_factory: Callable[[CAARConfig], object] = CAAR,
         planner_factory: Callable[..., object] = _DeploymentRawAORePlanCandidates,
@@ -209,7 +209,7 @@ class CAARLS:
             **common,
         )
         if self.caar_estimator is self.ao_estimator:
-            raise ValueError("CAAR-LS requires two independent value estimators.")
+            raise ValueError("SRSLM requires two independent value estimators.")
         self._freeze_estimator(self.caar_estimator)
         self._freeze_estimator(self.ao_estimator)
 
@@ -268,7 +268,7 @@ class CAARLS:
         if array.ndim == 1 and all(
             isinstance(row, str) for row in array.tolist()
         ):
-            return CAARLS._static_obstacle_mask("\n".join(array.tolist()))
+            return SRSLM._static_obstacle_mask("\n".join(array.tolist()))
         if array.ndim != 2 or not array.size:
             raise ValueError("grid_config.map must be a non-empty 2-D grid.")
         if array.dtype.kind in "bui":
@@ -458,13 +458,13 @@ class CAARLS:
             return
         if len(self._nominal_branch) != count:
             raise ValueError(
-                "CAAR-LS agent count changed without an environment reset."
+                "SRSLM agent count changed without an environment reset."
             )
         if (
             self._reverse_caar_cooldown_remaining is None
             or len(self._reverse_caar_cooldown_remaining) != count
         ):
-            raise RuntimeError("CAAR-LS reverse cooldown state is invalid.")
+            raise RuntimeError("SRSLM reverse cooldown state is invalid.")
 
     @staticmethod
     def _as_value_array(estimator, observations, count: int, label: str):
@@ -500,7 +500,7 @@ class CAARLS:
         )
         if not callable(get_augmented):
             raise RuntimeError(
-                "Trace-aware CAAR-LS requires "
+                "Trace-aware SRSLM requires "
                 "CAAR.last_augmented_observations()."
             )
         augmented_observations = get_augmented()
@@ -812,7 +812,7 @@ class CAARLS:
         self.caar.after_step(done_flags)
         if self._nominal_branch is not None:
             if len(done_flags) != len(self._nominal_branch):
-                raise ValueError("Done mask and CAAR-LS agent count differ.")
+                raise ValueError("Done mask and SRSLM agent count differ.")
             for index, done in enumerate(done_flags):
                 if done:
                     self._nominal_branch[index] = CAAR_BRANCH
@@ -965,15 +965,15 @@ class CAARLS:
 
 
 # Descriptive alias for callers that prefer the full algorithm name.
-CAARLSwitcher = CAARLS
+SRSLMSwitcher = SRSLM
 
 
 __all__ = [
     "AO_BRANCH",
     "CAAR_BRANCH",
-    "CAARLS",
-    "CAARLSConfig",
-    "CAARLSwitcher",
+    "SRSLM",
+    "SRSLMConfig",
+    "SRSLMSwitcher",
     "HYBRID_MODE",
     "REVERSE_COOLDOWN_HYBRID_MODE",
     "select_ao_by_absolute_return",

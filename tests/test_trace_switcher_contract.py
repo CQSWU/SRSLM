@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from agents.caar_lswitcher import CAARLS, CAARLSConfig, select_ao_by_absolute_return
+from agents.srlsm import SRSLM, SRSLMConfig, select_ao_by_absolute_return
 
 
 class _PolicyStub:
@@ -41,20 +41,20 @@ class TraceSwitcherContractTests(unittest.TestCase):
         np.testing.assert_array_equal(nonfinite, [False, False, True, True, False])
 
     def test_default_reverse_fallback_has_four_step_caar_cooldown(self):
-        config = CAARLSConfig()
+        config = SRSLMConfig()
         self.assertTrue(config.reverse_caar_override_enabled)
         self.assertEqual(config.reverse_caar_cooldown_steps, 4)
 
     def test_predictor_only_mode_cannot_retain_a_reverse_cooldown(self):
         with self.assertRaisesRegex(ValueError, "reverse CAAR cooldown"):
-            CAARLSConfig(
+            SRSLMConfig(
                 reverse_caar_override_enabled=False,
                 reverse_caar_cooldown_steps=4,
             )
 
     def test_loading_does_not_require_source_or_training_hashes(self):
-        switcher = CAARLS(
-            CAARLSConfig(),
+        switcher = SRSLM(
+            SRSLMConfig(),
             caar_factory=lambda _config: _PolicyStub(),
             planner_factory=lambda **_kwargs: _PlannerStub(),
             estimator_factory=lambda **_kwargs: _EstimatorStub(),

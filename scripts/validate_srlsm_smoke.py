@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed validation for root-runtime Context CAAR-LS v2 artifacts."""
+"""Fail-closed validation for SRSLM smoke artifacts."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def sha256_file(path: Path) -> str:
 def latest_checkpoint(weights: Path) -> Path:
     checkpoints = sorted((weights / "checkpoint_p0").glob("checkpoint_*.pth"))
     if not checkpoints:
-        raise RuntimeError(f"No Context CAAR checkpoint under {weights}")
+        raise RuntimeError(f"No CAAR checkpoint under {weights}")
     return checkpoints[-1]
 
 
@@ -86,7 +86,7 @@ def main() -> int:
     row = rows[0]
     if row.get("error"):
         raise RuntimeError(f"Smoke row failed: {row['error']}")
-    if row.get("algorithm") != "CAAR-LS":
+    if row.get("algorithm") != "SRSLM":
         raise RuntimeError(f"Unexpected smoke algorithm: {row.get('algorithm')}")
     if row.get("reverse_caar_override_enabled") is not True:
         raise RuntimeError("Reverse-to-CAAR rule was not enabled.")

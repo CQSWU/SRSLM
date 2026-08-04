@@ -125,7 +125,7 @@ class RolloutJob:
     gamma: float = 0.99
     sample_fraction: float = 0.2
     sample_seed: int = 0
-    caar_path_to_weights: str = "weights/CAAR/CAAR"
+    caar_path_to_weights: str = "weights/CAAR/CAAR-R5"
     caar_checkpoint_kind: str = "auto"
     caar_device: str = "cpu"
     plan_use_best_move: bool = True

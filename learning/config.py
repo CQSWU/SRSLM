@@ -298,8 +298,8 @@ class Experiment(BaseModel, extra=Extra.forbid):
             and not settings.caar_contextual_pressure
         ):
             raise ValueError(
-                'Legacy CAAR residual mode is retired; use Context '
-                '(both flags true) or Direct (both flags false).'
+                'Legacy CAAR residual mode is retired; use the current CAAR '
+                'configuration (both flags true).'
             )
         return values
 
