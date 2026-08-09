@@ -1,7 +1,7 @@
 # SRSLM
 
-Reference implementation for **SRSLM: Switching and Reweighting with Shared
-Lifelong Trace Memory for Partially Observable Multi-Agent Pathfinding**.
+Reference implementation for **SRSLM: Switch and Reweight with Shared Trace
+Memory for Lifelong Partially Observable Multi-Agent Pathfinding**.
 
 This release intentionally contains only the three methods used by SRSLM:
 
@@ -10,12 +10,14 @@ This release intentionally contains only the three methods used by SRSLM:
   with a pressure signal derived from the shared, decaying traffic trace.
 - **SRSLM** - CAAR and raw AO-RePlan proposals are compared at every
   step using two independent absolute-return estimators. A reverse AO proposal
-  is rejected and the agent remains on CAAR for four steps, including the
-  triggering step.
+  is rejected for that timestep and replaced by the CAAR action. The next
+  timestep starts with a new value comparison.
 
 The repository includes the map registries, source code, training entry points,
-and focused tests. It deliberately excludes historical experiments, external
-baselines, legacy switchers, and pretrained weights.
+and focused tests. Released CAAR and SRSLM weights are available from the
+[SRSLM v1.0.0 release](https://github.com/CQSWU/SRSLM/releases/tag/v1.0.0).
+Historical experiments, external baselines, and obsolete switchers are not
+included.
 
 ## Installation
 
@@ -64,7 +66,7 @@ After the full run, evaluate the resulting checkpoint directory:
 ```bash
 uv run python run_experiments.py \
   --algorithms CAAR \
-  --caar-weights-path weights/CAAR/CAAR-R5 \
+  --caar-weights-path weights/CAAR/radius_ablation/R5 \
   --map-list maps/eval.yaml \
   --agents 100,150,200,250,300,350,400 \
   --seeds 0,42,123,456,789 --workers 16 \
@@ -85,7 +87,7 @@ from identical scenarios; the trainer then writes `caar_estimator.pth` and
 uv run python scripts/collect_caar_ao_returns.py \
   --scenario-manifest configs/trace_smoke_scenarios.yaml \
   --output data/trace_smoke \
-  --caar-weights weights/CAAR/CAAR-R5 \
+  --caar-weights weights/CAAR/radius_ablation/R5 \
   --sample-fraction 1.0 --workers 1
 
 # Train the two value estimators.
@@ -97,10 +99,9 @@ uv run python scripts/train_caar_ao_estimators.py \
 # Run the learned, rule-constrained switcher.
 uv run python run_experiments.py \
   --algorithms SRSLM \
-  --caar-weights-path weights/CAAR/CAAR-R5 \
+  --caar-weights-path weights/CAAR/radius_ablation/R5 \
   --srlsm-caar-estimator-checkpoint weights/SRSLM-v1/caar_estimator.pth \
   --srlsm-ao-estimator-checkpoint weights/SRSLM-v1/ao_estimator.pth \
-  --srlsm-reverse-caar-cooldown-steps 4 \
   --map-file maps/srlsm_smoke.map \
   --agents 16 --seeds 0 --workers 1 --max-steps 128 \
   --output-dir results --output trace_srlsm_smoke.json
@@ -132,9 +133,9 @@ in result/provenance files for auditability only: normal deployment does not
 reject a checkpoint merely because the user changed source code or a runtime
 parameter. Incompatible checkpoint schemas or tensor shapes still fail clearly.
 
-Pretrained checkpoints are intentionally not committed to Git. If they are
-released later, they should be published as versioned GitHub Release assets
-with SHA-256 checksums rather than silently replacing files under `weights/`.
+Pretrained checkpoints are intentionally not committed to Git. They are
+published as versioned GitHub Release assets with SHA-256 checksums rather than
+silently replacing files under `weights/`.
 
 ## License
 

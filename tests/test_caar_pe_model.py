@@ -59,11 +59,13 @@ class PolicyEstimationModelTests(unittest.TestCase):
 
         self.assertTrue(torch.equal(actual, expected))
 
-    def test_legacy_model_config_defaults_coordinate_encoding(self):
+    def test_legacy_model_config_defaults_to_absolute_encoding(self):
         payload = make_checkpoint(PolicyEstimationModel(_config()), branch="caar")
         del payload["model_config"]["coordinate_encoding"]
-        branch, config = validate_checkpoint_payload(payload, expected_branch="caar")
-        self.assertEqual(branch, "caar")
+        _branch, config = validate_checkpoint_payload(
+            payload,
+            expected_branch="caar",
+        )
         self.assertEqual(config.coordinate_encoding, "absolute_v1")
 
     def test_nonrecurrent_scalar_model_and_independent_instances(self):

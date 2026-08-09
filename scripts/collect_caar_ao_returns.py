@@ -229,7 +229,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--shard-rows", type=int, default=100_000)
     parser.add_argument(
         "--caar-weights",
-        default="weights/CAAR/CAAR-R5",
+        default="weights/CAAR/radius_ablation/R5",
     )
     parser.add_argument(
         "--caar-checkpoint-kind",

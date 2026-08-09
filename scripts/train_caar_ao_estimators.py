@@ -1420,8 +1420,8 @@ def _infer_obs_shape(datasets: Iterable[_SegmentedDataset]) -> tuple[int, int, i
     if len(shapes) != 1:
         raise ValueError(f"All estimator samples must share one obs shape, got {shapes}.")
     shape = next(iter(shapes))
-    if len(shape) != 3 or shape[0] != 3:
-        raise ValueError(f"Estimator obs must have shape (3,H,W), got {shape}.")
+    if len(shape) != 3 or shape[0] != 4:
+        raise ValueError(f"Estimator obs must have shape (4,H,W), got {shape}.")
     return shape
 
 

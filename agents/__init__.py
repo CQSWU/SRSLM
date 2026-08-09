@@ -1,1 +1,1 @@
-"""Inference adapters for CAAR-RG and independent benchmark baselines."""
+"""Inference adapters for SRSLM, CAAR, AO-RePlan, and retained baselines."""
