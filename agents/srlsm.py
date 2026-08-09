@@ -1,13 +1,12 @@
-"""Original-style learnable switcher between CAAR and raw AO-RePlan.
+"""Learnable per-step switcher between CAAR and raw planner proposals.
 
 The switcher follows the value-evaluation design from *When to Switch*: two
 independent estimators predict absolute Monte-Carlo returns on every step.  The
 larger prediction selects the nominal branch immediately.  A missing or invalid
 raw Plan proposal is replaced for that step by CAAR.  Reverse proposals can
 either use the default CAAR safety override or execute exactly as selected by
-the predictor.  An optional per-agent reverse cooldown keeps CAAR active for a
-fixed number of steps, including the triggering step.  It never constructs or
-calls AO-RePlan's Probe.
+the predictor.  The branch values are compared again on the next step.  The
+switcher never constructs or calls AO-RePlan's Probe.
 """
 
 from __future__ import annotations
@@ -26,14 +25,12 @@ from pomapf_env.wrappers import MatrixObservationWrapper
 CAAR_BRANCH = 0
 AO_BRANCH = 1
 HYBRID_MODE = "per_step_absolute_return_srlsm_reverse_to_caar_v1"
-REVERSE_COOLDOWN_HYBRID_MODE = (
-    "per_step_absolute_return_srlsm_reverse_to_caar_cooldown_v1"
-)
 PREDICTOR_ONLY_HYBRID_MODE = (
     "per_step_absolute_return_srlsm_predictor_only_v1"
 )
-ROAD_TOPOLOGY_PROVENANCE_VERSION = "srlsm_road_topology_v1"
 DEFAULT_ACTION_COUNT = 5
+
+
 def _freeze_policy_parameters(policy) -> None:
     """Freeze weights without changing CAAR's deployed normalizer mode."""
 
@@ -50,27 +47,17 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["SRSLM"] = "SRSLM"
     hybrid_mode: Literal[
         "per_step_absolute_return_srlsm_reverse_to_caar_v1",
-        "per_step_absolute_return_srlsm_reverse_to_caar_cooldown_v1",
         "per_step_absolute_return_srlsm_predictor_only_v1",
     ] = HYBRID_MODE
     caar: CAARConfig = CAARConfig(
-        path_to_weights="weights/CAAR/CAAR-R5",
+        path_to_weights="weights/CAAR/radius_ablation/R5",
         checkpoint_kind="latest",
     )
-    caar_estimator_checkpoint_path: str = "weights/SRSLM/caar_estimator.pth"
-    ao_estimator_checkpoint_path: str = "weights/SRSLM/ao_estimator.pth"
+    caar_estimator_checkpoint_path: str = "weights/SRSLM-v1/caar_estimator.pth"
+    ao_estimator_checkpoint_path: str = "weights/SRSLM-v1/ao_estimator.pth"
     estimator_device: str = "auto"
     value_margin: float = 0.0
     reverse_caar_override_enabled: bool = True
-    reverse_caar_cooldown_steps: int = Field(4, ge=0)
-    road_topology_adaptive_cooldown_enabled: bool = False
-    road_open4_threshold: float = Field(0.68, ge=0.0, le=1.0)
-    road_dense_obstacle_threshold: float = Field(0.70, ge=0.0, le=1.0)
-    road_reverse_caar_cooldown_steps: int = Field(8, ge=0)
-    road_caar_only_density_threshold: float | None = Field(
-        None,
-        ge=0.0,
-    )
     plan_use_best_move: bool = True
     max_planning_steps: int = Field(10_000, gt=0)
 
@@ -79,36 +66,6 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
         if not np.isfinite(value):
             raise ValueError("value_margin must be finite.")
         return float(value)
-
-    @validator("reverse_caar_cooldown_steps")
-    def cooldown_requires_reverse_override(cls, value, values):
-        if int(value) > 0 and not values.get(
-            "reverse_caar_override_enabled", True
-        ):
-            raise ValueError(
-                "reverse CAAR cooldown requires the reverse override"
-            )
-        return int(value)
-
-    @validator("road_reverse_caar_cooldown_steps")
-    def road_cooldown_requires_reverse_override(cls, value, values):
-        if (
-            values.get("road_topology_adaptive_cooldown_enabled", False)
-            and int(value) > 0
-            and not values.get("reverse_caar_override_enabled", True)
-        ):
-            raise ValueError(
-                "road reverse CAAR cooldown requires the reverse override"
-            )
-        return int(value)
-
-    @validator("road_caar_only_density_threshold")
-    def finite_optional_density_threshold(cls, value):
-        if value is not None and not np.isfinite(value):
-            raise ValueError(
-                "road CAAR-only density threshold must be finite"
-            )
-        return None if value is None else float(value)
 
 
 def _default_estimator_factory(**kwargs):
@@ -215,19 +172,6 @@ class SRSLM:
 
         self.device = getattr(self.caar, "device", cfg.device)
         self.env = None
-        self._road_open4_ratio: float | None = None
-        self._road_dense_obstacle_ratio: float | None = None
-        self._road_open4_count: int | None = None
-        self._road_dense_obstacle_count: int | None = None
-        self._road_free_cell_count: int | None = None
-        self._road_obstacle_cell_count: int | None = None
-        self._road_map_shape: tuple[int, int] | None = None
-        self._road_agent_density: float | None = None
-        self._road_topology_detected = False
-        self._road_density_gate_active = False
-        self._effective_reverse_caar_cooldown_steps = int(
-            cfg.reverse_caar_cooldown_steps
-        )
         self.after_reset()
 
     @staticmethod
@@ -247,163 +191,7 @@ class SRSLM:
             for parameter in parameters():
                 parameter.requires_grad_(False)
 
-    @staticmethod
-    def _static_obstacle_mask(map_value) -> np.ndarray:
-        """Parse ``GridConfig.map`` without consulting a map name."""
-
-        if isinstance(map_value, str):
-            rows = [row.strip() for row in map_value.splitlines() if row.strip()]
-            if not rows:
-                raise ValueError("grid_config.map is empty.")
-            if len({len(row) for row in rows}) != 1:
-                raise ValueError("grid_config.map must be rectangular.")
-            if any(set(row) - {".", "#"} for row in rows):
-                raise ValueError("grid_config.map must contain only '.' and '#'.")
-            return np.asarray(
-                [[cell == "#" for cell in row] for row in rows],
-                dtype=bool,
-            )
-
-        array = np.asarray(map_value)
-        if array.ndim == 1 and all(
-            isinstance(row, str) for row in array.tolist()
-        ):
-            return SRSLM._static_obstacle_mask("\n".join(array.tolist()))
-        if array.ndim != 2 or not array.size:
-            raise ValueError("grid_config.map must be a non-empty 2-D grid.")
-        if array.dtype.kind in "bui":
-            if np.any((array != 0) & (array != 1)):
-                raise ValueError("numeric grid_config.map must contain 0/1.")
-            return array.astype(bool, copy=False)
-        symbols = array.astype(str)
-        if np.any((symbols != ".") & (symbols != "#")):
-            raise ValueError("grid_config.map must contain only '.' and '#'.")
-        return symbols == "#"
-
-    @staticmethod
-    def _topology_metrics(obstacles: np.ndarray) -> dict:
-        """Return map-only road features using in-bounds four-neighbours."""
-
-        if obstacles.ndim != 2 or not obstacles.size:
-            raise ValueError("The static obstacle mask must be non-empty and 2-D.")
-        obstacles = np.asarray(obstacles, dtype=bool)
-        free = ~obstacles
-        free_count = int(np.count_nonzero(free))
-        obstacle_count = int(np.count_nonzero(obstacles))
-
-        free4 = np.zeros_like(free)
-        if obstacles.shape[0] >= 3 and obstacles.shape[1] >= 3:
-            free4[1:-1, 1:-1] = (
-                free[1:-1, 1:-1]
-                & free[:-2, 1:-1]
-                & free[2:, 1:-1]
-                & free[1:-1, :-2]
-                & free[1:-1, 2:]
-            )
-
-        obstacle_neighbours = np.zeros(obstacles.shape, dtype=np.uint8)
-        obstacle_neighbours[1:, :] += obstacles[:-1, :]
-        obstacle_neighbours[:-1, :] += obstacles[1:, :]
-        obstacle_neighbours[:, 1:] += obstacles[:, :-1]
-        obstacle_neighbours[:, :-1] += obstacles[:, 1:]
-        dense_obstacles = obstacles & (obstacle_neighbours >= 3)
-
-        return {
-            "shape": (int(obstacles.shape[0]), int(obstacles.shape[1])),
-            "free_cell_count": free_count,
-            "obstacle_cell_count": obstacle_count,
-            "open4_count": int(np.count_nonzero(free4)),
-            "dense_obstacle_count": int(np.count_nonzero(dense_obstacles)),
-            "open4_ratio": (
-                float(np.count_nonzero(free4)) / free_count
-                if free_count
-                else 0.0
-            ),
-            "dense_obstacle_ratio": (
-                float(np.count_nonzero(dense_obstacles)) / obstacle_count
-                if obstacle_count
-                else 0.0
-            ),
-        }
-
-    def _configure_road_topology(self, grid_config) -> None:
-        self._road_open4_ratio = None
-        self._road_dense_obstacle_ratio = None
-        self._road_open4_count = None
-        self._road_dense_obstacle_count = None
-        self._road_free_cell_count = None
-        self._road_obstacle_cell_count = None
-        self._road_map_shape = None
-        self._road_agent_density = None
-        self._road_topology_detected = False
-        self._road_density_gate_active = False
-        self._effective_reverse_caar_cooldown_steps = int(
-            self.cfg.reverse_caar_cooldown_steps
-        )
-
-        feature_requested = bool(
-            self.cfg.road_topology_adaptive_cooldown_enabled
-            or self.cfg.road_caar_only_density_threshold is not None
-        )
-        map_value = getattr(grid_config, "map", None)
-        if map_value is None:
-            if feature_requested:
-                raise ValueError(
-                    "Road-topology adaptation requires grid_config.map."
-                )
-            return
-
-        try:
-            metrics = self._topology_metrics(
-                self._static_obstacle_mask(map_value)
-            )
-        except (TypeError, ValueError) as exc:
-            if feature_requested:
-                raise ValueError(
-                    "Could not compute road topology from grid_config.map."
-                ) from exc
-            return
-
-        self._road_open4_ratio = metrics["open4_ratio"]
-        self._road_dense_obstacle_ratio = metrics["dense_obstacle_ratio"]
-        self._road_open4_count = metrics["open4_count"]
-        self._road_dense_obstacle_count = metrics["dense_obstacle_count"]
-        self._road_free_cell_count = metrics["free_cell_count"]
-        self._road_obstacle_cell_count = metrics["obstacle_cell_count"]
-        self._road_map_shape = metrics["shape"]
-        self._road_topology_detected = bool(
-            self._road_open4_ratio >= self.cfg.road_open4_threshold
-            and self._road_dense_obstacle_ratio
-            >= self.cfg.road_dense_obstacle_threshold
-        )
-
-        num_agents = getattr(grid_config, "num_agents", None)
-        if num_agents is not None and self._road_free_cell_count:
-            self._road_agent_density = (
-                float(num_agents) / self._road_free_cell_count
-            )
-        elif self.cfg.road_caar_only_density_threshold is not None:
-            raise ValueError(
-                "Road density gating requires num_agents and free map cells."
-            )
-
-        if (
-            self.cfg.road_topology_adaptive_cooldown_enabled
-            and self._road_topology_detected
-        ):
-            self._effective_reverse_caar_cooldown_steps = int(
-                self.cfg.road_reverse_caar_cooldown_steps
-            )
-        threshold = self.cfg.road_caar_only_density_threshold
-        self._road_density_gate_active = bool(
-            threshold is not None
-            and self._road_topology_detected
-            and self._road_agent_density is not None
-            and self._road_agent_density >= threshold
-        )
-
     def set_grid_config(self, grid_config):
-        self._configure_road_topology(grid_config)
         self.caar.set_grid_config(grid_config)
 
     def set_env(self, env):
@@ -416,7 +204,6 @@ class SRSLM:
         self.plan_candidates.reset()
         self._nominal_branch: list[int] | None = None
         self._branch_initialized: list[bool] | None = None
-        self._reverse_caar_cooldown_remaining: list[int] | None = None
 
         self.environment_step_count = 0
         self.total_action_count = 0
@@ -441,11 +228,6 @@ class SRSLM:
         self.plan_caar_agreement_count = 0
         self.nominal_ao_agreement_count = 0
         self.forced_caar_count = 0
-        self.reverse_caar_cooldown_trigger_count = 0
-        self.reverse_caar_cooldown_action_count = 0
-        self.reverse_caar_cooldown_followup_action_count = 0
-        self.max_reverse_caar_cooldown_remaining = 0
-        self.road_density_gate_forced_nominal_count = 0
         self.final_none_action_count = 0
         self.max_concurrent_nominal_ao = 0
         self.max_concurrent_ao_executed = 0
@@ -454,17 +236,11 @@ class SRSLM:
         if self._nominal_branch is None:
             self._nominal_branch = [CAAR_BRANCH] * count
             self._branch_initialized = [False] * count
-            self._reverse_caar_cooldown_remaining = [0] * count
             return
         if len(self._nominal_branch) != count:
             raise ValueError(
                 "SRSLM agent count changed without an environment reset."
             )
-        if (
-            self._reverse_caar_cooldown_remaining is None
-            or len(self._reverse_caar_cooldown_remaining) != count
-        ):
-            raise RuntimeError("SRSLM reverse cooldown state is invalid.")
 
     @staticmethod
     def _as_value_array(estimator, observations, count: int, label: str):
@@ -557,16 +333,7 @@ class SRSLM:
         for index in range(count):
             previous = self._nominal_branch[index]
             initialized = self._branch_initialized[index]
-            cooldown_active = bool(
-                self._reverse_caar_cooldown_remaining[index] > 0
-            )
-            candidate = (
-                CAAR_BRANCH
-                if cooldown_active or self._road_density_gate_active
-                else int(choices[index])
-            )
-            if self._road_density_gate_active and int(choices[index]) == AO_BRANCH:
-                self.road_density_gate_forced_nominal_count += 1
+            candidate = int(choices[index])
             if initialized and candidate != previous:
                 self.branch_switch_count += 1
             self._nominal_branch[index] = candidate
@@ -662,22 +429,8 @@ class SRSLM:
             executed_ao_mask: list[bool] = []
             commit_mask: list[bool] = []
             reverse_mask = tuple(bool(value) for value in plan_batch.reverse_mask)
-            cooldown_active_mask = tuple(
-                remaining > 0
-                for remaining in self._reverse_caar_cooldown_remaining
-            )
-            reverse_cooldown_trigger_mask: list[bool] = []
-
             for index in range(count):
                 nominal_ao = self._nominal_branch[index] == AO_BRANCH
-                reverse_cooldown_trigger_mask.append(
-                    bool(
-                        self.cfg.reverse_caar_override_enabled
-                        and self._effective_reverse_caar_cooldown_steps > 0
-                        and nominal_ao
-                        and reverse_mask[index]
-                    )
-                )
                 usable_plan = (
                     plan_actions[index] is not None
                     and (
@@ -704,21 +457,6 @@ class SRSLM:
                         and int(plan_actions[index]) == final_action
                     )
                 )
-
-            for index, active in enumerate(cooldown_active_mask):
-                if active:
-                    self._reverse_caar_cooldown_remaining[index] -= 1
-                if reverse_cooldown_trigger_mask[index]:
-                    # The reverse-fallback step itself is step one of the
-                    # configured lock, leaving only N-1 future CAAR steps.
-                    self._reverse_caar_cooldown_remaining[index] = max(
-                        self._effective_reverse_caar_cooldown_steps - 1,
-                        0,
-                    )
-            self.max_reverse_caar_cooldown_remaining = max(
-                self.max_reverse_caar_cooldown_remaining,
-                max(self._reverse_caar_cooldown_remaining, default=0),
-            )
 
             self.plan_candidates.commit(
                 commit_mask,
@@ -760,15 +498,6 @@ class SRSLM:
         self.forced_caar_count += sum(
             nominal and not executed
             for nominal, executed in zip(nominal_ao_mask, executed_ao_mask)
-        )
-        cooldown_triggers = sum(reverse_cooldown_trigger_mask)
-        cooldown_followups = sum(cooldown_active_mask)
-        self.reverse_caar_cooldown_trigger_count += cooldown_triggers
-        self.reverse_caar_cooldown_followup_action_count += (
-            cooldown_followups
-        )
-        self.reverse_caar_cooldown_action_count += (
-            cooldown_triggers + cooldown_followups
         )
         agreement_mask = [
             plan is not None
@@ -817,7 +546,6 @@ class SRSLM:
                 if done:
                     self._nominal_branch[index] = CAAR_BRANCH
                     self._branch_initialized[index] = False
-                    self._reverse_caar_cooldown_remaining[index] = 0
         if done_flags and all(done_flags):
             self.plan_candidates.reset()
 
@@ -826,7 +554,6 @@ class SRSLM:
         return numerator / denominator if denominator else None
 
     def get_switch_stats(self):
-        cooldown_steps = self._effective_reverse_caar_cooldown_steps
         reverse_override_enabled = bool(
             self.cfg.reverse_caar_override_enabled
         )
@@ -834,77 +561,17 @@ class SRSLM:
             "hybrid_mode": (
                 PREDICTOR_ONLY_HYBRID_MODE
                 if not reverse_override_enabled
-                else (
-                    REVERSE_COOLDOWN_HYBRID_MODE
-                    if cooldown_steps > 0
-                    else HYBRID_MODE
-                )
+                else HYBRID_MODE
             ),
             "switch_pair": ["CAAR", "AO-RePlan"],
             "comparison_cadence": "every_step_per_agent",
             "switch_constraint": (
-                "reverse_caar_cooldown" if cooldown_steps > 0 else "none"
+                "reverse_to_caar_current_step"
+                if reverse_override_enabled
+                else "none"
             ),
             "value_margin": self.cfg.value_margin,
             "reverse_caar_override_enabled": reverse_override_enabled,
-            "reverse_caar_cooldown_steps": cooldown_steps,
-            "base_reverse_caar_cooldown_steps": int(
-                self.cfg.reverse_caar_cooldown_steps
-            ),
-            "reverse_caar_cooldown_includes_trigger_step": True,
-            "road_topology_adaptive_cooldown_enabled": bool(
-                self.cfg.road_topology_adaptive_cooldown_enabled
-            ),
-            "road_reverse_caar_cooldown_steps": int(
-                self.cfg.road_reverse_caar_cooldown_steps
-            ),
-            "road_open4_threshold": float(
-                self.cfg.road_open4_threshold
-            ),
-            "road_dense_obstacle_threshold": float(
-                self.cfg.road_dense_obstacle_threshold
-            ),
-            "road_open4": self._road_open4_ratio,
-            "road_dense_obstacle": self._road_dense_obstacle_ratio,
-            "road_open4_count": self._road_open4_count,
-            "road_dense_obstacle_count": self._road_dense_obstacle_count,
-            "road_free_cells": self._road_free_cell_count,
-            "road_obstacle_cells": self._road_obstacle_cell_count,
-            "road_map_shape": (
-                list(self._road_map_shape)
-                if self._road_map_shape is not None
-                else None
-            ),
-            "road_like": self._road_topology_detected,
-            "road_agent_density": self._road_agent_density,
-            "road_caar_only_density_threshold": (
-                self.cfg.road_caar_only_density_threshold
-            ),
-            "density_gate_active": self._road_density_gate_active,
-            "road_density_gate_forced_nominal_count": (
-                self.road_density_gate_forced_nominal_count
-            ),
-            "road_cooldown_source": (
-                "road_topology"
-                if (
-                    self.cfg.road_topology_adaptive_cooldown_enabled
-                    and self._road_topology_detected
-                )
-                else "base"
-            ),
-            "road_topology_provenance": {
-                "schema_version": ROAD_TOPOLOGY_PROVENANCE_VERSION,
-                "source": "grid_config.map",
-                "uses_map_name": False,
-                "neighbourhood": "four_cardinal_in_bounds",
-                "open4_denominator": "free_cells",
-                "dense_obstacle_denominator": "obstacle_cells",
-                "road_decision": (
-                    "open4>=road_open4_threshold and "
-                    "dense_obstacle>=road_dense_obstacle_threshold"
-                ),
-                "agent_density_definition": "num_agents/free_cells",
-            },
             "environment_step_count": self.environment_step_count,
             "total_action_count": self.total_action_count,
             "total_actions": self.total_action_count,
@@ -937,18 +604,6 @@ class SRSLM:
             "plan_caar_agreement_count": self.plan_caar_agreement_count,
             "nominal_ao_agreement_count": self.nominal_ao_agreement_count,
             "forced_caar_count": self.forced_caar_count,
-            "reverse_caar_cooldown_trigger_count": (
-                self.reverse_caar_cooldown_trigger_count
-            ),
-            "reverse_caar_cooldown_action_count": (
-                self.reverse_caar_cooldown_action_count
-            ),
-            "reverse_caar_cooldown_followup_action_count": (
-                self.reverse_caar_cooldown_followup_action_count
-            ),
-            "max_reverse_caar_cooldown_remaining": (
-                self.max_reverse_caar_cooldown_remaining
-            ),
             "probe_call_count": 0,
             "final_none_action_count": self.final_none_action_count,
             "max_concurrent_nominal_ao": self.max_concurrent_nominal_ao,
@@ -975,6 +630,5 @@ __all__ = [
     "SRSLMConfig",
     "SRSLMSwitcher",
     "HYBRID_MODE",
-    "REVERSE_COOLDOWN_HYBRID_MODE",
     "select_ao_by_absolute_return",
 ]

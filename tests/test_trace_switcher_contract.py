@@ -40,17 +40,10 @@ class TraceSwitcherContractTests(unittest.TestCase):
         np.testing.assert_array_equal(choices, [0, 1, 0, 0, 0])
         np.testing.assert_array_equal(nonfinite, [False, False, True, True, False])
 
-    def test_default_reverse_fallback_has_four_step_caar_cooldown(self):
+    def test_reverse_fallback_has_no_persistent_state(self):
         config = SRSLMConfig()
         self.assertTrue(config.reverse_caar_override_enabled)
-        self.assertEqual(config.reverse_caar_cooldown_steps, 4)
-
-    def test_predictor_only_mode_cannot_retain_a_reverse_cooldown(self):
-        with self.assertRaisesRegex(ValueError, "reverse CAAR cooldown"):
-            SRSLMConfig(
-                reverse_caar_override_enabled=False,
-                reverse_caar_cooldown_steps=4,
-            )
+        self.assertEqual(config.value_margin, 0.0)
 
     def test_loading_does_not_require_source_or_training_hashes(self):
         switcher = SRSLM(

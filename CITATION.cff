@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the associated paper."
-title: "SRSLM: Switching and Reweighting with Shared Lifelong Trace Memory for Partially Observable Multi-Agent Pathfinding"
+title: "SRSLM: Switch and Reweight with Shared Trace Memory for Lifelong Partially Observable Multi-Agent Pathfinding"
 type: software
 version: 1.0.0
 date-released: 2026-08-04

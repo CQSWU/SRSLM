@@ -410,14 +410,14 @@ RA_INTEGRITY_IMPLEMENTATION_FILES = (
 )
 
 RS_STRATEGY_KIND = "deterministic_rule_only_hybrid"
-RS_MODE = "rule_only_valid_nonreverse_raw_plan_else_caar_cooldown4_v1"
+RS_MODE = "rule_only_valid_nonreverse_raw_plan_else_caar_v1"
 RS_BASE_ALGORITHM = "CAAR"
 RS_PLAN_ALGORITHM = "Raw AO-RePlan"
 RS_ACTION_POLICY = "CAAR-or-Raw-AO-RePlan"
 RS_COMPONENTS = {
     "base_algorithm": RS_BASE_ALGORITHM,
     "candidate_algorithm": RS_PLAN_ALGORITHM,
-    "selector": "valid_nonreverse_raw_plan_else_caar_cooldown4",
+    "selector": "valid_nonreverse_raw_plan_else_caar",
 }
 RS_DEPLOYMENT_CONTRACT = {
     "selector_kind": "deterministic_rule_only",
@@ -426,9 +426,7 @@ RS_DEPLOYMENT_CONTRACT = {
     "value_predictor_loaded": False,
     "learned_gate_loaded": False,
     "reverse_plan_actions_executed": False,
-    "cooldown_steps": 4,
-    "cooldown_scope": "per_agent",
-    "cooldown_includes_trigger_step": True,
+    "reverse_rule_scope": "current_step",
     "probe_used": False,
     "simultaneous_plan_agents_allowed": True,
     "global_single_agent_cap": False,
@@ -462,9 +460,6 @@ RS_INTEGRITY_IMPLEMENTATION_FILES = (
 
 SRSLM_STRATEGY_KIND = "learned_absolute_return_hybrid"
 SRSLM_MODE = "per_step_absolute_return_srlsm_reverse_to_caar_v1"
-SRSLM_REVERSE_COOLDOWN_MODE = (
-    "per_step_absolute_return_srlsm_reverse_to_caar_cooldown_v1"
-)
 SRSLM_PREDICTOR_ONLY_MODE = (
     "per_step_absolute_return_srlsm_predictor_only_v1"
 )
@@ -485,7 +480,7 @@ SRSLM_DEPLOYMENT_CONTRACT = {
     "tie_policy": "CAAR",
     "nonfinite_policy": "CAAR",
     "comparison_cadence": "every_step_per_agent",
-    "switch_constraint": "none",
+    "switch_constraint": "reverse_to_caar_current_step",
     "hard_caar_fallbacks": "raw_plan_none_or_invalid_or_reverse",
     "safety_override_changes_nominal_selection": False,
     "reverse_plan_actions_executed": False,
@@ -499,22 +494,19 @@ SRSLM_DEPLOYMENT_CONTRACT = {
 
 
 def _srlsm_mode(
-    reverse_caar_cooldown_steps=4,
     reverse_caar_override_enabled=True,
 ):
     if not bool(reverse_caar_override_enabled):
         return SRSLM_PREDICTOR_ONLY_MODE
-    return (
-        SRSLM_REVERSE_COOLDOWN_MODE
-        if int(reverse_caar_cooldown_steps) > 0
-        else SRSLM_MODE
-    )
+    return SRSLM_MODE
 
 
-def _srlsm_switch_constraint(reverse_caar_cooldown_steps=4):
+def _srlsm_switch_constraint(
+    reverse_caar_override_enabled=True,
+):
     return (
-        "reverse_caar_cooldown"
-        if int(reverse_caar_cooldown_steps) > 0
+        "reverse_to_caar_current_step"
+        if reverse_caar_override_enabled
         else "none"
     )
 SRSLM_INTEGRITY_IMPLEMENTATION_FILES = (
@@ -685,88 +677,28 @@ def srlsm_contract_metadata(
     algorithms,
     *,
     value_margin=0.0,
-    reverse_caar_cooldown_steps=None,
     reverse_caar_override_enabled=True,
-    road_topology_adaptive_cooldown_enabled=False,
-    road_open4_threshold=0.68,
-    road_dense_obstacle_threshold=0.70,
-    road_reverse_caar_cooldown_steps=8,
-    road_caar_only_density_threshold=None,
 ):
     """Describe the per-step absolute-return learnable switcher."""
     if "SRSLM" not in algorithms:
         return None
     reverse_override_enabled = bool(reverse_caar_override_enabled)
-    cooldown_steps = int(
-        4 if reverse_caar_cooldown_steps is None and reverse_override_enabled
-        else 0 if reverse_caar_cooldown_steps is None
-        else reverse_caar_cooldown_steps
-    )
-    road_adaptive = bool(road_topology_adaptive_cooldown_enabled)
-    road_cooldown_steps = int(road_reverse_caar_cooldown_steps)
-    road_open4_threshold = float(road_open4_threshold)
-    road_dense_obstacle_threshold = float(
-        road_dense_obstacle_threshold
-    )
-    road_density_threshold = (
-        None
-        if road_caar_only_density_threshold is None
-        else float(road_caar_only_density_threshold)
-    )
-    for label, threshold in (
-        ("road_open4_threshold", road_open4_threshold),
-        ("road_dense_obstacle_threshold", road_dense_obstacle_threshold),
-    ):
-        if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
-            raise ValueError(f"{label} must be finite and within [0, 1]")
-    if road_cooldown_steps < 0:
-        raise ValueError("road reverse CAAR cooldown must be non-negative")
-    if road_density_threshold is not None and (
-        not np.isfinite(road_density_threshold)
-        or road_density_threshold < 0.0
-    ):
-        raise ValueError("road CAAR-only density threshold is invalid")
-    if cooldown_steps > 0 and not reverse_override_enabled:
-        raise ValueError(
-            "reverse CAAR cooldown requires the reverse override"
-        )
-    if road_adaptive and road_cooldown_steps > 0 and not reverse_override_enabled:
-        raise ValueError(
-            "road reverse CAAR cooldown requires the reverse override"
-        )
     deployment = dict(SRSLM_DEPLOYMENT_CONTRACT)
     deployment["value_margin"] = float(value_margin)
-    deployment["switch_constraint"] = _srlsm_switch_constraint(cooldown_steps)
-    deployment["reverse_caar_cooldown_steps"] = cooldown_steps
-    deployment["reverse_caar_cooldown_includes_trigger_step"] = True
     deployment["reverse_caar_override_enabled"] = reverse_override_enabled
-    deployment["road_topology_adaptive_cooldown_enabled"] = road_adaptive
-    deployment["road_open4_threshold"] = road_open4_threshold
-    deployment["road_dense_obstacle_threshold"] = (
-        road_dense_obstacle_threshold
+    deployment["switch_constraint"] = _srlsm_switch_constraint(
+        reverse_override_enabled,
     )
-    deployment["road_reverse_caar_cooldown_steps"] = road_cooldown_steps
-    deployment["road_caar_only_density_threshold"] = (
-        road_density_threshold
-    )
-    deployment["road_topology_source"] = "grid_config.map"
-    deployment["road_topology_uses_map_name"] = False
-    deployment["road_agent_density_definition"] = "num_agents/free_cells"
     deployment["hard_caar_fallbacks"] = (
         "raw_plan_none_or_invalid_or_reverse"
         if reverse_override_enabled
         else "raw_plan_none_or_invalid"
     )
-    if road_density_threshold is not None:
-        deployment["hard_caar_fallbacks"] += "_or_road_density_gate"
     deployment["reverse_plan_actions_executed"] = not reverse_override_enabled
-    deployment["safety_override_changes_nominal_selection"] = bool(
-        cooldown_steps or road_adaptive or road_density_threshold is not None
-    )
+    deployment["safety_override_changes_nominal_selection"] = False
     return {
         "strategy_kind": SRSLM_STRATEGY_KIND,
         "hybrid_mode": _srlsm_mode(
-            cooldown_steps,
             reverse_override_enabled,
         ),
         "base_algorithm": SRSLM_BASE_ALGORITHM,
@@ -816,10 +748,13 @@ def _has_checkpoints(path):
 
 def _find_caar_weights(main_dir):
     root = Path(main_dir).resolve()
+    preferred = root / "weights" / "CAAR" / "radius_ablation" / "R5"
+    if _has_config(preferred) and _has_checkpoints(preferred):
+        return str(preferred)
     candidate = _find_weight_run_dir(root / "weights" / "CAAR")
     if candidate is not None:
         return str(candidate)
-    return str(root / "weights" / "CAAR" / "CAAR")
+    return str(preferred)
 
 
 def _find_notau_weights(main_dir):
@@ -840,12 +775,12 @@ def _find_caar_ra_weights(main_dir):
 
 def _find_srlsm_caar_estimator_checkpoint(main_dir):
     root = Path(main_dir).resolve()
-    return str(root / "weights" / "SRSLM" / "caar_estimator.pth")
+    return str(root / "weights" / "SRSLM-v1" / "caar_estimator.pth")
 
 
 def _find_srlsm_ao_estimator_checkpoint(main_dir):
     root = Path(main_dir).resolve()
-    return str(root / "weights" / "SRSLM" / "ao_estimator.pth")
+    return str(root / "weights" / "SRSLM-v1" / "ao_estimator.pth")
 
 
 def _find_dhc_weights(main_dir):
@@ -1322,38 +1257,12 @@ def srlsm_integrity_metadata(
     map_list_sha256=None,
     map_registry_sha256=None,
 ):
-    """Hash both absolute-return estimators and the complete LS action path."""
+    """Hash both absolute-return estimators and the complete SRSLM path."""
 
     root = Path(args.main_dir).resolve()
-    cooldown_steps = int(
-        getattr(args, "srlsm_reverse_caar_cooldown_steps", 0)
-    )
     reverse_override_enabled = bool(
         getattr(args, "srlsm_reverse_caar_override_enabled", True)
     )
-    road_adaptive = bool(
-        getattr(
-            args,
-            "srlsm_road_topology_adaptive_cooldown_enabled",
-            False,
-        )
-    )
-    road_open4_threshold = float(
-        getattr(args, "srlsm_road_open4_threshold", 0.68)
-    )
-    road_dense_obstacle_threshold = float(
-        getattr(args, "srlsm_road_dense_obstacle_threshold", 0.70)
-    )
-    road_cooldown_steps = int(
-        getattr(args, "srlsm_road_reverse_caar_cooldown_steps", 8)
-    )
-    road_density_threshold = getattr(
-        args,
-        "srlsm_road_caar_only_density_threshold",
-        None,
-    )
-    if road_density_threshold is not None:
-        road_density_threshold = float(road_density_threshold)
     code_root = Path(__file__).resolve().parent
     caar_weights = _project_path(
         root,
@@ -1415,17 +1324,13 @@ def srlsm_integrity_metadata(
     }
     deployment_identity = {
         "hybrid_mode": _srlsm_mode(
-            cooldown_steps,
             reverse_override_enabled,
         ),
         "value_margin": float(args.srlsm_value_margin),
         "reverse_caar_override_enabled": reverse_override_enabled,
-        "reverse_caar_cooldown_steps": cooldown_steps,
-        "road_topology_adaptive_cooldown_enabled": road_adaptive,
-        "road_open4_threshold": road_open4_threshold,
-        "road_dense_obstacle_threshold": road_dense_obstacle_threshold,
-        "road_reverse_caar_cooldown_steps": road_cooldown_steps,
-        "road_caar_only_density_threshold": road_density_threshold,
+        "switch_constraint": _srlsm_switch_constraint(
+            reverse_override_enabled
+        ),
     }
     aggregate_sha256 = hashlib.sha256(
         json.dumps(
@@ -1440,23 +1345,17 @@ def srlsm_integrity_metadata(
     return {
         "strategy_kind": SRSLM_STRATEGY_KIND,
         "hybrid_mode": _srlsm_mode(
-            cooldown_steps,
             reverse_override_enabled,
         ),
         "hybrid_components": dict(SRSLM_COMPONENTS),
         "hybrid_action_policy": SRSLM_ACTION_POLICY,
         "hybrid_guide_algorithm": SRSLM_PLAN_ALGORITHM,
         "comparison_cadence": "every_step_per_agent",
-        "switch_constraint": _srlsm_switch_constraint(cooldown_steps),
+        "switch_constraint": _srlsm_switch_constraint(
+            reverse_override_enabled
+        ),
         "value_margin": float(args.srlsm_value_margin),
         "reverse_caar_override_enabled": reverse_override_enabled,
-        "reverse_caar_cooldown_steps": cooldown_steps,
-        "reverse_caar_cooldown_includes_trigger_step": True,
-        "road_topology_adaptive_cooldown_enabled": road_adaptive,
-        "road_open4_threshold": road_open4_threshold,
-        "road_dense_obstacle_threshold": road_dense_obstacle_threshold,
-        "road_reverse_caar_cooldown_steps": road_cooldown_steps,
-        "road_caar_only_density_threshold": road_density_threshold,
         "caar_checkpoint_path": str(caar_checkpoint),
         "caar_checkpoint_sha256": artifact_hashes["caar_checkpoint"],
         "caar_config_path": str(caar_config.resolve()),
@@ -1606,18 +1505,6 @@ def build_algorithm(
     srlsm_value_margin=0.0,
 
     srlsm_reverse_caar_override_enabled=True,
-
-    srlsm_reverse_caar_cooldown_steps=4,
-
-    srlsm_road_topology_adaptive_cooldown_enabled=False,
-
-    srlsm_road_open4_threshold=0.68,
-
-    srlsm_road_dense_obstacle_threshold=0.70,
-
-    srlsm_road_reverse_caar_cooldown_steps=8,
-
-    srlsm_road_caar_only_density_threshold=None,
 
     notau_weights_path=None,
 
@@ -1804,9 +1691,6 @@ def build_algorithm(
                     checkpoint_kind="latest",
                     device="auto",
                 ),
-                reverse_caar_cooldown_steps=int(
-                    srlsm_reverse_caar_cooldown_steps
-                ),
                 seed=seed,
             )
         )
@@ -1850,26 +1734,6 @@ def build_algorithm(
                 value_margin=float(srlsm_value_margin),
                 reverse_caar_override_enabled=bool(
                     srlsm_reverse_caar_override_enabled
-                ),
-                reverse_caar_cooldown_steps=int(
-                    srlsm_reverse_caar_cooldown_steps
-                ),
-                road_topology_adaptive_cooldown_enabled=bool(
-                    srlsm_road_topology_adaptive_cooldown_enabled
-                ),
-                road_open4_threshold=float(
-                    srlsm_road_open4_threshold
-                ),
-                road_dense_obstacle_threshold=float(
-                    srlsm_road_dense_obstacle_threshold
-                ),
-                road_reverse_caar_cooldown_steps=int(
-                    srlsm_road_reverse_caar_cooldown_steps
-                ),
-                road_caar_only_density_threshold=(
-                    None
-                    if srlsm_road_caar_only_density_threshold is None
-                    else float(srlsm_road_caar_only_density_threshold)
                 ),
                 seed=seed,
             )
@@ -2229,12 +2093,7 @@ def validate_caar_rs_stats(stats):
         "value_predictor_loaded",
         "value_predictor_call_count",
         "value_comparison_count",
-        "reverse_caar_cooldown_steps",
-        "reverse_caar_cooldown_includes_trigger_step",
-        "reverse_caar_cooldown_trigger_count",
-        "reverse_caar_cooldown_action_count",
-        "reverse_caar_cooldown_followup_action_count",
-        "max_reverse_caar_cooldown_remaining",
+        "switch_constraint",
         "total_action_count",
         "total_actions",
         "nominal_caar_count",
@@ -2266,10 +2125,8 @@ def validate_caar_rs_stats(stats):
         violations.append("a value predictor was called")
     if stats["value_comparison_count"] != 0:
         violations.append("a learned value comparison was recorded")
-    if stats["reverse_caar_cooldown_steps"] != 4:
-        violations.append("the required four-step cooldown is not enabled")
-    if stats["reverse_caar_cooldown_includes_trigger_step"] is not True:
-        violations.append("cooldown trigger-step semantics are invalid")
+    if stats["switch_constraint"] != "reverse_to_caar_current_step":
+        violations.append("the per-step reverse rule is not active")
     if total != stats["total_actions"]:
         violations.append("total action aliases disagree")
     if stats["nominal_caar_count"] != 0 or stats["nominal_ao_count"] != total:
@@ -2286,21 +2143,6 @@ def validate_caar_rs_stats(stats):
         violations.append("Probe was called")
     if stats["final_none_action_count"] != 0:
         violations.append("a final environment action was None")
-    triggers = stats["reverse_caar_cooldown_trigger_count"]
-    cooldown_actions = stats["reverse_caar_cooldown_action_count"]
-    cooldown_followups = stats[
-        "reverse_caar_cooldown_followup_action_count"
-    ]
-    if cooldown_actions != triggers + cooldown_followups:
-        violations.append("cooldown action accounting is inconsistent")
-    if not 0 <= triggers <= stats["reverse_count"]:
-        violations.append("cooldown trigger count is invalid")
-    if not 0 <= cooldown_actions <= triggers * 4:
-        violations.append("cooldown action count exceeds its bound")
-    if not 0 <= cooldown_followups <= triggers * 3:
-        violations.append("cooldown followup count exceeds its bound")
-    if not 0 <= stats["max_reverse_caar_cooldown_remaining"] <= 3:
-        violations.append("maximum cooldown state is invalid")
     for key in (
         "executed_caar_count",
         "executed_ao_count",
@@ -2344,12 +2186,6 @@ def validate_srlsm_stats(stats):
         "nonfinite_ao_value_count",
         "forced_caar_count",
         "reverse_caar_override_enabled",
-        "reverse_caar_cooldown_steps",
-        "reverse_caar_cooldown_includes_trigger_step",
-        "reverse_caar_cooldown_trigger_count",
-        "reverse_caar_cooldown_action_count",
-        "reverse_caar_cooldown_followup_action_count",
-        "max_reverse_caar_cooldown_remaining",
         "probe_call_count",
         "final_none_action_count",
         "max_concurrent_nominal_ao",
@@ -2362,18 +2198,11 @@ def validate_srlsm_stats(stats):
         )
 
     violations = []
-    cooldown_steps = stats["reverse_caar_cooldown_steps"]
     reverse_override_enabled = stats["reverse_caar_override_enabled"]
     if not isinstance(reverse_override_enabled, bool):
         violations.append("reverse CAAR override flag is invalid")
         reverse_override_enabled = True
-    if not isinstance(cooldown_steps, int) or cooldown_steps < 0:
-        violations.append("reverse CAAR cooldown steps are invalid")
-        cooldown_steps = 0
-    if cooldown_steps > 0 and not reverse_override_enabled:
-        violations.append("reverse cooldown is enabled without its override")
     if stats["hybrid_mode"] != _srlsm_mode(
-        cooldown_steps,
         reverse_override_enabled,
     ):
         violations.append("hybrid mode does not match the SRSLM contract")
@@ -2390,10 +2219,13 @@ def validate_srlsm_stats(stats):
         violations.append("nominal AO fallbacks are not fully classified")
     if stats["comparison_cadence"] != "every_step_per_agent":
         violations.append("absolute returns are not compared every step")
-    if stats["switch_constraint"] != _srlsm_switch_constraint(cooldown_steps):
-        violations.append("switch constraint does not match cooldown config")
-    if stats["reverse_caar_cooldown_includes_trigger_step"] is not True:
-        violations.append("reverse cooldown trigger-step semantics are invalid")
+    expected_constraint = (
+        "reverse_to_caar_current_step"
+        if reverse_override_enabled
+        else "none"
+    )
+    if stats["switch_constraint"] != expected_constraint:
+        violations.append("switch constraint does not match the reverse rule")
     if stats["probe_call_count"] != 0:
         violations.append("Probe was called")
     if (
@@ -2425,9 +2257,6 @@ def validate_srlsm_stats(stats):
         "invalid_override_count",
         "nonfinite_value_count",
         "forced_caar_count",
-        "reverse_caar_cooldown_trigger_count",
-        "reverse_caar_cooldown_action_count",
-        "reverse_caar_cooldown_followup_action_count",
     )
     for key in bounded_by_total:
         if not 0 <= stats[key] <= total:
@@ -2463,28 +2292,6 @@ def validate_srlsm_stats(stats):
         violations.append("an override class exceeds all forced CAAR actions")
     if stats["forced_caar_count"] > sum(override_counts):
         violations.append("a forced CAAR action has no safety-override reason")
-    cooldown_triggers = stats["reverse_caar_cooldown_trigger_count"]
-    cooldown_actions = stats["reverse_caar_cooldown_action_count"]
-    cooldown_followups = stats[
-        "reverse_caar_cooldown_followup_action_count"
-    ]
-    if cooldown_actions != cooldown_triggers + cooldown_followups:
-        violations.append("reverse cooldown action accounting is inconsistent")
-    if cooldown_actions > stats["executed_caar_count"]:
-        violations.append("reverse cooldown actions exceed CAAR executions")
-    if cooldown_steps == 0:
-        if cooldown_triggers or cooldown_actions or cooldown_followups:
-            violations.append("disabled reverse cooldown recorded actions")
-    else:
-        if cooldown_triggers != stats["reverse_override_count"]:
-            violations.append("reverse cooldown triggers miss reverse overrides")
-        if cooldown_actions > cooldown_triggers * cooldown_steps:
-            violations.append("reverse cooldown action count exceeds its bound")
-        if cooldown_followups > cooldown_triggers * (cooldown_steps - 1):
-            violations.append("reverse cooldown followups exceed their bound")
-    max_remaining = stats["max_reverse_caar_cooldown_remaining"]
-    if not 0 <= max_remaining <= max(cooldown_steps - 1, 0):
-        violations.append("maximum reverse cooldown remaining is invalid")
     if not (
         0
         <= stats["max_concurrent_nominal_ao"]
@@ -2497,45 +2304,6 @@ def validate_srlsm_stats(stats):
         <= stats["executed_ao_count"]
     ):
         violations.append("maximum concurrent executed AO count is inconsistent")
-    road_keys = {
-        "road_like",
-        "road_agent_density",
-        "road_caar_only_density_threshold",
-        "density_gate_active",
-        "road_density_gate_forced_nominal_count",
-        "road_topology_provenance",
-    }
-    if road_keys & set(stats):
-        missing_road = sorted(road_keys - set(stats))
-        if missing_road:
-            violations.append(
-                "road diagnostics are incomplete: "
-                + ", ".join(missing_road)
-            )
-        else:
-            road_like = stats["road_like"]
-            gate_active = stats["density_gate_active"]
-            if not isinstance(road_like, bool):
-                violations.append("road topology decision is invalid")
-            if not isinstance(gate_active, bool):
-                violations.append("road density gate flag is invalid")
-            gate_forced = stats["road_density_gate_forced_nominal_count"]
-            if not isinstance(gate_forced, int) or not 0 <= gate_forced <= total:
-                violations.append("road density-gate accounting is invalid")
-            provenance = stats["road_topology_provenance"]
-            if not isinstance(provenance, dict) or provenance.get(
-                "uses_map_name"
-            ) is not False:
-                violations.append("road topology provenance is invalid")
-            if gate_active:
-                threshold = stats["road_caar_only_density_threshold"]
-                density = stats["road_agent_density"]
-                if road_like is not True:
-                    violations.append("density gate activated on non-road topology")
-                if threshold is None or density is None or density < threshold:
-                    violations.append("density gate activated below its threshold")
-                if stats["nominal_ao_count"] or stats["executed_ao_count"]:
-                    violations.append("density gate allowed an AO branch")
     if violations:
         raise RuntimeError(
             "SRSLM safety contract failed: " + "; ".join(violations)
@@ -2805,21 +2573,6 @@ def run_single_experiment(task):
 
         task.get("srlsm_reverse_caar_override_enabled", True),
 
-        task.get("srlsm_reverse_caar_cooldown_steps", 0),
-
-        task.get(
-            "srlsm_road_topology_adaptive_cooldown_enabled",
-            False,
-        ),
-
-        task.get("srlsm_road_open4_threshold", 0.68),
-
-        task.get("srlsm_road_dense_obstacle_threshold", 0.70),
-
-        task.get("srlsm_road_reverse_caar_cooldown_steps", 8),
-
-        task.get("srlsm_road_caar_only_density_threshold"),
-
         task.get("notau_weights_path"),
 
         task.get("dhc_weights_path"),
@@ -2867,31 +2620,6 @@ def run_single_experiment(task):
                         "srlsm_reverse_caar_override_enabled", True
                     ),
 
-                    srlsm_reverse_caar_cooldown_steps=task.get(
-                        "srlsm_reverse_caar_cooldown_steps", 0
-                    ),
-
-                    srlsm_road_topology_adaptive_cooldown_enabled=task.get(
-                        "srlsm_road_topology_adaptive_cooldown_enabled",
-                        False,
-                    ),
-
-                    srlsm_road_open4_threshold=task.get(
-                        "srlsm_road_open4_threshold", 0.68
-                    ),
-
-                    srlsm_road_dense_obstacle_threshold=task.get(
-                        "srlsm_road_dense_obstacle_threshold", 0.70
-                    ),
-
-                    srlsm_road_reverse_caar_cooldown_steps=task.get(
-                        "srlsm_road_reverse_caar_cooldown_steps", 8
-                    ),
-
-                    srlsm_road_caar_only_density_threshold=task.get(
-                        "srlsm_road_caar_only_density_threshold"
-                    ),
-
                     notau_weights_path=task.get("notau_weights_path"),
 
                     dhc_weights_path=task.get("dhc_weights_path"),
@@ -2934,31 +2662,6 @@ def run_single_experiment(task):
 
                 srlsm_reverse_caar_override_enabled=task.get(
                     "srlsm_reverse_caar_override_enabled", True
-                ),
-
-                srlsm_reverse_caar_cooldown_steps=task.get(
-                    "srlsm_reverse_caar_cooldown_steps", 0
-                ),
-
-                srlsm_road_topology_adaptive_cooldown_enabled=task.get(
-                    "srlsm_road_topology_adaptive_cooldown_enabled",
-                    False,
-                ),
-
-                srlsm_road_open4_threshold=task.get(
-                    "srlsm_road_open4_threshold", 0.68
-                ),
-
-                srlsm_road_dense_obstacle_threshold=task.get(
-                    "srlsm_road_dense_obstacle_threshold", 0.70
-                ),
-
-                srlsm_road_reverse_caar_cooldown_steps=task.get(
-                    "srlsm_road_reverse_caar_cooldown_steps", 8
-                ),
-
-                srlsm_road_caar_only_density_threshold=task.get(
-                    "srlsm_road_caar_only_density_threshold"
                 ),
 
                 notau_weights_path=task.get("notau_weights_path"),
@@ -3517,32 +3220,6 @@ def build_tasks(
                 args.srlsm_reverse_caar_override_enabled
             ),
 
-            "srlsm_reverse_caar_cooldown_steps": (
-                args.srlsm_reverse_caar_cooldown_steps
-            ),
-
-            "srlsm_road_topology_adaptive_cooldown_enabled": getattr(
-                args,
-                "srlsm_road_topology_adaptive_cooldown_enabled",
-                False,
-            ),
-
-            "srlsm_road_open4_threshold": getattr(
-                args, "srlsm_road_open4_threshold", 0.68
-            ),
-
-            "srlsm_road_dense_obstacle_threshold": getattr(
-                args, "srlsm_road_dense_obstacle_threshold", 0.70
-            ),
-
-            "srlsm_road_reverse_caar_cooldown_steps": getattr(
-                args, "srlsm_road_reverse_caar_cooldown_steps", 8
-            ),
-
-            "srlsm_road_caar_only_density_threshold": getattr(
-                args, "srlsm_road_caar_only_density_threshold", None
-            ),
-
             "notau_weights_path": args.notau_weights_path,
 
             "dhc_weights_path": args.dhc_weights_path,
@@ -3992,99 +3669,6 @@ def parse_args():
 
     parser.add_argument(
 
-        "--srlsm-reverse-caar-cooldown-steps",
-
-        dest="srlsm_reverse_caar_cooldown_steps",
-
-        type=int,
-
-        default=None,
-
-        help=(
-            "Keep each reverse-fallback agent on CAAR for this many steps, "
-            "including the triggering step"
-        ),
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-road-topology-adaptive-cooldown",
-
-        dest="srlsm_road_topology_adaptive_cooldown_enabled",
-
-        action="store_true",
-
-        default=False,
-
-        help=(
-            "Use the road-specific reverse cooldown when map-only topology "
-            "features pass both thresholds"
-        ),
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-road-open4-threshold",
-
-        dest="srlsm_road_open4_threshold",
-
-        type=float,
-
-        default=0.68,
-
-        help="Minimum open-four-neighbour free-cell ratio for road topology",
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-road-dense-obstacle-threshold",
-
-        dest="srlsm_road_dense_obstacle_threshold",
-
-        type=float,
-
-        default=0.70,
-
-        help="Minimum dense-obstacle ratio for road topology",
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-road-reverse-caar-cooldown-steps",
-
-        dest="srlsm_road_reverse_caar_cooldown_steps",
-
-        type=int,
-
-        default=8,
-
-        help="Reverse-triggered CAAR dwell used on detected road topology",
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-road-caar-only-density-threshold",
-
-        dest="srlsm_road_caar_only_density_threshold",
-
-        type=float,
-
-        default=None,
-
-        help=(
-            "On detected road topology, stay with CAAR when "
-            "num_agents/free_cells reaches this threshold"
-        ),
-
-    )
-
-    parser.add_argument(
-
         "--notau-weights-path",
 
         dest="notau_weights_path",
@@ -4105,12 +3689,7 @@ def parse_args():
 
     parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
 
-    args = parser.parse_args()
-    if args.srlsm_reverse_caar_cooldown_steps is None:
-        args.srlsm_reverse_caar_cooldown_steps = (
-            4 if args.srlsm_reverse_caar_override_enabled else 0
-        )
-    return args
+    return parser.parse_args()
 
 
 
@@ -4137,58 +3716,6 @@ def main():
     if not np.isfinite(args.srlsm_value_margin):
 
         raise ValueError("--srlsm-value-margin must be finite")
-
-    if args.srlsm_reverse_caar_cooldown_steps < 0:
-        raise ValueError(
-            "--srlsm-reverse-caar-cooldown-steps must be non-negative"
-        )
-    if (
-        not args.srlsm_reverse_caar_override_enabled
-        and args.srlsm_reverse_caar_cooldown_steps > 0
-    ):
-        raise ValueError(
-            "reverse CAAR cooldown requires "
-            "--srlsm-reverse-caar-override"
-        )
-    for option, value in (
-        (
-            "--srlsm-road-open4-threshold",
-            args.srlsm_road_open4_threshold,
-        ),
-        (
-            "--srlsm-road-dense-obstacle-threshold",
-            args.srlsm_road_dense_obstacle_threshold,
-        ),
-    ):
-        if not np.isfinite(value) or not 0.0 <= value <= 1.0:
-            raise ValueError(f"{option} must be finite and within [0, 1]")
-    if args.srlsm_road_reverse_caar_cooldown_steps < 0:
-        raise ValueError(
-            "--srlsm-road-reverse-caar-cooldown-steps must be "
-            "non-negative"
-        )
-    if (
-        args.srlsm_road_topology_adaptive_cooldown_enabled
-        and args.srlsm_road_reverse_caar_cooldown_steps > 0
-        and not args.srlsm_reverse_caar_override_enabled
-    ):
-        raise ValueError(
-            "road reverse CAAR cooldown requires "
-            "--srlsm-reverse-caar-override"
-        )
-    if (
-        args.srlsm_road_caar_only_density_threshold is not None
-        and (
-            not np.isfinite(
-                args.srlsm_road_caar_only_density_threshold
-            )
-            or args.srlsm_road_caar_only_density_threshold < 0.0
-        )
-    ):
-        raise ValueError(
-            "--srlsm-road-caar-only-density-threshold must be a "
-            "finite non-negative value"
-        )
 
     map_sources = sum(
 
@@ -4227,22 +3754,6 @@ def main():
         value_margin=args.srlsm_value_margin,
         reverse_caar_override_enabled=(
             args.srlsm_reverse_caar_override_enabled
-        ),
-        reverse_caar_cooldown_steps=(
-            args.srlsm_reverse_caar_cooldown_steps
-        ),
-        road_topology_adaptive_cooldown_enabled=(
-            args.srlsm_road_topology_adaptive_cooldown_enabled
-        ),
-        road_open4_threshold=args.srlsm_road_open4_threshold,
-        road_dense_obstacle_threshold=(
-            args.srlsm_road_dense_obstacle_threshold
-        ),
-        road_reverse_caar_cooldown_steps=(
-            args.srlsm_road_reverse_caar_cooldown_steps
-        ),
-        road_caar_only_density_threshold=(
-            args.srlsm_road_caar_only_density_threshold
         ),
     )
     active_contracts = [
@@ -4457,30 +3968,6 @@ def main():
 
         "srlsm_reverse_caar_override_enabled": (
             args.srlsm_reverse_caar_override_enabled
-        ),
-
-        "srlsm_reverse_caar_cooldown_steps": (
-            args.srlsm_reverse_caar_cooldown_steps
-        ),
-
-        "srlsm_road_topology_adaptive_cooldown_enabled": (
-            args.srlsm_road_topology_adaptive_cooldown_enabled
-        ),
-
-        "srlsm_road_open4_threshold": (
-            args.srlsm_road_open4_threshold
-        ),
-
-        "srlsm_road_dense_obstacle_threshold": (
-            args.srlsm_road_dense_obstacle_threshold
-        ),
-
-        "srlsm_road_reverse_caar_cooldown_steps": (
-            args.srlsm_road_reverse_caar_cooldown_steps
-        ),
-
-        "srlsm_road_caar_only_density_threshold": (
-            args.srlsm_road_caar_only_density_threshold
         ),
 
         "notau_weights_path": args.notau_weights_path,

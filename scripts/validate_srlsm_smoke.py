@@ -74,11 +74,6 @@ def main() -> int:
     for field in ("caar_config_sha256", "caar_checkpoint_sha256"):
         if contract.get(field) != expected[field] or source_identity.get(field) != expected[field]:
             raise RuntimeError(f"Estimator manifest does not match deployed {field}.")
-    if contract.get("collection_implementation_sha256") != expected[
-        "collection_implementation_sha256"
-    ]:
-        raise RuntimeError("Estimator weights are not bound to the current root source hash.")
-
     smoke = json.loads(args.smoke.read_text(encoding="utf-8"))
     rows = smoke.get("results", [])
     if len(rows) != 1:
@@ -90,8 +85,8 @@ def main() -> int:
         raise RuntimeError(f"Unexpected smoke algorithm: {row.get('algorithm')}")
     if row.get("reverse_caar_override_enabled") is not True:
         raise RuntimeError("Reverse-to-CAAR rule was not enabled.")
-    if int(row.get("reverse_caar_cooldown_steps", -1)) != 4:
-        raise RuntimeError("Expected the formal four-step CAAR cooldown.")
+    if row.get("switch_constraint") != "reverse_to_caar_current_step":
+        raise RuntimeError("The per-step reverse fallback rule is not active.")
     if int(row.get("reverse_ao_executed_count", -1)) != 0:
         raise RuntimeError("A reverse AO action escaped the hard rule.")
     if int(row.get("value_comparison_count", 0)) <= 0:

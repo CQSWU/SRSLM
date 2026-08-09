@@ -26,7 +26,7 @@ from train import register_custom_components, validate_config
 
 class CAARConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["CAAR"] = "CAAR"
-    path_to_weights: str = "weights/CAAR/CAAR"
+    path_to_weights: str = "weights/CAAR/radius_ablation/R5"
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
 
 
