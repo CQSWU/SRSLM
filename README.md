@@ -15,7 +15,7 @@ This release intentionally contains only the three methods used by SRSLM:
 
 The repository includes the map registries, source code, training entry points,
 and focused tests. Released CAAR and SRSLM weights are available from the
-[SRSLM v1.0.0 release](https://github.com/CQSWU/SRSLM/releases/tag/v1.0.0).
+[latest SRSLM release](https://github.com/CQSWU/SRSLM/releases/latest).
 Historical experiments, external baselines, and obsolete switchers are not
 included.
 
