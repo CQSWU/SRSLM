@@ -1,5 +1,9 @@
 # SRSLM
 
+| RePlan | AORePlan |
+|:---:|:---:|
+| ![RePlan animation](docs/assets/replan_demo.svg) | ![AORePlan animation](docs/assets/aoreplan_demo.svg) |
+
 Reference implementation for **SRSLM: Switch and Reweight with Shared Trace
 Memory for Lifelong Partially Observable Multi-Agent Pathfinding**.
 
