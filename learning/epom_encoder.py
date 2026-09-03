@@ -9,7 +9,7 @@ SUPPORTED_COORDINATE_ENCODINGS = ("absolute_v1",)
 
 
 class EPOMEncoder(Encoder):
-    """Encoder architecture used by the original EPOM checkpoint."""
+    """Sample Factory 2 adapter for the official EPOM v0 encoder."""
 
     def __init__(self, cfg, obs_space):
         super().__init__(cfg)
@@ -17,17 +17,6 @@ class EPOMEncoder(Encoder):
         obs_shape = obs_space["obs"].shape
         channels = settings["pogema_encoder_num_filters"]
         num_blocks = settings["pogema_encoder_num_res_blocks"]
-        self.coordinate_encoding = getattr(
-            cfg,
-            "coordinate_encoding",
-            "absolute_v1",
-        )
-        if self.coordinate_encoding not in SUPPORTED_COORDINATE_ENCODINGS:
-            raise ValueError(
-                "coordinate_encoding must be one of "
-                f"{SUPPORTED_COORDINATE_ENCODINGS}, got "
-                f"{self.coordinate_encoding!r}."
-            )
 
         layers = [nn.Conv2d(obs_shape[0], channels, kernel_size=3, padding=1)]
         for _ in range(num_blocks):
@@ -42,17 +31,14 @@ class EPOMEncoder(Encoder):
             nn.Linear(cfg.hidden_size, cfg.hidden_size),
             nn.ReLU(),
         )
-        num_fc_layers = max(1, getattr(cfg, "encoder_extra_fc_layers", 1))
         self.fc_blocks = create_mlp(
-            [cfg.hidden_size for _ in range(num_fc_layers)],
+            [cfg.hidden_size],
             self.conv_head_out_size + cfg.hidden_size,
             nonlinearity(cfg),
         )
         self.encoder_out_size = cfg.hidden_size
 
     def _coordinate_features(self, observations):
-        # Keep the original absolute-coordinate preprocessing byte-for-byte
-        # equivalent for old checkpoints.
         coordinates = torch.cat(
             [observations["xy"], observations["target_xy"]],
             dim=-1,

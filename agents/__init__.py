@@ -1,1 +1,1 @@
-"""Inference adapters for SRSLM, CAAR, AO-RePlan, and retained baselines."""
+"""Inference adapters for SRSLM, CAAR, AORePlan, and retained baselines."""

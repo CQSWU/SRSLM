@@ -274,7 +274,7 @@ def _make_sample_factory_pogema(grid_config):
 
 
 
-def make_pomapf(grid_config, with_animations=False):
+def make_pomapf(grid_config, with_animations=False, auto_reset=True):
 
     grid_config = deepcopy(grid_config)
 
@@ -291,6 +291,8 @@ def make_pomapf(grid_config, with_animations=False):
 
     env = MultiMapWrapper(env)
 
-    env = AutoResetWrapper(env)
+    if auto_reset:
+
+        env = AutoResetWrapper(env)
 
     return EnvAttributesWrapper(env)

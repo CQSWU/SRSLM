@@ -7,26 +7,39 @@
 Reference implementation for **SRSLM: Switch and Reweight with Shared Trace
 Memory for Lifelong Partially Observable Multi-Agent Pathfinding**.
 
-This release intentionally contains only the three methods used by SRSLM:
+## Current method
 
-- **AO-RePlan** - the action-observation planning baseline.
-- **CAAR** - a recurrent MAPF policy whose action logits are reweighted
-  with a pressure signal derived from the shared, decaying traffic trace.
-- **SRSLM** - CAAR and raw AO-RePlan proposals are compared at every
-  step using two independent absolute-return estimators. A reverse AO proposal
-  is rejected for that timestep and replaced by the CAAR action. The next
-  timestep starts with a new value comparison.
+The public implementation contains the proposed method, its planning baseline,
+and the ablations needed to inspect each component:
 
-The repository includes the map registries, source code, training entry points,
-and focused tests. Released CAAR and SRSLM weights are available from the
-[latest SRSLM release](https://github.com/CQSWU/SRSLM/releases/latest).
-Historical experiments, external baselines, and obsolete switchers are not
-included.
+- **RePlan** is the original dynamic replanning baseline.
+- **AORePlan** changes only a reverse move. It queries A* once on the static
+  map and uses a usable non-reverse first step; a missing or locally
+  conflicting static step becomes wait. The previous position is recorded at
+  every timestep, including waits and blocked moves. RePlan's original
+  BestMove and 50% random / 50% stay no-path fallback are otherwise preserved.
+- **EPOM-L** is the lifelong fine-tuned recurrent base policy used by CAAR.
+- **Direct** subtracts a fixed capped-ReLU pressure, computed from the shared
+  11x11 trace, from the five base-policy logits.
+- **CAAR** freezes EPOM-L and trains a separate trace branch. A Conv32 encoder
+  with two residual blocks maps the mean-centred 11x11 trace to 32 features.
+  These features are fused with the frozen 512-dimensional recurrent state and
+  five base logits. The branch outputs five logit corrections. A policy-entropy
+  gate decides whether to apply them; no action mask is an input to the learned
+  branch. CAAR has 303,846 trainable parameters.
+- **Switcher** is a feed-forward PPO policy with two outputs: choose CAAR or
+  choose AORePlan. It does not output a primitive grid action.
+- **SRSLM** uses CAAR immediately when AORePlan proposes wait. For every
+  non-wait AORePlan proposal, Switcher samples one of the two complete
+  candidate actions. Training and evaluation share the same routing code.
+
+Historical value-estimator switchers and experimental compatibility branches
+are not part of this source release.
 
 ## Installation
 
 Python 3.10 or 3.11 and a C++ compiler are required. `cppimport` builds the
-planner extension from `planning/planner.cpp` on first use.
+planner extension from `planning/planner.cpp` when it is first imported.
 
 ```bash
 git clone https://github.com/CQSWU/SRSLM.git
@@ -34,112 +47,83 @@ cd SRSLM
 uv sync --extra test
 ```
 
-If `uv` is unavailable, create a Python 3.10/3.11 environment and install the
-locked project dependencies with your preferred package manager.
+## Quick AORePlan check
 
-## Quick AO-RePlan smoke run
-
-AO-RePlan does not require a learned checkpoint:
+AORePlan has no learned parameters:
 
 ```bash
 uv run python run_experiments.py \
-  --algorithms AO-RePlan \
+  --algorithms AORePlan \
   --map-file maps/srlsm_smoke.map \
   --agents 16 --seeds 0 --workers 1 \
-  --max-steps 128 --on-target finish \
-  --output-dir results --output ao_replan_smoke.json
+  --obs-radius 5 --max-steps 128 \
+  --on-target restart --collision-system block_both \
+  --output-dir results --output aoreplan_smoke.json
 ```
 
-## Train and evaluate CAAR
+## Training sequence
 
-The short configuration is for a functionality check. The R5 configuration is
-the full training recipe; it is not a quick smoke run.
+The current learned pipeline has three stages. Checkpoints are deliberately not
+committed to Git, and each later stage requires the earlier checkpoint at the
+path recorded in its YAML file.
 
 ```bash
-# Functionality smoke training
-uv run python train_caar.py \
-  --config_path learning/train_caar_r5_smoke.yaml
+# 1. Lifelong fine-tune of the EPOM base policy (100M frames)
+uv run python train.py \
+  --config_path learning/train_epom_lifelong_finetune_r5_100m.yaml
 
-# Full CAAR R5 recipe
-uv run python train_caar.py \
-  --config_path learning/train_caar_r5.yaml
+# 2. Frozen EPOM-L plus learned CAAR trace branch (500M frames)
+uv run python train.py \
+  --config_path learning/train_epom_trace_paper_conv_fusion_r5_500m.yaml
+
+# 3. Wait-aware two-branch Switcher (100M frames)
+uv run python train_switcher_wait_caar.py \
+  --config_path learning/train_switcher_wait_caar_100m_server2.yaml
 ```
 
-After the full run, evaluate the resulting checkpoint directory:
+Use the corresponding `*_smoke.yaml` files before a full run. The shell
+launchers under `scripts/` add PPU allocation, duplicate-run protection,
+checkpoint hashing, and postflight validation for the audited server setup.
+
+## Exact960 protocol
+
+The retained formal result uses 32 held-out maps, populations
+100/200/300/400/500/600, seeds 0/42/123/2024/3407, `block_both` collisions,
+lifelong `restart`, 512 steps, and observation radius 5. This is exactly 960
+map-population-seed episodes.
+
+The validated SRSLM run contains all 960 unique finite error-free rows and has
+mean throughput **1.8608784993**. The complete artifact identities and
+per-population values are recorded in [CURRENT_VERSION.md](CURRENT_VERSION.md).
+
+With the hash-pinned checkpoints and candidate manifest in their documented
+paths, the audited launcher is:
 
 ```bash
-uv run python run_experiments.py \
-  --algorithms CAAR \
-  --caar-weights-path weights/CAAR/radius_ablation/R5 \
-  --map-list maps/eval.yaml \
-  --agents 100,150,200,250,300,350,400 \
-  --seeds 0,42,123,456,789 --workers 16 \
-  --max-steps 512 --on-target restart \
-  --output-dir results --output caar_lifelong.json
+bash scripts/run_srslm_wait_aware_caar_100m_exact960_server1.sh
 ```
 
-## Train and evaluate SRSLM
-
-SRSLM requires a frozen CAAR checkpoint and two independently trained
-return estimators. The collection script writes paired CAAR/AO-safe trajectories
-from identical scenarios; the trainer then writes `caar_estimator.pth` and
-`ao_estimator.pth` plus a provenance manifest.
-
-```bash
-# Collect paired trajectories. Replace the small example scenario set with a
-# formal train/validation scenario manifest for a paper-scale run.
-uv run python scripts/collect_caar_ao_returns.py \
-  --scenario-manifest configs/trace_smoke_scenarios.yaml \
-  --output data/trace_smoke \
-  --caar-weights weights/CAAR/radius_ablation/R5 \
-  --sample-fraction 1.0 --workers 1
-
-# Train the two value estimators.
-uv run python scripts/train_caar_ao_estimators.py \
-  --data data/trace_smoke/caar data/trace_smoke/ao_safe \
-  --output weights/SRSLM-v1 \
-  --num-trials 1 --epochs-per-trial 1 --overfit-small-data
-
-# Run the learned, rule-constrained switcher.
-uv run python run_experiments.py \
-  --algorithms SRSLM \
-  --caar-weights-path weights/CAAR/radius_ablation/R5 \
-  --srlsm-caar-estimator-checkpoint weights/SRSLM-v1/caar_estimator.pth \
-  --srlsm-ao-estimator-checkpoint weights/SRSLM-v1/ao_estimator.pth \
-  --map-file maps/srlsm_smoke.map \
-  --agents 16 --seeds 0 --workers 1 --max-steps 128 \
-  --output-dir results --output trace_srlsm_smoke.json
-```
-
-The small scenario set is only a pipeline check. Reproducing paper-scale
-numbers requires the full map/seed protocol and the corresponding training
-budget; it must not be interpreted as a numerical reproduction of the paper.
+The launcher refuses to overwrite an existing result directory and writes a
+validation manifest only after the protocol, row count, artifacts, and source
+hashes pass.
 
 ## Tests
 
 ```bash
-uv run python -m unittest discover -s tests -p test_ao_replan.py
-uv run python -m unittest discover -s tests -p test_raw_aoreplan_candidates.py
-uv run python -m unittest discover -s tests -p test_trace_switcher_contract.py
-uv run python -m unittest discover -s tests -p test_caar_pe_model.py
-uv run python -m unittest discover -s tests -p test_caar_ao_rollout.py
-uv run python -m unittest discover -s tests -p test_stigmergic.py
+uv run python -m pytest \
+  tests/test_ao_replan.py \
+  tests/test_aoreplan_branch.py \
+  tests/test_direct.py \
+  tests/test_epom_paper_entropy_fusion.py \
+  tests/test_switcher.py \
+  tests/test_switcher_learner_patch.py \
+  tests/test_switcher_caar_candidate.py \
+  tests/test_srslm_candidate_binding.py \
+  tests/test_runner_current_contracts.py
 ```
 
-## Release boundary and reproducibility
-
-The released core algorithm modules match the runtime used for the retained
-SRSLM formal results: `run_experiments.py`, `agents/caar.py`,
-`agents/srlsm.py`, the encoder, planner, estimator, and environment.
-The public `uv.lock` is regenerated for a clean installation and is therefore
-treated as a separate, versioned runtime artifact. SHA-256 values are recorded
-in result/provenance files for auditability only: normal deployment does not
-reject a checkpoint merely because the user changed source code or a runtime
-parameter. Incompatible checkpoint schemas or tensor shapes still fail clearly.
-
-Pretrained checkpoints are intentionally not committed to Git. They are
-published as versioned GitHub Release assets with SHA-256 checksums rather than
-silently replacing files under `weights/`.
+See [CURRENT_VERSION.md](CURRENT_VERSION.md) for the frozen artifact hashes and
+[DIRECTORY.md](DIRECTORY.md) for the intentionally small public source layout.
 
 ## License
 

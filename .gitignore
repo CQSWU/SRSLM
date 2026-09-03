@@ -1,49 +1,62 @@
-# Bytecode
+# Python bytecode and test caches
 __pycache__/
 *.py[cod]
 *.pyo
+.pytest_cache/
+.pytest_tmp*/
 
-# Virtual environment
+# Local environments and build products
 .venv/
 venv/
 env/
-
-# Weights and checkpoints are versioned separately as release assets.
-*.pth
-*.pt
-weights/
-# Experiment results
-exp_result/
-results/
-single_task_logs/
-*.log
-*.pid
-*.job
-
-# Renders / animations
-renders/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Sample factory
 .sample_factory/
+*.egg-info/
+dist/
+build/
 
-# Compiled binaries
+# Compiled extensions and local planner builds
 *.so
 *.dylib
 *.pyd
 planning/.rendered.*
 
-# Data
+# Model artifacts are distributed separately from source
+weights/
+*.pth
+*.pt
+*.onnx
+*.cptk*
+*.ckpt*
+*.7z
+
+# Experiment outputs and immutable local audit records
+results/
+logs/
+artifacts/
+backups/
+tmp/
+exp_result/
+single_task_logs/
+*.log
+*.pid
+*.job
+
+# Upstream repositories and comparison implementations
+external/
+third_party/
+otherpolicy/
+
+# Generated data and renders
 data/
+renders/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 
 # LaTeX build products
 *.aux
@@ -54,10 +67,5 @@ data/
 PDF/tmp/
 PDF/render_check*/
 
-# Python eggs / wheels
-*.egg-info/
-dist/
-build/
-
-# Local release-staging artifact
+# Local release staging
 release_contents.tar

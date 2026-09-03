@@ -167,6 +167,20 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     caar_contextual_pressure: bool = False
 
+    caar_pressure_head_mode: Literal[
+        'legacy_multiplier',
+        'direct_pressure',
+    ] = 'legacy_multiplier'
+
+    caar_pressure_output_transform: Literal[
+        'clipped_relu',
+        'identity',
+    ] = 'clipped_relu'
+
+    caar_pressure_cap: float = Field(2.0, gt=0.0)
+
+    caar_pressure_init: float = Field(0.1, ge=0.0)
+
     hidden_size: int = 512
 
     nonlinearity: str = 'relu'

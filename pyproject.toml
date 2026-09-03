@@ -33,13 +33,13 @@ packages = [
     "learning",
     "maps",
     "planning",
-    "policy_estimation",
     "pomapf_env",
 ]
 py-modules = [
     "run_experiments",
     "train",
     "train_caar",
+    "train_switcher_wait_caar",
 ]
 
 [tool.setuptools.package-data]

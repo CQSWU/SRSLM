@@ -1,0 +1,70 @@
+name: SRSLM-WaitAware-CAAR-Smoke-1M
+candidate_policy:
+  kind: epom_trace_context_caar_milestone
+  schema: switcher_candidate_caar_v1
+  weights_path: weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902
+  checkpoint_path: weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902/checkpoint_p0/checkpoint_000122074_500015104.pth
+  checkpoint_sha256: 497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b
+  config_sha256: e76a2b238f196752ec358ce8946eb353caa3a4fe3e4df2a92cf812506d008747
+  base_weights_path: weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5
+  base_checkpoint_path: weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5/checkpoint_p0/checkpoint_000024418_100016128.pth
+  base_checkpoint_sha256: f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2
+  base_config_sha256: 74c5cc0f1c5fdc0043bfcaa2e48e3be9c46c2c652f489a2b83379788e5da69b9
+  checkpoint_selection: exact_milestone
+  frozen: true
+global_settings:
+  train_dir: weights/SRSLM-switcher-wait-aware-caar-smoke
+  device: gpu
+  seed: 0
+evaluation:
+  env_frameskip: 1
+experiment_settings:
+  save_every_sec: 300
+  save_best_every_sec: 86400
+  save_best_after: 1000000000000
+  save_best_metric: avg_throughput
+  save_milestones_sec: -1
+  keep_checkpoints: 5
+  encoder_custom: switcher
+  train_for_env_steps: 1000000
+  train_for_seconds: 3600
+  hidden_size: 128
+  learning_rate: 0.0001
+  gamma: 0.99
+  lr_schedule: constant
+  normalize_input: false
+  switcher_initial_ao_probability: 0.1
+async_ppo:
+  experiment_summaries_interval: 20
+  num_epochs: 2
+  max_grad_norm: 2.0
+  batch_size: 8192
+  num_workers: 12
+  num_envs_per_worker: 1
+  worker_num_splits: 1
+  rollout: 32
+  recurrence: 1
+  with_vtrace: false
+  num_batches_per_iteration: 1
+  max_policy_lag: 100
+  ppo_clip_ratio: 0.2
+  exploration_loss_coeff: 0.005
+  value_loss_coeff: 0.5
+  with_pbt: false
+  use_rnn: false
+environment:
+  name: POMAPF-SRSLM-v0
+  switcher_caar_weights_path: weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902
+  switcher_caar_checkpoint_kind: latest
+  switcher_caar_device: cuda
+  switcher_max_planning_steps: 10000
+  switcher_team_reward_coefficient: 1.0
+  switcher_feature_schema: srslm_switcher_state_v3
+  training_num_agents_by_worker: [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200]
+  grid_config:
+    on_target: restart
+    collision_system: block_both
+    map_name: maps/train.yaml
+    max_episode_steps: 512
+    obs_radius: 5
+    num_agents: 200

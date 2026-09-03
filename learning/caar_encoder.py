@@ -1,4 +1,4 @@
-"""Shared recurrent policy encoder for CAAR and NoTau."""
+"""Shared recurrent policy encoder for CAAR and NoReweight."""
 
 import torch
 from sample_factory.algo.utils.torch_utils import calc_num_elements

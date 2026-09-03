@@ -59,530 +59,35 @@ DEFAULT_MAPS = {
 
 
 SUPPORTED_ALGORITHMS = (
-
-    "Replan",
-
-    "AO-RePlan",
-
-    "DHC",
-
-    "DCC",
-
-    "SCRIMP",
-
+    "RePlan",
+    "AORePlan",
+    "NoReweight",
+    "Direct",
     "CAAR",
-
-    "NoTau",
-
-    "CAAR-RG",
-
-    "CAAR-Yield",
-
-    "CAAR-PB",
-
-    "CAAR-RA",
-
-    "CAAR-RS",
-
+    "SRSLM-NoWaitDetect",
+    "SRSLM-WaitDetectOnly",
     "SRSLM",
-
-    "EPOM",
-
-    "AS",
-
+    "EPOM-Lifelong-FT",
 )
 
 
-# Experimental hybrids have distinct integrity contracts from CAAR-RG. Keep
-# them opt-in so the historical default/"all" batch remains unambiguous.
-DEFAULT_ALGORITHMS = tuple(
-    algorithm
-    for algorithm in SUPPORTED_ALGORITHMS
-    if algorithm not in (
-        "CAAR-Yield",
-        "CAAR-PB",
-        "CAAR-RA",
-        "CAAR-RS",
-        "SRSLM",
-    )
-)
-HYBRID_STRATEGY_KIND = "hybrid_waypoint_guidance"
-HYBRID_MODE = "replan_waypoint_v4"
-HYBRID_BASE_ALGORITHM = "CAAR"
-HYBRID_ACTION_POLICY = "CAAR"
-HYBRID_GUIDE_ALGORITHM = "Replan"
-HYBRID_COMPONENTS = {
-    "base_algorithm": HYBRID_BASE_ALGORITHM,
-    "action_policy": HYBRID_ACTION_POLICY,
-    "guide_algorithm": HYBRID_GUIDE_ALGORITHM,
-}
-HYBRID_DEPLOYMENT_CONTRACT = {
-    "trigger": (
-        "no_net_goal_progress_over_8_step_window "
-        "AND net_displacement<=2 "
-        "AND local_visible_agents>=5_for_3_steps"
-    ),
-    "stall_window_steps": 8,
-    "stall_goal_progress_metric": "true_goal_manhattan_net_improvement",
-    "stall_max_net_goal_progress": 0,
-    "stall_displacement_metric": "window_start_to_end_manhattan",
-    "stall_max_net_displacement": 2,
-    "congestion_min_agents": 5,
-    "visible_agent_count_includes_self": True,
-    "congestion_confirm_steps": 3,
-    "static_visible_prefix_min_blockers": 2,
-    "static_visible_prefix_max_blockers": 3,
-    "static_visible_prefix_blocker_metric": "last_reference_blocker_count",
-    "static_visible_prefix_blockers_exclude_self": True,
-    "waypoint_encoding_confirm_steps": 2,
-    "waypoint_encoding_metric": "caar_axis_clamped_goal_cell",
-    "waypoint_encoding_must_be_stable": True,
-    "route_backoff_steps": 4,
-    "waypoint_abort_steps": 8,
-    "max_planning_steps": 10000,
-    "dynamic_agents_used": True,
-    "static_replan_counterfactual_reference": True,
-    "agent_induced_detour_required": True,
-    "activation_condition": (
-        "2<=static_visible_prefix_blockers<=3 "
-        "AND dynamic_agent_aware_waypoint_encoding_differs_from_static_reference "
-        "AND dynamic_waypoint_goal_encoding_stable_for_2_steps"
-    ),
-    "counterfactual_reference_algorithm": "ordinary_replan",
-    "actual_guide_algorithm": "ordinary_replan",
-    "shared_accumulated_static_memory": True,
-    "counterfactual_reference_uses_dynamic_agents": False,
-    "actual_guide_uses_dynamic_agents": True,
-    "path_requirement": "complete_four_connected_to_true_goal",
-    "guide_output": "last_contiguous_visible_prefix_point",
-    "visibility_metric": "chebyshev_obs_radius",
-    "same_goal_encoding_rejected": True,
-    "simultaneous_per_agent_guidance": True,
-    "temporary_target_scope": "caar_observation_only",
-    "environment_goal_mutated": False,
-    "action_source": "caar_only",
-    "planner_actions_executed": False,
-    "ao_replan_used": False,
-    "probe_used": False,
-}
-HYBRID_INTEGRITY_IMPLEMENTATION_FILES = (
-    "run_experiments.py",
-    "agents/caar.py",
-    "agents/caar_rg.py",
-    "agents/replan.py",
-    "agents/utils_agents.py",
-    "learning/caar_actor_critic.py",
-    "learning/caar_encoder.py",
-    "learning/config.py",
-    "learning/encoder.py",
-    "planning/replan_algo.py",
-    "planning/replan_waypoint.py",
-    "planning/planner.cpp",
-    "planning/planner.cpython-310-x86_64-linux-gnu.so",
-    "pomapf_env/custom_maps.py",
-    "pomapf_env/env.py",
-    "pomapf_env/pomapf_config.py",
-    "pomapf_env/stigmergic.py",
-    "pomapf_env/wrappers.py",
-    "train.py",
-    "uv.lock",
-)
-
-YIELD_STRATEGY_KIND = "hybrid_active_yielding"
-YIELD_MODE = "ao_safe_yield_pocket_v3"
-YIELD_BASE_ALGORITHM = "CAAR"
-YIELD_ACTION_POLICY = "CAAR"
-YIELD_GUIDE_ALGORITHM = "AO-RePlan+LocalSafePocketBFS"
-YIELD_COMPONENTS = {
-    "base_algorithm": YIELD_BASE_ALGORITHM,
-    "action_policy": YIELD_ACTION_POLICY,
-    "diagnostic_algorithm": "AO-RePlan",
-    "waypoint_selector": "local_safe_pocket_bfs",
-}
-YIELD_DEPLOYMENT_CONTRACT = {
-    "trigger": (
-        "no_net_goal_progress_over_8_step_window "
-        "AND net_displacement<=2 "
-        "AND local_visible_agents>=5_for_3_steps "
-        "AND ao_teammate_block_confirmed"
-    ),
-    "stall_window_steps": 8,
-    "stall_goal_progress_metric": "true_goal_manhattan_net_improvement",
-    "stall_max_net_goal_progress": 0,
-    "stall_max_net_displacement": 2,
-    "congestion_min_agents": 5,
-    "visible_agent_count_includes_self": True,
-    "congestion_confirm_steps": 3,
-    "component_min_agents": 5,
-    "component_link_distance": 2,
-    "narrow_static_degree_max": 2,
-    "ao_replan_role": "shadow_teammate_attribution_and_release_check",
-    "ao_replan_uses_real_target": True,
-    "ao_teammate_confidence_threshold": 2,
-    "direct_block_confirm_steps": 2,
-    "all_ao_proposals_cancelled": True,
-    "ao_actions_executed": False,
-    "ordinary_replan_used": False,
-    "pocket_search": "four_connected_local_bfs",
-    "pocket_max_path_steps": 3,
-    "pocket_min_agent_clearance": 2,
-    "pocket_fov_inner_margin": 1,
-    "straight_corridor_pockets_rejected": True,
-    "forward_goal_half_plane_rejected": True,
-    "activation_confirm_steps": 2,
-    "simultaneous_different_components": True,
-    "global_single_agent_cap": False,
-    "same_component_min_graph_distance": 3,
-    "reservation_rule": "path_tube_plus_one_cell_halo_disjoint",
-    "yield_no_progress_abort_steps": 6,
-    "yield_total_timeout_steps": 12,
-    "hold_min_steps": 3,
-    "post_reach_release_monitoring": True,
-    "release_monitoring_requires_yielder_at_pocket": False,
-    "release_seed_direction_check": (
-        "ao_static_probe_next_cell_unoccupied_and_confidence_zero"
-    ),
-    "dynamic_static_first_action_agreement_required": False,
-    "whole_component_clear_required": False,
-    "release_conflict_scope": "original_seed_to_yielder_edges",
-    "hold_timeout_steps": 16,
-    "release_confirm_steps": 2,
-    "backoff_steps": 4,
-    "temporary_target_scope": "caar_observation_only",
-    "environment_goal_mutated": False,
-    "action_source": "caar_only",
-    "caar_forward_passes_per_environment_step": 1,
-}
-YIELD_INTEGRITY_IMPLEMENTATION_FILES = (
-    "run_experiments.py",
-    "agents/ao_replan.py",
-    "agents/caar.py",
-    "agents/caar_yield.py",
-    "agents/utils_agents.py",
-    "learning/caar_actor_critic.py",
-    "learning/caar_encoder.py",
-    "learning/config.py",
-    "learning/encoder.py",
-    "planning/ao_replan_algo.py",
-    "planning/planner.cpp",
-    "planning/planner.cpython-310-x86_64-linux-gnu.so",
-    "planning/yield_pocket.py",
-    "pomapf_env/custom_maps.py",
-    "pomapf_env/env.py",
-    "pomapf_env/pomapf_config.py",
-    "pomapf_env/stigmergic.py",
-    "pomapf_env/wrappers.py",
-    "scripts/run_caar_yield_pilot.sh",
-    "train.py",
-    "uv.lock",
-)
-
-PB_STRATEGY_KIND = "hybrid_probe_virtual_obstacles"
-PB_MODE = "ao_probe_virtual_block_v2"
-PB_BASE_ALGORITHM = "CAAR"
-PB_ACTION_POLICY = "CAAR"
-PB_GUIDE_ALGORITHM = "AO-RePlan Local Probe"
-PB_COMPONENTS = {
-    "base_algorithm": PB_BASE_ALGORITHM,
-    "action_policy": PB_ACTION_POLICY,
-    "diagnostic_algorithm": "AO-RePlan Local Probe",
-    "observation_modifier": "persistent_per_agent_virtual_obstacles",
-}
-PB_DEPLOYMENT_CONTRACT = {
-    "trigger": "visible_probe_path_contains_at_least_2_teammates",
-    "initial_trigger_requires_stall": False,
-    "probe_target": "real_target",
-    "probe_ignores_dynamic_agents": True,
-    "probe_path_requirement": "complete_four_connected_to_true_goal",
-    "probe_visible_prefix_metric": "contiguous_chebyshev_fov_prefix",
-    "probe_static_knowledge_scope": "current_local_obstacles_unknown_outside_free",
-    "path_blockers_source": "local_agents_observation",
-    "path_blockers_exclude_self": True,
-    "initial_min_path_blockers": 2,
-    "virtual_block_cell": "probe_path_first_move_after_current",
-    "candidate_validation": "fresh_stateless_probe_after_tentative_block",
-    "candidate_no_path_policy": "rollback_without_commit",
-    "persistent_until": (
-        "real_target_reached_or_changed_or_agent_done_or_inactive_or_reset"
-    ),
-    "repeat_trigger": (
-        "after_existing_block_and_all_positions_in_fresh_8_step_window_"
-        "remain_within_manhattan_radius_2_of_window_anchor AND current_"
-        "visible_probe_path_contains_at_least_2_teammates"
-    ),
-    "repeat_requires_fresh_congestion_evidence": True,
-    "repeat_min_path_blockers": 2,
-    "repeat_path_blocker_metric": (
-        "current_probe_contiguous_visible_prefix_distinct_teammate_cells"
-    ),
-    "repeat_probe_obstacle_scope": "current_local_obstacles_plus_owned_blocks",
-    "repeat_uses_goal_distance": False,
-    "repeat_stall_region_metric": (
-        "maximum_manhattan_displacement_from_window_anchor"
-    ),
-    "repeat_stall_window_steps": 8,
-    "repeat_stall_max_anchor_displacement": 2,
-    "repeat_window_reset_after_attempt": True,
-    "repeat_window_consumed_on_probe_no_path": True,
-    "repeat_window_consumed_without_congestion": True,
-    "maximum_new_blocks_per_attempt": 1,
-    "maximum_virtual_blocks_per_real_target": 4,
-    "maximum_virtual_blocks_scope": "per_agent_per_real_target_episode",
-    "at_block_cap": "stop_appending_until_persistent_state_is_cleared",
-    "ordinary_replan_used": False,
-    "ao_probe_actions_executed": False,
-    "temporary_obstacle_scope": "caar_observation_copy_only",
-    "environment_obstacles_mutated": False,
-    "environment_goal_mutated": False,
-    "action_source": "caar_only",
-    "caar_forward_passes_per_environment_step": 1,
-}
-PB_INTEGRITY_IMPLEMENTATION_FILES = (
-    "run_experiments.py",
-    "agents/ao_replan.py",
-    "agents/caar.py",
-    "agents/caar_probe_block.py",
-    "agents/utils_agents.py",
-    "learning/caar_actor_critic.py",
-    "learning/caar_encoder.py",
-    "learning/config.py",
-    "learning/encoder.py",
-    "planning/ao_replan_algo.py",
-    "planning/planner.cpp",
-    "planning/planner.cpython-310-x86_64-linux-gnu.so",
-    "pomapf_env/custom_maps.py",
-    "pomapf_env/env.py",
-    "pomapf_env/pomapf_config.py",
-    "pomapf_env/stigmergic.py",
-    "pomapf_env/wrappers.py",
-    "scripts/run_caar_probe_block_pilot.sh",
-    "train.py",
-    "uv.lock",
-)
-
-RA_STRATEGY_KIND = "learned_relative_advantage_hybrid"
-RA_MODE = "learned_relative_advantage_raw_plan_v1"
-RA_BASE_ALGORITHM = "CAAR"
-RA_PLAN_ALGORITHM = "Raw AO-RePlan"
-RA_ACTION_POLICY = "CAAR-or-Raw-AO-RePlan"
-RA_COMPONENTS = {
-    "base_algorithm": RA_BASE_ALGORITHM,
-    "candidate_algorithm": RA_PLAN_ALGORITHM,
-    "selector": "binary_relative_advantage_gate",
-}
-RA_DEPLOYMENT_CONTRACT = {
-    "decision_order": "CAAR_then_raw_AO-RePlan_then_gate",
-    "gate_actions": {"0": "CAAR", "1": "raw_plan"},
-    "deterministic_logit_margin": 0.0,
-    "hard_caar_fallbacks": (
-        "raw_plan_none_or_invalid_or_reverse_or_equal_to_caar"
-    ),
-    "reverse_plan_actions_executed": False,
-    "probe_used": False,
-    "simultaneous_plan_agents_allowed": True,
-    "global_single_agent_cap": False,
-    "joint_filter": (
-        "reject_only_vertex_or_edge_swap_conflicts_new_relative_to_all_caar"
-    ),
-    "proposal_feedback": "commit_if_raw_plan_matches_final_physical_action",
-}
-RA_INTEGRITY_IMPLEMENTATION_FILES = (
-    "run_experiments.py",
-    "agents/caar.py",
-    "agents/caar_ra.py",
-    "agents/utils_agents.py",
-    "learning/caar_actor_critic.py",
-    "learning/caar_encoder.py",
-    "learning/caar_plan_gate_env.py",
-    "learning/config.py",
-    "learning/encoder.py",
-    "planning/ao_replan_algo.py",
-    "planning/raw_aoreplan_candidates.py",
-    "planning/planner.cpp",
-    "planning/planner.cpython-310-x86_64-linux-gnu.so",
-    "pomapf_env/custom_maps.py",
-    "pomapf_env/env.py",
-    "pomapf_env/pomapf_config.py",
-    "pomapf_env/stigmergic.py",
-    "pomapf_env/wrappers.py",
-    "train.py",
-    "uv.lock",
-)
-
-RS_STRATEGY_KIND = "deterministic_rule_only_hybrid"
-RS_MODE = "rule_only_valid_nonreverse_raw_plan_else_caar_v1"
-RS_BASE_ALGORITHM = "CAAR"
-RS_PLAN_ALGORITHM = "Raw AO-RePlan"
-RS_ACTION_POLICY = "CAAR-or-Raw-AO-RePlan"
-RS_COMPONENTS = {
-    "base_algorithm": RS_BASE_ALGORITHM,
-    "candidate_algorithm": RS_PLAN_ALGORITHM,
-    "selector": "valid_nonreverse_raw_plan_else_caar",
-}
-RS_DEPLOYMENT_CONTRACT = {
-    "selector_kind": "deterministic_rule_only",
-    "default_action_source": "raw_AO-RePlan",
-    "hard_caar_fallbacks": "raw_plan_none_or_invalid_or_reverse",
-    "value_predictor_loaded": False,
-    "learned_gate_loaded": False,
-    "reverse_plan_actions_executed": False,
-    "reverse_rule_scope": "current_step",
-    "probe_used": False,
-    "simultaneous_plan_agents_allowed": True,
-    "global_single_agent_cap": False,
-    "joint_filter": "none",
-    "proposal_feedback": (
-        "commit_if_valid_nonreverse_raw_plan_matches_final_physical_action"
-    ),
-}
-RS_INTEGRITY_IMPLEMENTATION_FILES = (
-    "run_experiments.py",
-    "agents/caar.py",
-    "agents/caar_rule_switch.py",
-    "agents/utils_agents.py",
-    "learning/caar_actor_critic.py",
-    "learning/caar_encoder.py",
-    "learning/config.py",
-    "learning/encoder.py",
-    "learning/grid_memory.py",
-    "planning/ao_replan_algo.py",
-    "planning/raw_aoreplan_candidates.py",
-    "planning/planner.cpp",
-    "planning/planner.cpython-310-x86_64-linux-gnu.so",
-    "pomapf_env/custom_maps.py",
-    "pomapf_env/env.py",
-    "pomapf_env/pomapf_config.py",
-    "pomapf_env/stigmergic.py",
-    "pomapf_env/wrappers.py",
-    "train.py",
-    "uv.lock",
-)
-
-SRSLM_STRATEGY_KIND = "learned_absolute_return_hybrid"
-SRSLM_MODE = "per_step_absolute_return_srlsm_reverse_to_caar_v1"
-SRSLM_PREDICTOR_ONLY_MODE = (
-    "per_step_absolute_return_srlsm_predictor_only_v1"
-)
-SRSLM_BASE_ALGORITHM = "CAAR"
-SRSLM_PLAN_ALGORITHM = "Raw AO-RePlan"
-SRSLM_ACTION_POLICY = "CAAR-or-Raw-AO-RePlan"
-SRSLM_COMPONENTS = {
-    "base_algorithm": SRSLM_BASE_ALGORITHM,
-    "candidate_algorithm": SRSLM_PLAN_ALGORITHM,
-    "selector": (
-        "two_independent_absolute_mc_return_estimators_with_shared_trace"
-    ),
-}
-SRSLM_DEPLOYMENT_CONTRACT = {
-    "value_targets": "separate_absolute_raw_monte_carlo_returns",
-    "estimator_input": "matrix_observation_plus_shared_traffic_trace",
-    "selector": "V_AO_gt_V_CAAR_plus_margin",
-    "tie_policy": "CAAR",
-    "nonfinite_policy": "CAAR",
-    "comparison_cadence": "every_step_per_agent",
-    "switch_constraint": "reverse_to_caar_current_step",
-    "hard_caar_fallbacks": "raw_plan_none_or_invalid_or_reverse",
-    "safety_override_changes_nominal_selection": False,
-    "reverse_plan_actions_executed": False,
-    "probe_used": False,
-    "simultaneous_plan_agents_allowed": True,
-    "global_single_agent_cap": False,
-    "proposal_feedback": (
-        "commit_if_valid_nonreverse_raw_plan_matches_final_physical_action"
-    ),
-}
-
-
-def _srlsm_mode(
-    reverse_caar_override_enabled=True,
-):
-    if not bool(reverse_caar_override_enabled):
-        return SRSLM_PREDICTOR_ONLY_MODE
-    return SRSLM_MODE
-
-
-def _srlsm_switch_constraint(
-    reverse_caar_override_enabled=True,
-):
-    return (
-        "reverse_to_caar_current_step"
-        if reverse_caar_override_enabled
-        else "none"
-    )
-SRSLM_INTEGRITY_IMPLEMENTATION_FILES = (
-    "run_experiments.py",
-    "agents/caar.py",
-    "agents/srlsm.py",
-    "agents/utils_agents.py",
-    "learning/encoder.py",
-    "learning/epom_encoder.py",
-    "planning/ao_replan_algo.py",
-    "planning/raw_aoreplan_candidates.py",
-    "planning/planner.cpp",
-    "planning/planner.cpython-310-x86_64-linux-gnu.so",
-    "policy_estimation/model.py",
-    "pomapf_env/env.py",
-    "pomapf_env/pomapf_config.py",
-    "pomapf_env/stigmergic.py",
-    "pomapf_env/wrappers.py",
-    "uv.lock",
-)
-
-
+# Methods that require explicit artifacts or distinct evaluation protocols
+# remain opt-in so the default/"all" batch stays unambiguous.
+DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
 ALGORITHM_ALIASES = {
-
-    "replan": "Replan",
-
-    "ao-replan": "AO-RePlan",
-
-    "dhc": "DHC",
-
-    "dcc": "DCC",
-
-    "scrimp": "SCRIMP",
-
+    "replan": "RePlan",
+    "aoreplan": "AORePlan",
+    "noreweight": "NoReweight",
+    "no-reweight": "NoReweight",
+    "direct": "Direct",
     "caar": "CAAR",
-
-    "notau": "NoTau",
-
-    "caar-rg": "CAAR-RG",
-
-    "caarrg": "CAAR-RG",
-
-    "caar_rg": "CAAR-RG",
-
-    "caar-yield": "CAAR-Yield",
-
-    "caaryield": "CAAR-Yield",
-
-    "caar_yield": "CAAR-Yield",
-
-    "caar-pb": "CAAR-PB",
-
-    "caarpb": "CAAR-PB",
-
-    "caar_pb": "CAAR-PB",
-
-    "caar-ra": "CAAR-RA",
-
-    "caarra": "CAAR-RA",
-
-    "caar_ra": "CAAR-RA",
-
-    "caar-rs": "CAAR-RS",
-
-    "caarrs": "CAAR-RS",
-
-    "caar_rs": "CAAR-RS",
-
-    "caar-rule": "CAAR-RS",
-
-    "srlsm": "SRSLM",
-
-    "epom": "EPOM",
-
-    "as": "AS",
-
+    "srslm": "SRSLM",
+    "srslm-nowaitdetect": "SRSLM-NoWaitDetect",
+    "srslm-no-wait-detect": "SRSLM-NoWaitDetect",
+    "srslm-waitdetectonly": "SRSLM-WaitDetectOnly",
+    "srslm-wait-detect-only": "SRSLM-WaitDetectOnly",
+    "epom-lifelong-ft": "EPOM-Lifelong-FT",
+    "epom_lifelong_ft": "EPOM-Lifelong-FT",
 }
 
 
@@ -595,124 +100,178 @@ _worker_algo_cache = {}
 
 def canonical_algorithm_name(value):
 
-    return ALGORITHM_ALIASES.get(value.strip().lower())
+    canonical = ALGORITHM_ALIASES.get(value.strip().lower())
+    return canonical if canonical in SUPPORTED_ALGORITHMS else None
 
 
-def hybrid_contract_metadata(algorithms):
-    """Describe CAAR actions guided by ordinary-Replan path waypoints."""
-    if "CAAR-RG" not in algorithms:
+
+
+
+
+def epom_lifelong_result_manifest(results, algorithms):
+    """Pin the EPOM-L artifact used by the public lifelong baseline."""
+    selected = (
+        ["EPOM-Lifelong-FT"]
+        if "EPOM-Lifelong-FT" in algorithms
+        else []
+    )
+    if not selected:
         return None
+    error_rows = [
+        row
+        for row in results
+        if row.get("algorithm") in selected and row.get("error")
+    ]
+    if error_rows:
+        return {
+            "validated": False,
+            "algorithms": selected,
+            "error_rows": len(error_rows),
+            "shared_artifact": None,
+        }
+
+    manifests = []
+    rows_by_algorithm = {algorithm: 0 for algorithm in selected}
+    for row in results:
+        algorithm = row.get("algorithm")
+        if algorithm not in rows_by_algorithm or row.get("error"):
+            continue
+        rows_by_algorithm[algorithm] += 1
+        provenance = row.get("model_provenance") or {}
+        epom = provenance
+        if epom.get("artifact_profile") != "lifelong_finetuned":
+            raise RuntimeError(
+                f"{algorithm} row is missing lifelong_finetuned EPOM provenance"
+            )
+        manifests.append(
+            {
+                key: epom.get(key)
+                for key in (
+                    "artifact_profile",
+                    "weights_path",
+                    "config_path",
+                    "config_sha256",
+                    "checkpoint_path",
+                    "checkpoint_name",
+                    "checkpoint_size",
+                    "checkpoint_sha256",
+                    "selection_rule",
+                    "training_protocol",
+                    "source_encoder_custom",
+                    "inference_encoder_custom",
+                )
+            }
+        )
+
+    missing = [
+        algorithm for algorithm, count in rows_by_algorithm.items() if count == 0
+    ]
+    if missing:
+        raise RuntimeError(
+            "No successful rows were available for EPOM-L manifest: "
+            + ", ".join(missing)
+        )
+    unique = {json.dumps(item, sort_keys=True) for item in manifests}
+    if len(unique) != 1:
+        raise RuntimeError(
+            "EPOM-L rows did not use one identical artifact."
+        )
     return {
-        "strategy_kind": HYBRID_STRATEGY_KIND,
-        "hybrid_mode": HYBRID_MODE,
-        "base_algorithm": HYBRID_BASE_ALGORITHM,
-        "action_policy": HYBRID_ACTION_POLICY,
-        "guide_algorithm": HYBRID_GUIDE_ALGORITHM,
-        "hybrid_components": dict(HYBRID_COMPONENTS),
-        "deployment": dict(HYBRID_DEPLOYMENT_CONTRACT),
+        "validated": True,
+        "algorithms": selected,
+        "shared_artifact": json.loads(next(iter(unique))),
+        "rows_by_algorithm": rows_by_algorithm,
     }
 
 
-def yield_contract_metadata(algorithms):
-    """Describe AO-assisted active yielding with CAAR-only actions."""
-    if "CAAR-Yield" not in algorithms:
-        return None
-    return {
-        "strategy_kind": YIELD_STRATEGY_KIND,
-        "hybrid_mode": YIELD_MODE,
-        "base_algorithm": YIELD_BASE_ALGORITHM,
-        "action_policy": YIELD_ACTION_POLICY,
-        "guide_algorithm": YIELD_GUIDE_ALGORITHM,
-        "hybrid_components": dict(YIELD_COMPONENTS),
-        "deployment": dict(YIELD_DEPLOYMENT_CONTRACT),
-    }
 
 
-def pb_contract_metadata(algorithms):
-    """Describe Probe-guided virtual obstacles with CAAR-only actions."""
-    if "CAAR-PB" not in algorithms:
-        return None
-    return {
-        "strategy_kind": PB_STRATEGY_KIND,
-        "hybrid_mode": PB_MODE,
-        "base_algorithm": PB_BASE_ALGORITHM,
-        "action_policy": PB_ACTION_POLICY,
-        "guide_algorithm": PB_GUIDE_ALGORITHM,
-        "hybrid_components": dict(PB_COMPONENTS),
-        "deployment": dict(PB_DEPLOYMENT_CONTRACT),
-    }
-
-
-def ra_contract_metadata(algorithms):
-    """Describe the learned CAAR/raw-Plan relative-advantage policy."""
-    if "CAAR-RA" not in algorithms:
-        return None
-    return {
-        "strategy_kind": RA_STRATEGY_KIND,
-        "hybrid_mode": RA_MODE,
-        "base_algorithm": RA_BASE_ALGORITHM,
-        "action_policy": RA_ACTION_POLICY,
-        "guide_algorithm": RA_PLAN_ALGORITHM,
-        "hybrid_components": dict(RA_COMPONENTS),
-        "deployment": dict(RA_DEPLOYMENT_CONTRACT),
-    }
-
-
-def rs_contract_metadata(algorithms):
-    """Describe the deterministic CAAR/raw-Plan rule-only policy."""
-    if "CAAR-RS" not in algorithms:
-        return None
-    return {
-        "strategy_kind": RS_STRATEGY_KIND,
-        "hybrid_mode": RS_MODE,
-        "base_algorithm": RS_BASE_ALGORITHM,
-        "action_policy": RS_ACTION_POLICY,
-        "guide_algorithm": RS_PLAN_ALGORITHM,
-        "hybrid_components": dict(RS_COMPONENTS),
-        "deployment": dict(RS_DEPLOYMENT_CONTRACT),
-    }
-
-
-def srlsm_contract_metadata(
-    algorithms,
-    *,
-    value_margin=0.0,
-    reverse_caar_override_enabled=True,
-):
-    """Describe the per-step absolute-return learnable switcher."""
+def srslm_contract_metadata(algorithms):
+    """Describe the fixed AORePlan-wait bypass and learned Switcher."""
     if "SRSLM" not in algorithms:
         return None
-    reverse_override_enabled = bool(reverse_caar_override_enabled)
-    deployment = dict(SRSLM_DEPLOYMENT_CONTRACT)
-    deployment["value_margin"] = float(value_margin)
-    deployment["reverse_caar_override_enabled"] = reverse_override_enabled
-    deployment["switch_constraint"] = _srlsm_switch_constraint(
-        reverse_override_enabled,
-    )
-    deployment["hard_caar_fallbacks"] = (
-        "raw_plan_none_or_invalid_or_reverse"
-        if reverse_override_enabled
-        else "raw_plan_none_or_invalid"
-    )
-    deployment["reverse_plan_actions_executed"] = not reverse_override_enabled
-    deployment["safety_override_changes_nominal_selection"] = False
     return {
-        "strategy_kind": SRSLM_STRATEGY_KIND,
-        "hybrid_mode": _srlsm_mode(
-            reverse_override_enabled,
-        ),
-        "base_algorithm": SRSLM_BASE_ALGORITHM,
-        "action_policy": SRSLM_ACTION_POLICY,
-        "guide_algorithm": SRSLM_PLAN_ALGORITHM,
-        "hybrid_components": dict(SRSLM_COMPONENTS),
-        "deployment": deployment,
+        "strategy_kind": "hybrid_switching",
+        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
+        "branch_algorithms": ["CAAR", "AORePlan"],
+        "hybrid_components": {
+            "learning_branch": "CAAR",
+            "planning_branch": "AORePlan",
+            "selector": "Switcher",
+        },
+        "action_policy": "CAAR-or-AORePlan",
+        "guide_algorithm": "AORePlan",
+        "deployment": {
+            "wait_rule": "aoreplan_wait_directly_uses_caar",
+            "switcher_scope": "aoreplan_nonwait_only",
+            "switcher_output": "two_branch_categorical_logits",
+            "selection": "softmax_sampling",
+            "joint_conflict_prediction_enabled": False,
+            "simulator_collision_system": "block_both",
+        },
     }
 
 
-def switch_contract_metadata(algorithms):
-    """Compatibility alias for the CAAR/Replan hybrid contract."""
-    return hybrid_contract_metadata(algorithms)
 
+
+def srslm_ablation_contract_metadata(algorithms):
+    """Describe one current-V3 wait-detector ablation."""
+    selected = [
+        name
+        for name in ("SRSLM-NoWaitDetect", "SRSLM-WaitDetectOnly")
+        if name in algorithms
+    ]
+    if not selected:
+        return None
+    if len(selected) != 1 or "SRSLM" in algorithms:
+        raise ValueError(
+            "Run each SRSLM wait-detector ablation in a separate invocation "
+            "so its artifact contract stays unambiguous."
+        )
+    algorithm = selected[0]
+    if algorithm == "SRSLM-NoWaitDetect":
+        return {
+            "strategy_kind": "hybrid_switching_ablation",
+            "algorithm": algorithm,
+            "hybrid_mode": "all_state_switcher_v3",
+            "branch_algorithms": ["CAAR", "AORePlan"],
+            "hybrid_components": {
+                "learning_branch": "CAAR",
+                "planning_branch": "AORePlan",
+                "selector": "AllStateSwitcher",
+            },
+            "action_policy": "CAAR-or-AORePlan",
+            "guide_algorithm": "AORePlan",
+            "deployment": {
+                "wait_rule": "disabled",
+                "switcher_scope": "all_states",
+                "switcher_output": "two_branch_categorical_logits",
+                "selection": "softmax_sampling",
+                "joint_conflict_prediction_enabled": False,
+                "simulator_collision_system": "block_both",
+            },
+        }
+    return {
+        "strategy_kind": "hybrid_switching_ablation",
+        "algorithm": algorithm,
+        "hybrid_mode": "aoreplan_wait_detect_only_v3",
+        "branch_algorithms": ["CAAR", "AORePlan"],
+        "hybrid_components": {
+            "learning_branch": "CAAR",
+            "planning_branch": "AORePlan",
+            "selector": "deterministic_wait_detector",
+        },
+        "action_policy": "CAAR-on-wait-otherwise-AORePlan",
+        "guide_algorithm": "AORePlan",
+        "deployment": {
+            "wait_rule": "aoreplan_wait_directly_uses_caar",
+            "switcher_scope": "none",
+            "selection": "deterministic",
+            "learned_switcher_called": False,
+            "joint_conflict_prediction_enabled": False,
+            "simulator_collision_system": "block_both",
+        },
+    }
 
 
 def quiet_model_logs():
@@ -748,60 +307,71 @@ def _has_checkpoints(path):
 
 def _find_caar_weights(main_dir):
     root = Path(main_dir).resolve()
-    preferred = root / "weights" / "CAAR" / "radius_ablation" / "R5"
-    if _has_config(preferred) and _has_checkpoints(preferred):
-        return str(preferred)
-    candidate = _find_weight_run_dir(root / "weights" / "CAAR")
+    current = _find_weight_run_dir(
+        root / "weights" / "EPOM-TracePaperConvDirectCorrection-R5-500m"
+    )
+    if current is None:
+        raise FileNotFoundError(
+            "No current CAAR checkpoint was found under "
+            f"{root / 'weights' / 'EPOM-TracePaperConvDirectCorrection-R5-500m'}. "
+            "Train CAAR or pass --caar-weights-path explicitly."
+        )
+    return str(current)
+
+
+def _find_no_reweight_weights(main_dir):
+    root = Path(main_dir).resolve()
+    candidate = _find_weight_run_dir(root / "weights" / "NoReweight-block-1b")
     if candidate is not None:
         return str(candidate)
-    return str(preferred)
+    return str(
+        root
+        / "weights"
+        / "NoReweight-block-1b"
+        / "NoReweight-Block-R5-1B"
+    )
 
 
-def _find_notau_weights(main_dir):
+def _find_switcher_weights(main_dir):
     root = Path(main_dir).resolve()
-    candidate = _find_weight_run_dir(root / "weights" / "NoTau")
-    if candidate is not None:
-        return str(candidate)
-    return str(root / "weights" / "NoTau" / "NoTau")
-
-
-def _find_caar_ra_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = _find_weight_run_dir(root / "weights" / "CAAR-RA")
-    if candidate is not None:
-        return str(candidate)
-    return str(root / "weights" / "CAAR-RA" / "CAAR-RA")
-
-
-def _find_srlsm_caar_estimator_checkpoint(main_dir):
-    root = Path(main_dir).resolve()
-    return str(root / "weights" / "SRSLM-v1" / "caar_estimator.pth")
-
-
-def _find_srlsm_ao_estimator_checkpoint(main_dir):
-    root = Path(main_dir).resolve()
-    return str(root / "weights" / "SRSLM-v1" / "ao_estimator.pth")
-
-
-def _find_dhc_weights(main_dir):
-    root = Path(main_dir).resolve()
-    return str(root / "otherpolicy" / "DHC" / "models" / "337500.pth")
-
-
-def _find_dcc_weights(main_dir):
-    root = Path(main_dir).resolve()
-    return str(root / "otherpolicy" / "DCC" / "saved_models" / "128000.pth")
-
-
-def _find_scrimp_weights(main_dir):
-    root = Path(main_dir).resolve()
-    return str(root / "otherpolicy" / "SCRIMP" / "final" / "net_checkpoint.pkl")
-
-
-def _find_epom_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = root / "weights" / "EPOM" / "EPOM"
+    candidate = _find_weight_run_dir(
+        root / "weights" / "SRSLM-switcher-wait-aware-caar-100m"
+    )
+    if candidate is None:
+        raise FileNotFoundError(
+            "No current wait-aware SRSLM Switcher checkpoint was found under "
+            f"{root / 'weights' / 'SRSLM-switcher-wait-aware-caar-100m'}. "
+            "Train the Switcher or pass --switcher-weights-path explicitly."
+        )
     return str(candidate)
+
+
+def _find_no_wait_detect_switcher_weights(main_dir):
+    root = Path(main_dir).resolve()
+    candidate = _find_weight_run_dir(
+        root / "weights" / "SRSLM-switcher-caar-nowait-100m"
+    )
+    if candidate is None:
+        raise FileNotFoundError(
+            "No independently trained SRSLM-NoWaitDetect checkpoint was "
+            "found under "
+            f"{root / 'weights' / 'SRSLM-switcher-caar-nowait-100m'}. "
+            "Train the all-state policy or pass "
+            "--no-wait-detect-switcher-weights-path explicitly."
+        )
+    return str(candidate)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _sha256_file(path):
@@ -829,6 +399,97 @@ def runtime_provenance():
     }
 
 
+def static_astar_metric_metadata():
+    """Describe AORePlan's static-A* query statistic."""
+
+    return {
+        "version": "aoreplan_static_astar_query_v3",
+        "scope": "standalone AORePlan in lifelong evaluation",
+        "definition": (
+            "the reported rate counts static-map A* checks triggered by "
+            "reverse dynamic movement proposals"
+        ),
+        "static_astar_query_rate_numerator": (
+            "static-map A* queries attached to raw dynamic RePlan "
+            "non-wait movement proposals"
+        ),
+        "static_astar_query_rate_denominator": (
+            "raw dynamic RePlan non-wait movement proposals before AORePlan "
+            "substitution"
+        ),
+        "no_path_fallback_count": (
+            "dynamic A*/BestMove failures handled by the original 50% wait, "
+            "50% obstacle-screened random-direction fallback"
+        ),
+    }
+
+
+def runtime_metric_metadata():
+    """Describe the wall-clock fields emitted by the experiment runner."""
+
+    return {
+        "version": "end_to_end_episode_wall_v1",
+        "run_time_seconds": (
+            "per-run worker wall time around run_algorithm; includes environment "
+            "construction, reset, policy actions, environment steps, and metric "
+            "collection, but excludes algorithm construction and checkpoint loading"
+        ),
+        "total_elapsed_seconds": (
+            "wall time for the complete ProcessPool batch at the configured "
+            "worker count"
+        ),
+        "elapsed_since_start_seconds": (
+            "cumulative batch time when a result completed; this is not an "
+            "individual run duration"
+        ),
+    }
+
+
+def contention_metric_metadata():
+    """Describe how many active agents participate in traffic contention."""
+
+    return {
+        "version": "agent_contention_participation_v1",
+        "definition": (
+            "an active agent participates when it is one of multiple movement "
+            "proposals for the same destination, is part of an edge swap, or "
+            "proposes or occupies a destination that is not vacated during "
+            "the environment step"
+        ),
+        "contention_rate_numerator": (
+            "active agent-steps participating in at least one contention event"
+        ),
+        "contention_rate_denominator": "all active agent-steps",
+        "counting_rule": (
+            "each active agent is counted at most once per environment step"
+        ),
+    }
+
+
+def vertex_flow_metric_metadata():
+    """Describe the one-step vertex flow cost used for evaluation."""
+
+    return {
+        "version": "submitted_one_step_vertex_flow_pairs_v1",
+        "definition": (
+            "before collision resolution, valid non-wait movement proposals "
+            "are grouped by destination; a destination with n incoming "
+            "proposals contributes n*(n-1)/2 pairwise vertex-flow cost"
+        ),
+        "vertex_flow_pair_count": (
+            "sum of pairwise same-destination movement proposals over steps"
+        ),
+        "vertex_flow_move_denominator": (
+            "submitted non-wait proposals whose destination is an in-bounds "
+            "free cell"
+        ),
+        "vertex_flow_pair_cost_per_move": (
+            "vertex_flow_pair_count divided by vertex_flow_move_denominator"
+        ),
+        "capture_point": "submitted actions before environment collision resolution",
+    }
+
+
 def _project_path(main_dir, value):
     path = Path(value)
     if not path.is_absolute():
@@ -836,22 +497,38 @@ def _project_path(main_dir, value):
     return path.resolve()
 
 
+
+
+_EPISODE_FRESH_ALGORITHMS = frozenset(
+    (
+        "CAAR",
+        "NoReweight",
+        "Direct",
+        "SRSLM-NoWaitDetect",
+        "SRSLM-WaitDetectOnly",
+        "SRSLM",
+    )
+)
+
+
+def should_cache_algorithm(algorithm, requested):
+    """Return whether an inference instance is safe to reuse across episodes."""
+    canonical = canonical_algorithm_name(algorithm) or algorithm
+    return bool(requested) and canonical not in _EPISODE_FRESH_ALGORITHMS
+
+
 def cache_algorithm_metadata(algorithms, requested):
     """Describe requested and effective per-algorithm instance caching."""
     requested = bool(requested)
     effective_by_algorithm = {
-        algorithm: requested and algorithm not in ("SRSLM", "CAAR-RS")
+        algorithm: should_cache_algorithm(algorithm, requested)
         for algorithm in algorithms
     }
-    exceptions = {}
-    if requested and "SRSLM" in effective_by_algorithm:
-        exceptions["SRSLM"] = (
-            "disabled_to_preserve_episode_fresh_caar_normalization"
-        )
-    if requested and "CAAR-RS" in effective_by_algorithm:
-        exceptions["CAAR-RS"] = (
-            "disabled_to_preserve_episode_fresh_caar_normalization"
-        )
+    exceptions = {
+        algorithm: "disabled_to_preserve_episode_fresh_policy_state"
+        for algorithm, effective in effective_by_algorithm.items()
+        if requested and not effective
+    }
     return {
         "requested": requested,
         "effective_by_algorithm": effective_by_algorithm,
@@ -869,22 +546,12 @@ def _latest_caar_checkpoint(weights_path):
     return checkpoints[-1].resolve()
 
 
-def _latest_gate_checkpoint(weights_path):
-    checkpoint_dir = Path(weights_path) / "checkpoint_p0"
-    checkpoints = sorted(checkpoint_dir.glob("checkpoint_*.pth"))
-    if not checkpoints:
-        raise FileNotFoundError(
-            f"No latest CAAR-RA gate checkpoint under {checkpoint_dir}."
-        )
-    return checkpoints[-1].resolve()
-
-
-def hybrid_integrity_metadata(
+def srslm_integrity_metadata(
     args,
     map_list_sha256=None,
     map_registry_sha256=None,
 ):
-    """Hash the exact CAAR/Replan waypoint hybrid used by an evaluation."""
+    """Hash the two frozen branches, Switcher, and current routing code."""
 
     root = Path(args.main_dir).resolve()
     code_root = Path(__file__).resolve().parent
@@ -892,292 +559,72 @@ def hybrid_integrity_metadata(
         root,
         args.caar_weights_path or _find_caar_weights(root),
     )
-    caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    caar_config = caar_weights / "config.json"
-    implementation = {
-        relative_path: code_root / relative_path
-        for relative_path in HYBRID_INTEGRITY_IMPLEMENTATION_FILES
-    }
-    required_files = {
-        "caar_checkpoint": caar_checkpoint,
-        "caar_config": caar_config,
-        **implementation,
-    }
-    if args.map_list:
-        required_files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in required_files.items()
-        if not Path(path).is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create CAAR-RG integrity metadata; missing "
-            + ", ".join(missing)
-        )
-    return {
-        "strategy_kind": HYBRID_STRATEGY_KIND,
-        "hybrid_mode": HYBRID_MODE,
-        "hybrid_components": dict(HYBRID_COMPONENTS),
-        "hybrid_action_policy": HYBRID_ACTION_POLICY,
-        "hybrid_guide_algorithm": HYBRID_GUIDE_ALGORITHM,
-        "caar_checkpoint_path": str(caar_checkpoint),
-        "caar_checkpoint_sha256": _sha256_file(caar_checkpoint),
-        "caar_config_path": str(caar_config.resolve()),
-        "caar_config_sha256": _sha256_file(caar_config),
-        "implementation_sha256": {
-            label: _sha256_file(path)
-            for label, path in implementation.items()
-        },
-        "map_list_sha256": (
-            map_list_sha256
-            if map_list_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
-        ),
-        "map_registry_sha256": (
-            map_registry_sha256
-            if map_registry_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
-        ),
-    }
-
-
-def yield_integrity_metadata(
-    args,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Hash the exact AO-assisted safe-yield policy and CAAR checkpoint."""
-
-    root = Path(args.main_dir).resolve()
-    code_root = Path(__file__).resolve().parent
-    caar_weights = _project_path(
+    switcher_weights = _project_path(
         root,
-        args.caar_weights_path or _find_caar_weights(root),
+        args.switcher_weights_path or _find_switcher_weights(root),
     )
     caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    caar_config = caar_weights / "config.json"
-    implementation = {
-        relative_path: code_root / relative_path
-        for relative_path in YIELD_INTEGRITY_IMPLEMENTATION_FILES
-    }
-    required_files = {
+    switcher_checkpoint = _latest_caar_checkpoint(switcher_weights)
+    files = {
+        "caar_config": caar_weights / "config.json",
         "caar_checkpoint": caar_checkpoint,
-        "caar_config": caar_config,
-        **implementation,
-    }
-    if args.map_list:
-        required_files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in required_files.items()
-        if not Path(path).is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create CAAR-Yield integrity metadata; missing "
-            + ", ".join(missing)
-        )
-    return {
-        "strategy_kind": YIELD_STRATEGY_KIND,
-        "hybrid_mode": YIELD_MODE,
-        "hybrid_components": dict(YIELD_COMPONENTS),
-        "hybrid_action_policy": YIELD_ACTION_POLICY,
-        "hybrid_guide_algorithm": YIELD_GUIDE_ALGORITHM,
-        "caar_checkpoint_path": str(caar_checkpoint),
-        "caar_checkpoint_sha256": _sha256_file(caar_checkpoint),
-        "caar_config_path": str(caar_config.resolve()),
-        "caar_config_sha256": _sha256_file(caar_config),
-        "implementation_sha256": {
-            label: _sha256_file(path)
-            for label, path in implementation.items()
-        },
-        "map_list_sha256": (
-            map_list_sha256
-            if map_list_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
+        "switcher_config": switcher_weights / "config.json",
+        "switcher_checkpoint": switcher_checkpoint,
+        "run_experiments.py": code_root / "run_experiments.py",
+        "agents/caar.py": code_root / "agents/caar.py",
+        "agents/srslm.py": code_root / "agents/srslm.py",
+        "agents/switcher.py": code_root / "agents/switcher.py",
+        "agents/switcher_core.py": code_root / "agents/switcher_core.py",
+        "agents/reverse_metrics.py": code_root / "agents/reverse_metrics.py",
+        "learning/encoder.py": code_root / "learning/encoder.py",
+        "learning/switcher_actor_critic.py": (
+            code_root / "learning/switcher_actor_critic.py"
         ),
-        "map_registry_sha256": map_registry_sha256,
-    }
-
-
-def pb_integrity_metadata(
-    args,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Hash the exact Probe-block policy and CAAR checkpoint."""
-
-    root = Path(args.main_dir).resolve()
-    code_root = Path(__file__).resolve().parent
-    caar_weights = _project_path(
-        root,
-        args.caar_weights_path or _find_caar_weights(root),
-    )
-    caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    caar_config = caar_weights / "config.json"
-    implementation = {
-        relative_path: code_root / relative_path
-        for relative_path in PB_INTEGRITY_IMPLEMENTATION_FILES
-    }
-    required_files = {
-        "caar_checkpoint": caar_checkpoint,
-        "caar_config": caar_config,
-        **implementation,
-    }
-    if args.map_list:
-        required_files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in required_files.items()
-        if not Path(path).is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create CAAR-PB integrity metadata; missing "
-            + ", ".join(missing)
-        )
-    return {
-        "strategy_kind": PB_STRATEGY_KIND,
-        "hybrid_mode": PB_MODE,
-        "hybrid_components": dict(PB_COMPONENTS),
-        "hybrid_action_policy": PB_ACTION_POLICY,
-        "hybrid_guide_algorithm": PB_GUIDE_ALGORITHM,
-        "caar_checkpoint_path": str(caar_checkpoint),
-        "caar_checkpoint_sha256": _sha256_file(caar_checkpoint),
-        "caar_config_path": str(caar_config.resolve()),
-        "caar_config_sha256": _sha256_file(caar_config),
-        "implementation_sha256": {
-            label: _sha256_file(path)
-            for label, path in implementation.items()
-        },
-        "map_list_sha256": (
-            map_list_sha256
-            if map_list_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
+        "planning/ao_replan_algo.py": code_root / "planning/ao_replan_algo.py",
+        "planning/aoreplan_branch.py": (
+            code_root / "planning/aoreplan_branch.py"
         ),
-        "map_registry_sha256": map_registry_sha256,
-    }
-
-
-def ra_integrity_metadata(
-    args,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Hash both frozen policies and all CAAR-RA decision-path sources."""
-
-    root = Path(args.main_dir).resolve()
-    code_root = Path(__file__).resolve().parent
-    caar_weights = _project_path(
-        root,
-        args.caar_weights_path or _find_caar_weights(root),
-    )
-    gate_weights = _project_path(
-        root,
-        args.caar_ra_weights_path or _find_caar_ra_weights(root),
-    )
-    caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    gate_checkpoint = _latest_gate_checkpoint(gate_weights)
-    caar_config = caar_weights / "config.json"
-    gate_config = gate_weights / "config.json"
-    implementation = {
-        relative_path: code_root / relative_path
-        for relative_path in RA_INTEGRITY_IMPLEMENTATION_FILES
-    }
-    required_files = {
-        "caar_checkpoint": caar_checkpoint,
-        "caar_config": caar_config,
-        "gate_checkpoint": gate_checkpoint,
-        "gate_config": gate_config,
-        **implementation,
+        "pomapf_env/switcher_env.py": code_root / "pomapf_env/switcher_env.py",
     }
     if getattr(args, "map_list", None):
-        required_files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in required_files.items()
-        if not Path(path).is_file()
-    ]
+        files["map_list"] = _project_path(root, args.map_list)
+        files["map_registry"] = _project_path(root, "maps/eval.yaml")
+    missing = [f"{label}={path}" for label, path in files.items() if not path.is_file()]
     if missing:
         raise FileNotFoundError(
-            "Cannot create CAAR-RA integrity metadata; missing "
-            + ", ".join(missing)
+            "Cannot create SRSLM integrity metadata; missing " + ", ".join(missing)
         )
-
-    implementation_hashes = {
-        label: _sha256_file(path)
-        for label, path in implementation.items()
-    }
-    artifact_hashes = {
-        "caar_checkpoint": _sha256_file(caar_checkpoint),
-        "caar_config": _sha256_file(caar_config),
-        "gate_checkpoint": _sha256_file(gate_checkpoint),
-        "gate_config": _sha256_file(gate_config),
-        **{
-            f"implementation:{label}": digest
-            for label, digest in implementation_hashes.items()
-        },
-    }
-    aggregate_sha256 = hashlib.sha256(
-        json.dumps(
-            artifact_hashes,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
+    hashes = {label: _sha256_file(path) for label, path in files.items()}
+    aggregate = hashlib.sha256(
+        json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return {
-        "strategy_kind": RA_STRATEGY_KIND,
-        "hybrid_mode": RA_MODE,
-        "hybrid_components": dict(RA_COMPONENTS),
-        "hybrid_action_policy": RA_ACTION_POLICY,
-        "hybrid_guide_algorithm": RA_PLAN_ALGORITHM,
-        "caar_checkpoint_path": str(caar_checkpoint),
-        "caar_checkpoint_sha256": artifact_hashes["caar_checkpoint"],
-        "caar_config_path": str(caar_config.resolve()),
-        "caar_config_sha256": artifact_hashes["caar_config"],
-        "gate_checkpoint_path": str(gate_checkpoint),
-        "gate_checkpoint_sha256": artifact_hashes["gate_checkpoint"],
-        "gate_config_path": str(gate_config.resolve()),
-        "gate_config_sha256": artifact_hashes["gate_config"],
-        "implementation_sha256": implementation_hashes,
-        "aggregate_sha256": aggregate_sha256,
+        "strategy_kind": "hybrid_switching",
+        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
+        "caar_weights_path": str(caar_weights),
+        "switcher_weights_path": str(switcher_weights),
+        "caar_checkpoint_sha256": hashes["caar_checkpoint"],
+        "switcher_checkpoint_sha256": hashes["switcher_checkpoint"],
+        "artifact_sha256": hashes,
+        "aggregate_sha256": aggregate,
         "map_list_sha256": (
             map_list_sha256
             if map_list_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
+            else hashes.get("map_list")
         ),
         "map_registry_sha256": map_registry_sha256,
     }
 
 
-def rs_integrity_metadata(
+
+
+def srslm_ablation_integrity_metadata(
     args,
+    algorithm,
     map_list_sha256=None,
     map_registry_sha256=None,
 ):
-    """Hash CAAR and the complete deterministic rule-only action path."""
-
+    """Bind a V3 wait-detector ablation to its exact code and artifacts."""
     root = Path(args.main_dir).resolve()
     code_root = Path(__file__).resolve().parent
     caar_weights = _project_path(
@@ -1185,216 +632,81 @@ def rs_integrity_metadata(
         args.caar_weights_path or _find_caar_weights(root),
     )
     caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    caar_config = caar_weights / "config.json"
-    implementation = {
-        relative_path: code_root / relative_path
-        for relative_path in RS_INTEGRITY_IMPLEMENTATION_FILES
-    }
-    required_files = {
+    files = {
+        "caar_config": caar_weights / "config.json",
         "caar_checkpoint": caar_checkpoint,
-        "caar_config": caar_config,
-        **implementation,
+        "run_experiments.py": code_root / "run_experiments.py",
+        "agents/caar.py": code_root / "agents/caar.py",
+        "agents/srslm_ablation.py": code_root / "agents/srslm_ablation.py",
+        "agents/switcher_core.py": code_root / "agents/switcher_core.py",
+        "agents/reverse_metrics.py": code_root / "agents/reverse_metrics.py",
+        "planning/ao_replan_algo.py": code_root / "planning/ao_replan_algo.py",
+        "planning/aoreplan_branch.py": code_root / "planning/aoreplan_branch.py",
     }
-    if getattr(args, "map_list", None):
-        required_files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in required_files.items()
-        if not Path(path).is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create CAAR-RS integrity metadata; missing "
-            + ", ".join(missing)
+    switcher_weights = None
+    switcher_checkpoint = None
+    if algorithm == "SRSLM-NoWaitDetect":
+        switcher_weights = _project_path(
+            root,
+            args.no_wait_detect_switcher_weights_path
+            or _find_no_wait_detect_switcher_weights(root),
         )
-
-    implementation_hashes = {
-        label: _sha256_file(path)
-        for label, path in implementation.items()
-    }
-    artifact_hashes = {
-        "caar_checkpoint": _sha256_file(caar_checkpoint),
-        "caar_config": _sha256_file(caar_config),
-        **{
-            f"implementation:{label}": digest
-            for label, digest in implementation_hashes.items()
-        },
-    }
-    aggregate_sha256 = hashlib.sha256(
-        json.dumps(
-            artifact_hashes,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
-    return {
-        "strategy_kind": RS_STRATEGY_KIND,
-        "hybrid_mode": RS_MODE,
-        "hybrid_components": dict(RS_COMPONENTS),
-        "hybrid_action_policy": RS_ACTION_POLICY,
-        "hybrid_guide_algorithm": RS_PLAN_ALGORITHM,
-        "caar_checkpoint_path": str(caar_checkpoint),
-        "caar_checkpoint_sha256": artifact_hashes["caar_checkpoint"],
-        "caar_config_path": str(caar_config.resolve()),
-        "caar_config_sha256": artifact_hashes["caar_config"],
-        "implementation_sha256": implementation_hashes,
-        "aggregate_sha256": aggregate_sha256,
-        "map_list_sha256": (
-            map_list_sha256
-            if map_list_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
-        ),
-        "map_registry_sha256": map_registry_sha256,
-    }
-
-
-def srlsm_integrity_metadata(
-    args,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Hash both absolute-return estimators and the complete SRSLM path."""
-
-    root = Path(args.main_dir).resolve()
-    reverse_override_enabled = bool(
-        getattr(args, "srlsm_reverse_caar_override_enabled", True)
-    )
-    code_root = Path(__file__).resolve().parent
-    caar_weights = _project_path(
-        root,
-        args.caar_weights_path or _find_caar_weights(root),
-    )
-    caar_estimator_checkpoint = _project_path(
-        root,
-        args.srlsm_caar_estimator_checkpoint
-        or _find_srlsm_caar_estimator_checkpoint(root),
-    )
-    ao_estimator_checkpoint = _project_path(
-        root,
-        args.srlsm_ao_estimator_checkpoint
-        or _find_srlsm_ao_estimator_checkpoint(root),
-    )
-    caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    caar_config = caar_weights / "config.json"
-    implementation = {
-        relative_path: code_root / relative_path
-        for relative_path in SRSLM_INTEGRITY_IMPLEMENTATION_FILES
-    }
-    required_files = {
-        "caar_checkpoint": caar_checkpoint,
-        "caar_config": caar_config,
-        "caar_estimator_checkpoint": caar_estimator_checkpoint,
-        "ao_estimator_checkpoint": ao_estimator_checkpoint,
-        **implementation,
-    }
-    if getattr(args, "map_list", None):
-        required_files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in required_files.items()
-        if not Path(path).is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create SRSLM integrity metadata; missing "
-            + ", ".join(missing)
-        )
-
-    implementation_hashes = {
-        label: _sha256_file(path)
-        for label, path in implementation.items()
-    }
-    artifact_hashes = {
-        "caar_checkpoint": _sha256_file(caar_checkpoint),
-        "caar_config": _sha256_file(caar_config),
-        "caar_estimator_checkpoint": _sha256_file(
-            caar_estimator_checkpoint
-        ),
-        "ao_estimator_checkpoint": _sha256_file(
-            ao_estimator_checkpoint
-        ),
-        **{
-            f"implementation:{label}": digest
-            for label, digest in implementation_hashes.items()
-        },
-    }
-    deployment_identity = {
-        "hybrid_mode": _srlsm_mode(
-            reverse_override_enabled,
-        ),
-        "value_margin": float(args.srlsm_value_margin),
-        "reverse_caar_override_enabled": reverse_override_enabled,
-        "switch_constraint": _srlsm_switch_constraint(
-            reverse_override_enabled
-        ),
-    }
-    aggregate_sha256 = hashlib.sha256(
-        json.dumps(
+        switcher_checkpoint = _latest_caar_checkpoint(switcher_weights)
+        files.update(
             {
-                "artifacts": artifact_hashes,
-                "deployment": deployment_identity,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
+                "switcher_config": switcher_weights / "config.json",
+                "switcher_checkpoint": switcher_checkpoint,
+                "agents/switcher.py": code_root / "agents/switcher.py",
+                "learning/encoder.py": code_root / "learning/encoder.py",
+                "learning/switcher_actor_critic.py": (
+                    code_root / "learning/switcher_actor_critic.py"
+                ),
+            }
+        )
+    if getattr(args, "map_list", None):
+        files["map_list"] = _project_path(root, args.map_list)
+    missing = [
+        f"{label}={path}"
+        for label, path in files.items()
+        if not path.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Cannot create SRSLM ablation integrity metadata; missing "
+            + ", ".join(missing)
+        )
+    hashes = {label: _sha256_file(path) for label, path in files.items()}
+    aggregate = hashlib.sha256(
+        json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
     ).hexdigest()
+    mode = (
+        "all_state_switcher_v3"
+        if algorithm == "SRSLM-NoWaitDetect"
+        else "aoreplan_wait_detect_only_v3"
+    )
     return {
-        "strategy_kind": SRSLM_STRATEGY_KIND,
-        "hybrid_mode": _srlsm_mode(
-            reverse_override_enabled,
+        "strategy_kind": "hybrid_switching_ablation",
+        "algorithm": algorithm,
+        "hybrid_mode": mode,
+        "caar_weights_path": str(caar_weights),
+        "caar_checkpoint_sha256": hashes["caar_checkpoint"],
+        "switcher_weights_path": (
+            str(switcher_weights) if switcher_weights is not None else None
         ),
-        "hybrid_components": dict(SRSLM_COMPONENTS),
-        "hybrid_action_policy": SRSLM_ACTION_POLICY,
-        "hybrid_guide_algorithm": SRSLM_PLAN_ALGORITHM,
-        "comparison_cadence": "every_step_per_agent",
-        "switch_constraint": _srlsm_switch_constraint(
-            reverse_override_enabled
+        "switcher_checkpoint_sha256": (
+            hashes.get("switcher_checkpoint")
         ),
-        "value_margin": float(args.srlsm_value_margin),
-        "reverse_caar_override_enabled": reverse_override_enabled,
-        "caar_checkpoint_path": str(caar_checkpoint),
-        "caar_checkpoint_sha256": artifact_hashes["caar_checkpoint"],
-        "caar_config_path": str(caar_config.resolve()),
-        "caar_config_sha256": artifact_hashes["caar_config"],
-        "caar_estimator_checkpoint_path": str(caar_estimator_checkpoint),
-        "caar_estimator_checkpoint_sha256": artifact_hashes[
-            "caar_estimator_checkpoint"
-        ],
-        "ao_estimator_checkpoint_path": str(ao_estimator_checkpoint),
-        "ao_estimator_checkpoint_sha256": artifact_hashes[
-            "ao_estimator_checkpoint"
-        ],
-        "implementation_sha256": implementation_hashes,
-        "aggregate_sha256": aggregate_sha256,
+        "artifact_sha256": hashes,
+        "aggregate_sha256": aggregate,
         "map_list_sha256": (
             map_list_sha256
             if map_list_sha256 is not None
-            else (
-                _sha256_file(required_files["map_list"])
-                if "map_list" in required_files
-                else None
-            )
+            else hashes.get("map_list")
         ),
         "map_registry_sha256": map_registry_sha256,
     }
-
-
-def switch_integrity_metadata(
-    args,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Compatibility alias for hybrid integrity metadata."""
-    return hybrid_integrity_metadata(
-        args,
-        map_list_sha256=map_list_sha256,
-        map_registry_sha256=map_registry_sha256,
-    )
-
 
 def _find_weight_run_dir(root):
     root = Path(root)
@@ -1471,14 +783,6 @@ def _ao_replan_cfg(
 
         name="AORePlan",
 
-        no_path_random=True,
-
-        use_best_move=True,
-
-        fix_nones=True,
-
-        handoff_on_reverse=False,
-
         max_planning_steps=max_planning_steps,
 
         seed=seed,
@@ -1487,709 +791,180 @@ def _ao_replan_cfg(
 
 
 def build_algorithm(
-
     algo_name,
-
     main_dir,
-
     seed,
-
     caar_weights_path=None,
-
-    caar_ra_weights_path=None,
-
-    srlsm_caar_estimator_checkpoint=None,
-
-    srlsm_ao_estimator_checkpoint=None,
-
-    srlsm_value_margin=0.0,
-
-    srlsm_reverse_caar_override_enabled=True,
-
-    notau_weights_path=None,
-
-    dhc_weights_path=None,
-
-    dcc_weights_path=None,
-
-    scrimp_weights_path=None,
-
+    switcher_weights_path=None,
+    no_wait_detect_switcher_weights_path=None,
+    no_reweight_weights_path=None,
     epom_weights_path=None,
-
 ):
-
     algo_name = canonical_algorithm_name(algo_name) or algo_name
 
-
-    if algo_name == "Replan":
-
+    if algo_name == "RePlan":
         from agents.replan import RePlan
-
 
         return RePlan(_replan_cfg(seed))
 
-
-    if algo_name == "AO-RePlan":
-
+    if algo_name == "AORePlan":
         from agents.ao_replan import AORePlan
-
 
         return AORePlan(_ao_replan_cfg(seed))
 
-    if algo_name == "DHC":
-
-        from agents.dhc import DHC, DHCConfig
-
-        return DHC(
-
-            DHCConfig(
-
-                path_to_weights=dhc_weights_path or _find_dhc_weights(main_dir),
-
-                seed=seed,
-
-            )
-
-        )
-
-
-
-
-
-
-
-    if algo_name == "DCC":
-
-        from agents.dcc import DCC, DCCConfig
-
-        return DCC(
-
-            DCCConfig(
-
-                path_to_weights=dcc_weights_path or _find_dcc_weights(main_dir),
-
-                seed=seed,
-
-            )
-
-        )
-
-
-    if algo_name == "SCRIMP":
-
-        from agents.scrimp import SCRIMP, SCRIMPConfig
-
-        return SCRIMP(
-
-            SCRIMPConfig(
-
-                path_to_weights=scrimp_weights_path or _find_scrimp_weights(main_dir),
-
-                seed=seed,
-
-            )
-
-        )
-
-
-    if algo_name == "CAAR-RG":
+    if algo_name in ("SRSLM-NoWaitDetect", "SRSLM-WaitDetectOnly"):
         from agents.caar import CAARConfig
-        from agents.caar_rg import CAARRG, CAARRGConfig
+        from agents.srslm_ablation import (
+            SRSLMNoWaitDetect,
+            SRSLMNoWaitDetectConfig,
+            SRSLMWaitDetectOnly,
+            SRSLMWaitDetectOnlyConfig,
+        )
 
-        return CAARRG(
-            CAARRGConfig(
-                caar=CAARConfig(
-                    path_to_weights=(
-                        caar_weights_path or _find_caar_weights(main_dir)
-                    ),
-                    checkpoint_kind="latest",
-                ),
-                seed=seed,
+        caar_config = CAARConfig(
+            path_to_weights=str(
+                _project_path(
+                    main_dir,
+                    caar_weights_path or _find_caar_weights(main_dir),
+                )
+            ),
+            checkpoint_kind="latest",
+            device="auto",
+        )
+        if algo_name == "SRSLM-WaitDetectOnly":
+            return SRSLMWaitDetectOnly(
+                SRSLMWaitDetectOnlyConfig(
+                    caar=caar_config,
+                    seed=seed,
+                )
             )
-        )
 
+        from agents.switcher import AllStateSwitcherConfig
 
-    if algo_name == "CAAR-Yield":
-        from agents.caar import CAARConfig
-        from agents.caar_yield import CAARYield, CAARYieldConfig
-
-        return CAARYield(
-            CAARYieldConfig(
-                caar=CAARConfig(
-                    path_to_weights=(
-                        caar_weights_path or _find_caar_weights(main_dir)
-                    ),
-                    checkpoint_kind="latest",
-                ),
-                seed=seed,
-            )
-        )
-
-
-    if algo_name == "CAAR-PB":
-        from agents.caar import CAARConfig
-        from agents.caar_probe_block import (
-            CAARProbeBlock,
-            CAARProbeBlockConfig,
-        )
-
-        return CAARProbeBlock(
-            CAARProbeBlockConfig(
-                caar=CAARConfig(
-                    path_to_weights=(
-                        caar_weights_path or _find_caar_weights(main_dir)
-                    ),
-                    checkpoint_kind="latest",
-                ),
-                initial_min_path_blockers=2,
-                repeat_stall_window_steps=8,
-                repeat_stall_max_anchor_displacement=2,
-                max_virtual_blocks_per_target=4,
-                seed=seed,
-            )
-        )
-
-
-    if algo_name == "CAAR-RA":
-        from agents.caar import CAARConfig
-        from agents.caar_ra import CAARRA, CAARRAConfig
-
-        return CAARRA(
-            CAARRAConfig(
-                caar=CAARConfig(
-                    path_to_weights=(
-                        caar_weights_path or _find_caar_weights(main_dir)
-                    ),
-                    checkpoint_kind="latest",
-                    device="auto",
-                ),
-                gate_path_to_weights=(
-                    caar_ra_weights_path or _find_caar_ra_weights(main_dir)
-                ),
-                gate_checkpoint_kind="latest",
-                gate_device="auto",
-                logit_margin=0.0,
-                filter_new_conflicts=True,
-                seed=seed,
-            )
-        )
-
-
-    if algo_name == "CAAR-RS":
-        from agents.caar import CAARConfig
-        from agents.caar_rule_switch import CAARRS, CAARRSConfig
-
-        return CAARRS(
-            CAARRSConfig(
-                caar=CAARConfig(
+        return SRSLMNoWaitDetect(
+            SRSLMNoWaitDetectConfig(
+                caar=caar_config,
+                switcher=AllStateSwitcherConfig(
                     path_to_weights=str(
                         _project_path(
                             main_dir,
-                            caar_weights_path or _find_caar_weights(main_dir),
+                            no_wait_detect_switcher_weights_path
+                            or _find_no_wait_detect_switcher_weights(main_dir),
                         )
                     ),
-                    checkpoint_kind="latest",
+                    checkpoint_kind="auto",
                     device="auto",
+                    deterministic=False,
                 ),
                 seed=seed,
             )
         )
 
-
     if algo_name == "SRSLM":
-        from agents.caar import CAARConfig
-        from agents.srlsm import SRSLM, SRSLMConfig
-
-        resolved_caar_weights = str(
-            _project_path(
-                main_dir,
-                caar_weights_path or _find_caar_weights(main_dir),
-            )
-        )
-        resolved_caar_estimator = str(
-            _project_path(
-                main_dir,
-                srlsm_caar_estimator_checkpoint
-                or _find_srlsm_caar_estimator_checkpoint(main_dir),
-            )
-        )
-        resolved_ao_estimator = str(
-            _project_path(
-                main_dir,
-                srlsm_ao_estimator_checkpoint
-                or _find_srlsm_ao_estimator_checkpoint(main_dir),
-            )
-        )
+        from agents.srslm import SRSLM, SRSLMConfig
+        from agents.switcher import SwitcherConfig
 
         return SRSLM(
             SRSLMConfig(
-                caar=CAARConfig(
-                    path_to_weights=resolved_caar_weights,
-                    checkpoint_kind="latest",
+                switcher=SwitcherConfig(
+                    path_to_weights=str(
+                        _project_path(
+                            main_dir,
+                            switcher_weights_path
+                            or _find_switcher_weights(main_dir),
+                        )
+                    ),
+                    checkpoint_kind="auto",
                     device="auto",
-                ),
-                caar_estimator_checkpoint_path=resolved_caar_estimator,
-                ao_estimator_checkpoint_path=resolved_ao_estimator,
-                estimator_device="auto",
-                value_margin=float(srlsm_value_margin),
-                reverse_caar_override_enabled=bool(
-                    srlsm_reverse_caar_override_enabled
+                    deterministic=False,
                 ),
                 seed=seed,
-            )
+            ),
+            project_root=Path(main_dir).resolve(),
         )
 
-
-
-    if algo_name == "EPOM":
-
+    if algo_name == "EPOM-Lifelong-FT":
         from agents.epom import EPOM, EPOMConfig
 
-
+        if not epom_weights_path:
+            raise ValueError(
+                "EPOM-Lifelong-FT requires an explicit --epom-weights-path."
+            )
         return EPOM(
-
             EPOMConfig(
-
-                path_to_weights=epom_weights_path or _find_epom_weights(main_dir),
-
+                path_to_weights=epom_weights_path,
                 seed=seed,
-
                 device="auto",
-
+                artifact_profile="lifelong_finetuned",
             )
-
         )
 
+    if algo_name == "NoReweight":
+        from agents.caar import NoReweight, NoReweightConfig
 
-    if algo_name == "AS":
-
-        from agents.assistant_switcher import (
-
-            AssistantSwitcher,
-
-            AssistantSwitcherConfig,
-
+        weights_path = (
+            no_reweight_weights_path or _find_no_reweight_weights(main_dir)
         )
-
-        from agents.epom import EPOMConfig
-
-        from agents.replan import RePlanConfig
-
-
-        return AssistantSwitcher(
-
-            AssistantSwitcherConfig(
-
-                planning=RePlanConfig(
-
-                    name="RePlan",
-
-                    fix_loops=True,
-
-                    add_none_if_loop=True,
-
-                    no_path_random=False,
-
-                    use_best_move=False,
-
-                    fix_nones=False,
-
-                    seed=seed,
-
-                ),
-
-                learning=EPOMConfig(
-                    path_to_weights=epom_weights_path or _find_epom_weights(main_dir),
-                    seed=seed,
-                    device="auto",
-                ),
-
+        return NoReweight(
+            NoReweightConfig(
+                path_to_weights=weights_path,
                 seed=seed,
-
-            )
-
-        )
-
-
-    if algo_name == "NoTau":
-
-        from agents.caar import NoTau, NoTauConfig
-
-        notau_path = notau_weights_path or _find_notau_weights(main_dir)
-
-
-        return NoTau(
-
-            NoTauConfig(
-
-                path_to_weights=notau_path,
-
-                seed=seed,
-
-                checkpoint_kind="auto" if notau_weights_path else "best",
-
+                checkpoint_kind="latest",
                 device="auto",
-
             )
-
         )
 
+    if algo_name == "Direct":
+        from agents.direct import Direct, DirectConfig
+
+        weights_path = (
+            no_reweight_weights_path or _find_no_reweight_weights(main_dir)
+        )
+        return Direct(
+            DirectConfig(
+                path_to_weights=weights_path,
+                name="Direct",
+                pressure_scale=1.0,
+                seed=seed,
+                checkpoint_kind="latest",
+                device="auto",
+            )
+        )
 
     if algo_name == "CAAR":
-
-        caar_path = caar_weights_path or _find_caar_weights(main_dir)
-
         from agents.caar import CAAR
 
-
-        return CAAR(
-
-            _caar_cfg(
-
-                caar_path,
-
-                seed,
-
-            )
-
-        )
-
+        caar_path = caar_weights_path or _find_caar_weights(main_dir)
+        return CAAR(_caar_cfg(caar_path, seed))
 
     raise ValueError(f"Unsupported algorithm: {algo_name}")
 
 
-def validate_caar_yield_stats(stats):
-    """Fail a result if the CAAR-only action-source contract was violated."""
-
-    required = (
-        "environment_step_count",
-        "caar_forward_pass_count",
-        "total_actions",
-        "caar_action_count",
-        "ao_planned_proposal_count",
-        "ao_cancelled_proposal_count",
-        "ao_action_execution_count",
-        "none_action_count",
-        "target_mutation_leak_count",
-        "adjacent_yielder_violation_count",
-        "pocket_conflict_violation_count",
-        "invalid_state_transition_count",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError(
-            "CAAR-Yield diagnostics are incomplete: " + ", ".join(missing)
-        )
-    equalities = (
-        (
-            "one CAAR forward per environment step",
-            stats["caar_forward_pass_count"],
-            stats["environment_step_count"],
-        ),
-        (
-            "all environment actions come from CAAR",
-            stats["caar_action_count"],
-            stats["total_actions"],
-        ),
-        (
-            "all AO proposals are cancelled",
-            stats["ao_cancelled_proposal_count"],
-            stats["ao_planned_proposal_count"],
-        ),
-    )
-    violations = [
-        f"{label}: {actual} != {expected}"
-        for label, actual, expected in equalities
-        if actual != expected
-    ]
-    zero_fields = (
-        "ao_action_execution_count",
-        "none_action_count",
-        "target_mutation_leak_count",
-        "adjacent_yielder_violation_count",
-        "pocket_conflict_violation_count",
-        "invalid_state_transition_count",
-    )
-    violations.extend(
-        f"{key}: {stats[key]} != 0"
-        for key in zero_fields
-        if stats[key] != 0
-    )
-    if violations:
-        raise RuntimeError(
-            "CAAR-Yield safety contract failed: " + "; ".join(violations)
-        )
-
-
-def validate_caar_pb_stats(stats):
-    """Fail a result if CAAR-PB mutates raw inputs or executes another policy."""
+def validate_srslm_stats(stats):
+    """Reject an SRSLM episode that violates the fixed routing contract."""
 
     required = (
         "hybrid_mode",
-        "environment_step_count",
-        "caar_forward_pass_count",
-        "total_actions",
-        "caar_action_count",
-        "ao_action_execution_count",
-        "ordinary_replan_action_count",
-        "none_action_count",
-        "target_mutation_leak_count",
-        "obstacle_mutation_leak_count",
-        "agent_mutation_leak_count",
-        "initial_congestion_trigger_count",
-        "repeat_stall_trigger_count",
-        "repeat_window_reset_count",
-        "repeat_congestion_confirmed_count",
-        "repeat_stall_without_congestion_count",
-        "repeat_probe_no_path_count",
-        "initial_virtual_block_count",
-        "repeat_virtual_block_count",
-        "virtual_block_commit_count",
-        "max_virtual_blocks_per_agent",
-        "virtual_block_cap_reached_count",
-        "repeat_min_path_blockers_configured",
-        "repeat_stall_window_steps_configured",
-        "repeat_stall_radius_configured",
-        "max_virtual_blocks_configured",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError(
-            "CAAR-PB diagnostics are incomplete: " + ", ".join(missing)
-        )
-    violations = []
-    if stats["hybrid_mode"] != PB_MODE:
-        violations.append("hybrid mode does not match the v2 contract")
-    if stats["caar_forward_pass_count"] != stats["environment_step_count"]:
-        violations.append("CAAR forward count differs from environment steps")
-    if stats["caar_action_count"] != stats["total_actions"]:
-        violations.append("not all environment actions came from CAAR")
-    for key in (
-        "ao_action_execution_count",
-        "ordinary_replan_action_count",
-        "none_action_count",
-        "target_mutation_leak_count",
-        "obstacle_mutation_leak_count",
-        "agent_mutation_leak_count",
-    ):
-        if stats[key] != 0:
-            violations.append(f"{key}: {stats[key]} != 0")
-    classified_repeat_count = (
-        stats["repeat_congestion_confirmed_count"]
-        + stats["repeat_stall_without_congestion_count"]
-        + stats["repeat_probe_no_path_count"]
-    )
-    if classified_repeat_count != stats["repeat_stall_trigger_count"]:
-        violations.append(
-            "repeat attempts are not fully classified and window-consumed"
-        )
-    if stats["repeat_window_reset_count"] != stats["repeat_stall_trigger_count"]:
-        violations.append("not every repeat attempt consumed its 8-step window")
-    if (
-        stats["repeat_virtual_block_count"]
-        > stats["repeat_congestion_confirmed_count"]
-    ):
-        violations.append(
-            "repeat commits exceed freshly confirmed congestion attempts"
-        )
-    if stats["virtual_block_commit_count"] != (
-        stats["initial_virtual_block_count"]
-        + stats["repeat_virtual_block_count"]
-    ):
-        violations.append("virtual block commit accounting is inconsistent")
-    attempt_count = (
-        stats["initial_congestion_trigger_count"]
-        + stats["repeat_congestion_confirmed_count"]
-    )
-    if stats["virtual_block_commit_count"] > attempt_count:
-        violations.append(
-            "virtual block commits exceed initial plus repeat attempts"
-        )
-    if stats["max_virtual_blocks_per_agent"] > 4:
-        violations.append("per-target virtual block cap exceeded 4")
-    configured = (
-        stats["repeat_min_path_blockers_configured"],
-        stats["repeat_stall_window_steps_configured"],
-        stats["repeat_stall_radius_configured"],
-        stats["max_virtual_blocks_configured"],
-    )
-    if configured != (2, 8, 2, 4):
-        violations.append(
-            "configured repeat blockers/window/radius/block cap differ "
-            "from 2/8/2/4"
-        )
-    if violations:
-        raise RuntimeError(
-            "CAAR-PB safety contract failed: " + "; ".join(violations)
-        )
-
-
-def validate_caar_ra_stats(stats):
-    """Validate hard safety and accounting invariants of learned CAAR-RA."""
-
-    required = (
-        "hybrid_mode",
-        "environment_step_count",
-        "total_action_count",
-        "total_actions",
-        "caar_action_count",
-        "reverse_count",
-        "none_count",
-        "plan_requested_count",
-        "eligible_plan_requested_count",
-        "plan_executed_count",
-        "reverse_executed_count",
-        "final_none_action_count",
-        "conflict_rejected_count",
-        "max_concurrent_plan",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError(
-            "CAAR-RA diagnostics are incomplete: " + ", ".join(missing)
-        )
-
-    violations = []
-    if stats["hybrid_mode"] != RA_MODE:
-        violations.append("hybrid mode does not match the CAAR-RA contract")
-    total = stats["total_action_count"]
-    if total != stats["total_actions"]:
-        violations.append("total action aliases disagree")
-    if stats["plan_executed_count"] + stats["caar_action_count"] != total:
-        violations.append("final actions are not fully classified")
-    if stats["reverse_executed_count"] != 0:
-        violations.append("a reverse raw Plan proposal was executed")
-    if stats["final_none_action_count"] != 0:
-        violations.append("a final environment action was None")
-    if not (
-        0
-        <= stats["eligible_plan_requested_count"]
-        <= stats["plan_requested_count"]
-        <= total
-    ):
-        violations.append("Plan request accounting is inconsistent")
-    if stats["plan_executed_count"] + stats["conflict_rejected_count"] != (
-        stats["eligible_plan_requested_count"]
-    ):
-        violations.append("eligible Plan requests are not fully classified")
-    if not 0 <= stats["reverse_count"] <= total:
-        violations.append("reverse proposal count is outside action bounds")
-    if not 0 <= stats["none_count"] <= total:
-        violations.append("None proposal count is outside action bounds")
-    if not 0 <= stats["max_concurrent_plan"] <= stats["plan_executed_count"]:
-        violations.append("maximum concurrent Plan count is inconsistent")
-    if violations:
-        raise RuntimeError(
-            "CAAR-RA safety contract failed: " + "; ".join(violations)
-        )
-
-
-def validate_caar_rs_stats(stats):
-    """Validate deterministic rule-only selection and safety accounting."""
-
-    required = (
-        "hybrid_mode",
-        "selector_kind",
+        "switch_pair",
+        "switcher_training",
         "value_predictor_loaded",
-        "value_predictor_call_count",
-        "value_comparison_count",
-        "switch_constraint",
+        "switcher_feature_schema",
+        "selector_kind",
+        "switcher_decision_scope",
+        "joint_conflict_prediction_enabled",
         "total_action_count",
-        "total_actions",
-        "nominal_caar_count",
-        "nominal_ao_count",
-        "executed_caar_count",
+        "switcher_choice_count",
+        "switcher_model_choice_count",
+        "selected_ao_count",
+        "switcher_model_selected_ao_count",
         "executed_ao_count",
-        "forced_caar_count",
-        "reverse_count",
-        "reverse_override_count",
-        "reverse_ao_executed_count",
-        "probe_call_count",
-        "final_none_action_count",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError(
-            "CAAR-RS diagnostics are incomplete: " + ", ".join(missing)
-        )
-
-    violations = []
-    total = stats["total_action_count"]
-    if stats["hybrid_mode"] != RS_MODE:
-        violations.append("hybrid mode does not match the CAAR-RS contract")
-    if stats["selector_kind"] != "deterministic_rule_only":
-        violations.append("selector is not deterministic rule-only")
-    if stats["value_predictor_loaded"] is not False:
-        violations.append("a value predictor was loaded")
-    if stats["value_predictor_call_count"] != 0:
-        violations.append("a value predictor was called")
-    if stats["value_comparison_count"] != 0:
-        violations.append("a learned value comparison was recorded")
-    if stats["switch_constraint"] != "reverse_to_caar_current_step":
-        violations.append("the per-step reverse rule is not active")
-    if total != stats["total_actions"]:
-        violations.append("total action aliases disagree")
-    if stats["nominal_caar_count"] != 0 or stats["nominal_ao_count"] != total:
-        violations.append("raw Plan is not the default nominal source")
-    if stats["executed_caar_count"] + stats["executed_ao_count"] != total:
-        violations.append("final actions are not fully classified")
-    if stats["forced_caar_count"] != stats["executed_caar_count"]:
-        violations.append("rule fallback accounting is inconsistent")
-    if stats["reverse_override_count"] != stats["reverse_count"]:
-        violations.append("reverse rule accounting is inconsistent")
-    if stats["reverse_ao_executed_count"] != 0:
-        violations.append("a reverse raw Plan proposal executed")
-    if stats["probe_call_count"] != 0:
-        violations.append("Probe was called")
-    if stats["final_none_action_count"] != 0:
-        violations.append("a final environment action was None")
-    for key in (
         "executed_caar_count",
-        "executed_ao_count",
-        "forced_caar_count",
-        "reverse_count",
-        "reverse_override_count",
-    ):
-        if not 0 <= stats[key] <= total:
-            violations.append(f"{key} is outside total-action bounds")
-    if violations:
-        raise RuntimeError(
-            "CAAR-RS safety contract failed: " + "; ".join(violations)
-        )
-
-
-def validate_srlsm_stats(stats):
-    """Validate SRSLM safety, provenance, and accounting invariants."""
-
-    required = (
-        "hybrid_mode",
-        "comparison_cadence",
-        "switch_constraint",
-        "environment_step_count",
-        "total_action_count",
-        "total_actions",
-        "value_comparison_count",
-        "branch_switch_count",
-        "nominal_caar_count",
-        "nominal_ao_count",
-        "executed_caar_count",
-        "executed_ao_count",
-        "reverse_count",
-        "reverse_override_count",
-        "reverse_ao_executed_count",
-        "none_count",
-        "none_override_count",
-        "invalid_plan_count",
-        "invalid_override_count",
-        "nonfinite_value_count",
-        "nonfinite_caar_value_count",
-        "nonfinite_ao_value_count",
-        "forced_caar_count",
-        "reverse_caar_override_enabled",
-        "probe_call_count",
-        "final_none_action_count",
-        "max_concurrent_nominal_ao",
-        "max_concurrent_ao_executed",
+        "aoreplan_wait_bypass_count",
+        "branch_action_agreement_count",
+        "static_astar_query_count",
+        "aoreplan_commit_count",
+        "switcher_checkpoint_sha256",
+        "switcher_stochastic",
     )
     missing = [key for key in required if key not in stats]
     if missing:
@@ -2197,127 +972,216 @@ def validate_srlsm_stats(stats):
             "SRSLM diagnostics are incomplete: " + ", ".join(missing)
         )
 
+    total = int(stats["total_action_count"])
+    choices = int(stats["switcher_choice_count"])
+    bypasses = int(stats["aoreplan_wait_bypass_count"])
+    selected_ao = int(stats["selected_ao_count"])
+    executed_ao = int(stats["executed_ao_count"])
+    executed_caar = int(stats["executed_caar_count"])
     violations = []
-    reverse_override_enabled = stats["reverse_caar_override_enabled"]
-    if not isinstance(reverse_override_enabled, bool):
-        violations.append("reverse CAAR override flag is invalid")
-        reverse_override_enabled = True
-    if stats["hybrid_mode"] != _srlsm_mode(
-        reverse_override_enabled,
-    ):
-        violations.append("hybrid mode does not match the SRSLM contract")
-    total = stats["total_action_count"]
-    if total != stats["total_actions"]:
-        violations.append("total action aliases disagree")
-    if stats["nominal_caar_count"] + stats["nominal_ao_count"] != total:
-        violations.append("nominal branches are not fully classified")
-    if stats["executed_caar_count"] + stats["executed_ao_count"] != total:
-        violations.append("executed sources are not fully classified")
-    if stats["forced_caar_count"] != (
-        stats["nominal_ao_count"] - stats["executed_ao_count"]
-    ):
-        violations.append("nominal AO fallbacks are not fully classified")
-    if stats["comparison_cadence"] != "every_step_per_agent":
-        violations.append("absolute returns are not compared every step")
-    expected_constraint = (
-        "reverse_to_caar_current_step"
-        if reverse_override_enabled
-        else "none"
-    )
-    if stats["switch_constraint"] != expected_constraint:
-        violations.append("switch constraint does not match the reverse rule")
-    if stats["probe_call_count"] != 0:
-        violations.append("Probe was called")
-    if (
-        reverse_override_enabled
-        and stats["reverse_ao_executed_count"] != 0
-    ):
-        violations.append("a reverse raw Plan proposal executed as AO")
-    if (
-        not reverse_override_enabled
-        and stats["reverse_override_count"] != 0
-    ):
-        violations.append("predictor-only mode recorded a reverse override")
-    if stats["final_none_action_count"] != 0:
-        violations.append("a final environment action was None")
-
-    bounded_by_total = (
-        "value_comparison_count",
-        "branch_switch_count",
-        "nominal_caar_count",
-        "nominal_ao_count",
-        "executed_caar_count",
-        "executed_ao_count",
-        "reverse_count",
-        "reverse_override_count",
-        "reverse_ao_executed_count",
-        "none_count",
-        "none_override_count",
-        "invalid_plan_count",
-        "invalid_override_count",
-        "nonfinite_value_count",
-        "forced_caar_count",
-    )
-    for key in bounded_by_total:
-        if not 0 <= stats[key] <= total:
-            violations.append(f"{key} is outside total-action bounds")
-    if stats["branch_switch_count"] > stats["value_comparison_count"]:
-        violations.append("branch switches exceed value comparisons")
-    if stats["nonfinite_value_count"] > stats["value_comparison_count"]:
-        violations.append("non-finite comparisons exceed value comparisons")
-    if stats["value_comparison_count"] != total:
-        violations.append("absolute-return values were not compared every step")
+    if stats["hybrid_mode"] != "aoreplan_wait_bypass_switcher_v3":
+        violations.append("hybrid mode differs from the fixed SRSLM policy")
+    if stats["switch_pair"] != ["CAAR", "AORePlan"]:
+        violations.append("branch names are not CAAR/AORePlan")
+    if stats["switcher_training"] != "PPO":
+        violations.append("Switcher training method is not PPO")
+    if stats["value_predictor_loaded"] is not False:
+        violations.append("a retired value predictor was loaded")
+    if stats["switcher_feature_schema"] != "srslm_switcher_state_v3":
+        violations.append("Switcher state schema differs")
+    if stats["selector_kind"] != "ppo_two_branch_categorical":
+        violations.append("Switcher is not a two-branch categorical policy")
+    if stats["switcher_decision_scope"] != "aoreplan_nonwait_only":
+        violations.append("Switcher received states outside AORePlan moves")
+    if stats["joint_conflict_prediction_enabled"] is not False:
+        violations.append("retired joint-conflict prediction is active")
+    if choices + bypasses != total:
+        violations.append("Switcher choices and AORePlan-wait bypasses do not sum")
+    if executed_ao + executed_caar != total:
+        violations.append("executed branch counts do not sum")
+    if selected_ao != executed_ao or selected_ao > choices:
+        violations.append("selected and executed AORePlan counts disagree")
+    if int(stats["switcher_model_choice_count"]) != choices:
+        violations.append("Switcher model and router choice counts disagree")
+    if int(stats["switcher_model_selected_ao_count"]) != selected_ao:
+        violations.append("Switcher model and router AO counts disagree")
+    if int(stats["aoreplan_commit_count"]) > total:
+        violations.append("AORePlan commit count exceeds total actions")
+    if int(stats["branch_action_agreement_count"]) > total:
+        violations.append("branch agreement count exceeds total actions")
+    digest = str(stats["switcher_checkpoint_sha256"])
+    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+        violations.append("Switcher checkpoint SHA256 is invalid")
+    if stats["switcher_stochastic"] is not True:
+        violations.append("Switcher evaluation is not stochastic")
     for key in (
-        "nonfinite_caar_value_count",
-        "nonfinite_ao_value_count",
+        "switcher_choice_rate",
+        "selected_ao_rate",
+        "executed_ao_rate",
+        "aoreplan_wait_bypass_rate",
+        "branch_action_agreement_rate",
+        "switcher_sampled_ao_rate",
+        "switcher_ao_probability_mean",
+        "switcher_ao_probability_p05",
+        "switcher_ao_probability_p95",
     ):
-        if not 0 <= stats[key] <= stats["nonfinite_value_count"]:
-            violations.append(f"{key} is inconsistent")
-    if stats["reverse_override_count"] > stats["reverse_count"]:
-        violations.append("reverse overrides exceed reverse proposals")
-    if stats["reverse_ao_executed_count"] > stats["reverse_count"]:
-        violations.append("executed reverse AO exceeds reverse proposals")
-    if stats["reverse_ao_executed_count"] > stats["executed_ao_count"]:
-        violations.append("executed reverse AO exceeds all AO executions")
-    if stats["none_override_count"] > stats["none_count"]:
-        violations.append("None overrides exceed None proposals")
-    if stats["invalid_override_count"] > stats["invalid_plan_count"]:
-        violations.append("invalid overrides exceed invalid proposals")
-    override_counts = (
-        stats["reverse_override_count"],
-        stats["none_override_count"],
-        stats["invalid_override_count"],
+        value = stats.get(key)
+        if value is None or not np.isfinite(value) or not 0.0 <= value <= 1.0:
+            violations.append(f"{key} is not a probability")
+    if violations:
+        raise RuntimeError("SRSLM contract failed: " + "; ".join(violations))
+
+
+
+
+
+
+
+
+def validate_srslm_ablation_stats(algorithm, stats):
+    """Reject rows that do not implement the named V3 wait ablation."""
+    common = (
+        "hybrid_mode",
+        "ablation_name",
+        "switch_pair",
+        "switcher_training",
+        "value_predictor_loaded",
+        "switcher_feature_schema",
+        "selector_kind",
+        "switcher_decision_scope",
+        "wait_detection_enabled",
+        "learned_switcher_called",
+        "joint_conflict_prediction_enabled",
+        "total_action_count",
+        "switcher_choice_count",
+        "switcher_model_choice_count",
+        "selected_ao_count",
+        "switcher_model_selected_ao_count",
+        "executed_ao_count",
+        "executed_caar_count",
+        "aoreplan_wait_bypass_count",
+        "branch_action_agreement_count",
+        "static_astar_query_count",
+        "aoreplan_commit_count",
+        "switcher_stochastic",
     )
-    if any(value > stats["forced_caar_count"] for value in override_counts):
-        violations.append("an override class exceeds all forced CAAR actions")
-    if stats["forced_caar_count"] > sum(override_counts):
-        violations.append("a forced CAAR action has no safety-override reason")
-    if not (
-        0
-        <= stats["max_concurrent_nominal_ao"]
-        <= stats["nominal_ao_count"]
+    missing = [key for key in common if key not in stats]
+    if missing:
+        raise RuntimeError(
+            f"{algorithm} diagnostics are incomplete: " + ", ".join(missing)
+        )
+    total = int(stats["total_action_count"])
+    choices = int(stats["switcher_choice_count"])
+    selected_ao = int(stats["selected_ao_count"])
+    executed_ao = int(stats["executed_ao_count"])
+    executed_caar = int(stats["executed_caar_count"])
+    bypasses = int(stats["aoreplan_wait_bypass_count"])
+    violations = []
+    if stats["ablation_name"] != algorithm:
+        violations.append("ablation label differs")
+    if stats["switch_pair"] != ["CAAR", "AORePlan"]:
+        violations.append("branch names differ")
+    if stats["value_predictor_loaded"] is not False:
+        violations.append("a retired value predictor was loaded")
+    if stats["switcher_feature_schema"] != "srslm_switcher_state_v3":
+        violations.append("feature schema differs")
+    if stats["joint_conflict_prediction_enabled"] is not False:
+        violations.append("retired joint-conflict prediction is active")
+    if executed_ao + executed_caar != total:
+        violations.append("executed branch counts do not sum")
+    if int(stats["aoreplan_commit_count"]) > total:
+        violations.append("AORePlan commit count exceeds total actions")
+    if int(stats["branch_action_agreement_count"]) > total:
+        violations.append("branch agreement count exceeds total actions")
+
+    if algorithm == "SRSLM-NoWaitDetect":
+        if stats["hybrid_mode"] != "all_state_switcher_v3":
+            violations.append("hybrid mode differs")
+        if stats["switcher_training"] != "PPO":
+            violations.append("Switcher training is not PPO")
+        if stats["selector_kind"] != "ppo_two_branch_categorical":
+            violations.append("selector is not categorical PPO")
+        if stats["switcher_decision_scope"] != "all_states":
+            violations.append("Switcher does not cover all states")
+        if stats["wait_detection_enabled"] is not False:
+            violations.append("wait detector is still enabled")
+        if stats["learned_switcher_called"] is not True:
+            violations.append("learned Switcher was not called")
+        if choices != total or bypasses != 0:
+            violations.append("all-state choice accounting differs")
+        if selected_ao != executed_ao:
+            violations.append("selected and executed AORePlan counts differ")
+        if int(stats["switcher_model_choice_count"]) != total:
+            violations.append("model did not receive every state")
+        if int(stats["switcher_model_selected_ao_count"]) != selected_ao:
+            violations.append("model/router AO counts differ")
+        if stats["switcher_stochastic"] is not True:
+            violations.append("all-state Switcher is not stochastic")
+        digest = str(stats.get("switcher_checkpoint_sha256", ""))
+        if len(digest) != 64 or any(
+            char not in "0123456789abcdef" for char in digest
+        ):
+            violations.append("all-state checkpoint SHA256 is invalid")
+    elif algorithm == "SRSLM-WaitDetectOnly":
+        if stats["hybrid_mode"] != "aoreplan_wait_detect_only_v3":
+            violations.append("hybrid mode differs")
+        if stats["switcher_training"] != "none":
+            violations.append("a learned Switcher was declared")
+        if stats["selector_kind"] != "deterministic_wait_detect_only":
+            violations.append("selector is not the wait detector")
+        if stats["switcher_decision_scope"] != "none":
+            violations.append("a learned decision scope was declared")
+        if stats["wait_detection_enabled"] is not True:
+            violations.append("wait detector is disabled")
+        if stats["learned_switcher_called"] is not False:
+            violations.append("learned Switcher was called")
+        if choices or selected_ao:
+            violations.append("Switcher choice counters are nonzero")
+        if int(stats["switcher_model_choice_count"]) or int(
+            stats["switcher_model_selected_ao_count"]
+        ):
+            violations.append("Switcher model counters are nonzero")
+        if executed_caar != bypasses or executed_ao + bypasses != total:
+            violations.append("deterministic wait routing differs")
+        if stats["switcher_stochastic"] is not False:
+            violations.append("deterministic ablation is marked stochastic")
+    else:
+        raise ValueError(f"Unknown SRSLM ablation {algorithm!r}.")
+
+    for key in (
+        "switcher_choice_rate",
+        "selected_ao_rate",
+        "executed_ao_rate",
+        "aoreplan_wait_bypass_rate",
+        "branch_action_agreement_rate",
     ):
-        violations.append("maximum concurrent nominal AO count is inconsistent")
-    if not (
-        0
-        <= stats["max_concurrent_ao_executed"]
-        <= stats["executed_ao_count"]
-    ):
-        violations.append("maximum concurrent executed AO count is inconsistent")
+        value = stats.get(key)
+        if value is None or not np.isfinite(value) or not 0.0 <= value <= 1.0:
+            violations.append(f"{key} is not a probability")
     if violations:
         raise RuntimeError(
-            "SRSLM safety contract failed: " + "; ".join(violations)
+            f"{algorithm} contract failed: " + "; ".join(violations)
         )
 
 
+
+
+
 class _MoveFailureTracker:
-    """Count submitted moves that the environment did not execute."""
+    """Track movement outcomes and agent contention without changing actions."""
 
     METRIC_VERSION = "submitted_nonwait_no_position_change_v1"
+    CONTENTION_METRIC_VERSION = "agent_contention_participation_v1"
+    VERTEX_FLOW_METRIC_VERSION = "submitted_one_step_vertex_flow_pairs_v1"
 
-    def __init__(self, moves):
+    def __init__(self, moves, obstacle_mask=None):
         self.moves = tuple(
             tuple(int(value) for value in move) for move in moves
+        )
+        self.obstacle_mask = (
+            None
+            if obstacle_mask is None
+            else np.asarray(obstacle_mask, dtype=bool).copy()
         )
         self.environment_step_count = 0
         self.active_agent_step_count = 0
@@ -2328,20 +1192,50 @@ class _MoveFailureTracker:
         self.agent_conflict_count = 0
         self.other_or_unattributed_conflict_count = 0
         self.conflict_step_count = 0
+        self.contention_participant_count = 0
+        self.contention_step_count = 0
+        self.vertex_flow_pair_count = 0
+        self.vertex_flow_move_denominator = 0
+        self.vertex_flow_contested_destination_count = 0
+        self.vertex_flow_step_count = 0
+        self.vertex_flow_max_inflow = 0
 
     @staticmethod
     def _point(observation):
         value = observation["xy"]
         return int(value[0]), int(value[1])
 
-    def capture(self, actions, observations, dones, infos):
-        positions = [self._point(observation) for observation in observations]
+    def _is_valid_flow_target(self, target):
+        if self.obstacle_mask is None:
+            return True
+        x, y = target
+        height, width = self.obstacle_mask.shape
+        return (
+            0 <= x < height
+            and 0 <= y < width
+            and not bool(self.obstacle_mask[x, y])
+        )
+
+    def capture(
+        self,
+        actions,
+        observations,
+        dones,
+        infos,
+        global_positions=None,
+    ):
+        positions = (
+            [tuple(int(value) for value in position) for position in global_positions]
+            if global_positions is not None
+            else [self._point(observation) for observation in observations]
+        )
         active = [
             not bool(dones[index])
             and bool(infos[index].get("is_active", True))
             for index in range(len(observations))
         ]
         attempts = []
+        flow_attempts = []
         waits = 0
         for index, is_active in enumerate(active):
             if not is_active:
@@ -2358,23 +1252,72 @@ class _MoveFailureTracker:
             position = positions[index]
             target = position[0] + delta[0], position[1] + delta[1]
             attempts.append((index, position, target))
+            if self._is_valid_flow_target(target):
+                flow_attempts.append((index, position, target))
         return {
             "positions": positions,
+            "active": active,
             "active_count": sum(active),
             "wait_count": waits,
             "attempts": attempts,
+            "flow_attempts": flow_attempts,
         }
 
-    def commit(self, pending, observations):
-        after_positions = [
-            self._point(observation) for observation in observations
-        ]
+    def commit(self, pending, observations, global_positions=None):
+        after_positions = (
+            [tuple(int(value) for value in position) for position in global_positions]
+            if global_positions is not None
+            else [self._point(observation) for observation in observations]
+        )
         occupied = {}
         for index, position in enumerate(pending["positions"]):
             occupied.setdefault(position, set()).add(index)
         target_counts = {}
         for _, _, target in pending["attempts"]:
             target_counts[target] = target_counts.get(target, 0) + 1
+
+        attempts_by_agent = {
+            index: (before, target)
+            for index, before, target in pending["attempts"]
+        }
+        contention_participants = set()
+
+        target_groups = {}
+        for index, _, target in pending["attempts"]:
+            target_groups.setdefault(target, []).append(index)
+        for group in target_groups.values():
+            if len(group) > 1:
+                contention_participants.update(group)
+
+        flow_target_counts = {}
+        for _, _, target in pending["flow_attempts"]:
+            flow_target_counts[target] = flow_target_counts.get(target, 0) + 1
+        vertex_flow_pairs = sum(
+            count * (count - 1) // 2
+            for count in flow_target_counts.values()
+        )
+        contested_flow_destinations = sum(
+            count > 1 for count in flow_target_counts.values()
+        )
+        max_inflow = max(flow_target_counts.values(), default=0)
+
+        position_to_agents = {}
+        for index, position in enumerate(pending["positions"]):
+            position_to_agents.setdefault(position, []).append(index)
+
+        for index, before, target in pending["attempts"]:
+            for other in position_to_agents.get(target, ()):
+                if other == index:
+                    continue
+                other_attempt = attempts_by_agent.get(other)
+                if other_attempt is not None and other_attempt[1] == before:
+                    contention_participants.add(index)
+                    if pending["active"][other]:
+                        contention_participants.add(other)
+                if after_positions[other] == pending["positions"][other]:
+                    contention_participants.add(index)
+                    if pending["active"][other]:
+                        contention_participants.add(other)
 
         failed_this_step = 0
         agent_conflicts = 0
@@ -2402,6 +1345,20 @@ class _MoveFailureTracker:
         )
         if failed_this_step:
             self.conflict_step_count += 1
+        self.contention_participant_count += len(contention_participants)
+        if contention_participants:
+            self.contention_step_count += 1
+        self.vertex_flow_pair_count += vertex_flow_pairs
+        self.vertex_flow_move_denominator += len(pending["flow_attempts"])
+        self.vertex_flow_contested_destination_count += (
+            contested_flow_destinations
+        )
+        if vertex_flow_pairs:
+            self.vertex_flow_step_count += 1
+        self.vertex_flow_max_inflow = max(
+            self.vertex_flow_max_inflow,
+            max_inflow,
+        )
 
     @staticmethod
     def _rate(numerator, denominator):
@@ -2422,6 +1379,29 @@ class _MoveFailureTracker:
                 self.other_or_unattributed_conflict_count
             ),
             "conflict_step_count": self.conflict_step_count,
+            "contention_metric_version": self.CONTENTION_METRIC_VERSION,
+            "contention_participant_count": self.contention_participant_count,
+            "contention_step_count": self.contention_step_count,
+            "contention_participation_rate": self._rate(
+                self.contention_participant_count,
+                self.active_agent_step_count,
+            ),
+            "contention_step_rate": self._rate(
+                self.contention_step_count,
+                self.environment_step_count,
+            ),
+            "vertex_flow_metric_version": self.VERTEX_FLOW_METRIC_VERSION,
+            "vertex_flow_pair_count": self.vertex_flow_pair_count,
+            "vertex_flow_move_denominator": self.vertex_flow_move_denominator,
+            "vertex_flow_pair_cost_per_move": self._rate(
+                self.vertex_flow_pair_count,
+                self.vertex_flow_move_denominator,
+            ),
+            "vertex_flow_contested_destination_count": (
+                self.vertex_flow_contested_destination_count
+            ),
+            "vertex_flow_step_count": self.vertex_flow_step_count,
+            "vertex_flow_max_inflow": self.vertex_flow_max_inflow,
             "congestion_rate": self._rate(
                 self.conflict_count,
                 self.move_attempt_count,
@@ -2453,6 +1433,8 @@ def run_algorithm(
     on_target,
     collision_system,
     map_text,
+    agents_xy=None,
+    targets_xy=None,
 ):
     """Run one episode and attach environment-level congestion metrics."""
 
@@ -2472,8 +1454,27 @@ def run_algorithm(
     else:
         gc_kwargs["map_name"] = map_name
 
+    if (agents_xy is None) != (targets_xy is None):
+        raise ValueError(
+            "Explicit placements require both agents_xy and targets_xy"
+        )
+    if agents_xy is not None:
+        if len(agents_xy) != num_agents or len(targets_xy) != num_agents:
+            raise ValueError(
+                "Explicit placement count must equal num_agents"
+            )
+        gc_kwargs["agents_xy"] = [list(position) for position in agents_xy]
+        gc_kwargs["targets_xy"] = [list(position) for position in targets_xy]
+
     grid_config = POMAPFConfig(**gc_kwargs)
-    env = make_pomapf(grid_config=grid_config, with_animations=False)
+    # A single-episode evaluator must observe the true final transition.
+    # Auto-resetting inside env.step replaces final positions before the
+    # movement tracker can commit step 512 and silently drops those failures.
+    env = make_pomapf(
+        grid_config=grid_config,
+        with_animations=False,
+        auto_reset=False,
+    )
     if animate:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         map_short = map_name.split("-")[-1] if "-" in map_name else map_name
@@ -2485,9 +1486,99 @@ def run_algorithm(
             AnimationConfig(directory=str(directory)),
         )
 
-    tracker = _MoveFailureTracker(grid_config.MOVES)
+    def environment_grid():
+        current = env
+        while current is not None:
+            grid = getattr(current, "grid", None)
+            if grid is not None:
+                return grid
+            current = getattr(current, "env", None)
+        raise RuntimeError("Could not locate the environment grid")
+
+    def global_positions():
+        grid = environment_grid()
+        positions = getattr(grid, "positions_xy", None)
+        if positions is None and hasattr(grid, "get_agents_xy"):
+            positions = grid.get_agents_xy()
+        if positions is not None:
+            return np.asarray(positions, dtype=np.int64).copy()
+        raise RuntimeError(
+            "Contention participation requires global agent positions from "
+            "the environment grid."
+        )
+
+    def global_obstacles():
+        grid = environment_grid()
+        obstacles = getattr(grid, "obstacles", None)
+        if obstacles is not None:
+            return np.asarray(obstacles, dtype=bool).copy()
+        raise RuntimeError(
+            "Vertex flow evaluation requires the environment obstacle grid."
+        )
+
     try:
         observations, _ = env.reset()
+        if agents_xy is not None:
+            grid = environment_grid()
+            expected_agents = np.asarray(agents_xy, dtype=np.int64)
+            if (
+                targets_xy
+                and isinstance(targets_xy[0], (list, tuple))
+                and targets_xy[0]
+                and isinstance(targets_xy[0][0], (list, tuple))
+            ):
+                expected_targets = np.asarray(
+                    [sequence[0] for sequence in targets_xy],
+                    dtype=np.int64,
+                )
+            else:
+                expected_targets = np.asarray(targets_xy, dtype=np.int64)
+            actual_agents = np.asarray(
+                grid.get_agents_xy(ignore_borders=True),
+                dtype=np.int64,
+            )
+            actual_targets = np.asarray(
+                grid.get_targets_xy(ignore_borders=True),
+                dtype=np.int64,
+            )
+            expected_obstacles = np.asarray(
+                [
+                    [character == "#" for character in row]
+                    for row in map_text.splitlines()
+                ],
+                dtype=bool,
+            )
+            actual_obstacles = np.asarray(
+                grid.get_obstacles(ignore_borders=True),
+                dtype=bool,
+            )
+            if not np.array_equal(actual_agents, expected_agents):
+                raise RuntimeError(
+                    "Environment changed the explicit start coordinates"
+                )
+            if not np.array_equal(actual_targets, expected_targets):
+                raise RuntimeError(
+                    "Environment changed the explicit goal coordinates"
+                )
+            if not np.array_equal(actual_obstacles, expected_obstacles):
+                raise RuntimeError(
+                    "Environment changed the explicit obstacle grid"
+                )
+            padding = int(grid_config.obs_radius)
+            if not np.array_equal(
+                np.asarray(grid.positions_xy, dtype=np.int64),
+                expected_agents + padding,
+            ):
+                raise RuntimeError("Unexpected padded start coordinates")
+            if not np.array_equal(
+                np.asarray(grid.finishes_xy, dtype=np.int64),
+                expected_targets + padding,
+            ):
+                raise RuntimeError("Unexpected padded goal coordinates")
+        tracker = _MoveFailureTracker(
+            grid_config.MOVES,
+            obstacle_mask=global_obstacles(),
+        )
         algo.after_reset()
         if hasattr(algo, "set_grid_config"):
             algo.set_grid_config(env.grid_config)
@@ -2505,11 +1596,16 @@ def run_algorithm(
                     observations,
                     dones,
                     infos,
+                    global_positions=global_positions(),
                 )
                 observations, rewards, terminated, truncated, infos = env.step(
                     actions
                 )
-                tracker.commit(pending, observations)
+                tracker.commit(
+                    pending,
+                    observations,
+                    global_positions=global_positions(),
+                )
                 dones = [
                     terminated_value or truncated_value
                     for terminated_value, truncated_value in zip(
@@ -2545,44 +1641,26 @@ def run_single_experiment(task):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    # SRSLM estimators are trained against an episode-fresh CAAR
-    # observation normalizer. Reusing the actor across maps would make its
-    # online normalization state depend on task order and silently change the
-    # two policies whose returns are being compared.
-    use_cache = bool(task.get("cache_algorithms", False)) and (
-        algo_name not in ("SRSLM", "CAAR-RS")
+    # Recurrent and trace state must never cross episode boundaries.
+    use_cache = should_cache_algorithm(
+        algo_name,
+        task.get("cache_algorithms", False),
     )
 
+    algorithm_kwargs = {
+        "caar_weights_path": task.get("caar_weights_path"),
+        "switcher_weights_path": task.get("switcher_weights_path"),
+        "no_wait_detect_switcher_weights_path": task.get(
+            "no_wait_detect_switcher_weights_path"
+        ),
+        "no_reweight_weights_path": task.get("no_reweight_weights_path"),
+        "epom_weights_path": task.get("epom_weights_path"),
+    }
     cache_key = (
-
         algo_name,
-
         str(Path(main_dir).resolve()),
-
         seed,
-
-        task.get("caar_weights_path"),
-
-        task.get("caar_ra_weights_path"),
-
-        task.get("srlsm_caar_estimator_checkpoint"),
-
-        task.get("srlsm_ao_estimator_checkpoint"),
-
-        task.get("srlsm_value_margin", 0.0),
-
-        task.get("srlsm_reverse_caar_override_enabled", True),
-
-        task.get("notau_weights_path"),
-
-        task.get("dhc_weights_path"),
-
-        task.get("dcc_weights_path"),
-
-        task.get("scrimp_weights_path"),
-
-        task.get("epom_weights_path"),
-
+        *algorithm_kwargs.values(),
     )
 
 
@@ -2599,37 +1677,7 @@ def run_single_experiment(task):
                     main_dir,
 
                     seed,
-
-                    caar_weights_path=task.get("caar_weights_path"),
-
-                    caar_ra_weights_path=task.get("caar_ra_weights_path"),
-
-                    srlsm_caar_estimator_checkpoint=task.get(
-                        "srlsm_caar_estimator_checkpoint"
-                    ),
-
-                    srlsm_ao_estimator_checkpoint=task.get(
-                        "srlsm_ao_estimator_checkpoint"
-                    ),
-
-                    srlsm_value_margin=task.get(
-                        "srlsm_value_margin", 0.0
-                    ),
-
-                    srlsm_reverse_caar_override_enabled=task.get(
-                        "srlsm_reverse_caar_override_enabled", True
-                    ),
-
-                    notau_weights_path=task.get("notau_weights_path"),
-
-                    dhc_weights_path=task.get("dhc_weights_path"),
-
-                    dcc_weights_path=task.get("dcc_weights_path"),
-
-                    scrimp_weights_path=task.get("scrimp_weights_path"),
-
-                    epom_weights_path=task.get("epom_weights_path"),
-
+                    **algorithm_kwargs,
                 )
 
             algo = _worker_algo_cache[cache_key]
@@ -2643,37 +1691,7 @@ def run_single_experiment(task):
                 main_dir,
 
                 seed,
-
-                caar_weights_path=task.get("caar_weights_path"),
-
-                caar_ra_weights_path=task.get("caar_ra_weights_path"),
-
-                srlsm_caar_estimator_checkpoint=task.get(
-                    "srlsm_caar_estimator_checkpoint"
-                ),
-
-                srlsm_ao_estimator_checkpoint=task.get(
-                    "srlsm_ao_estimator_checkpoint"
-                ),
-
-                srlsm_value_margin=task.get(
-                    "srlsm_value_margin", 0.0
-                ),
-
-                srlsm_reverse_caar_override_enabled=task.get(
-                    "srlsm_reverse_caar_override_enabled", True
-                ),
-
-                notau_weights_path=task.get("notau_weights_path"),
-
-                dhc_weights_path=task.get("dhc_weights_path"),
-
-                dcc_weights_path=task.get("dcc_weights_path"),
-
-                scrimp_weights_path=task.get("scrimp_weights_path"),
-
-                epom_weights_path=task.get("epom_weights_path"),
-
+                **algorithm_kwargs,
             )
 
 
@@ -2701,6 +1719,10 @@ def run_single_experiment(task):
 
             map_text=task.get("map_text"),
 
+            agents_xy=task.get("agents_xy"),
+
+            targets_xy=task.get("targets_xy"),
+
         )
 
         run_time = time.time() - start
@@ -2709,7 +1731,7 @@ def run_single_experiment(task):
 
         on_target = task.get("on_target", "restart")
         is_restart = on_target == "restart"
-        is_replan = algo_name in ("Replan", "AO-RePlan")
+        is_replan = algo_name in ("RePlan", "AORePlan")
 
         if hasattr(algo, "get_hybrid_stats"):
             hybrid_stats = algo.get_hybrid_stats()
@@ -2717,20 +1739,22 @@ def run_single_experiment(task):
             hybrid_stats = algo.get_switch_stats()
         else:
             hybrid_stats = {}
-        if algo_name == "CAAR-Yield":
-            validate_caar_yield_stats(hybrid_stats)
-        elif algo_name == "CAAR-PB":
-            validate_caar_pb_stats(hybrid_stats)
-        elif algo_name == "CAAR-RA":
-            validate_caar_ra_stats(hybrid_stats)
-        elif algo_name == "CAAR-RS":
-            validate_caar_rs_stats(hybrid_stats)
-        elif algo_name == "SRSLM":
-            validate_srlsm_stats(hybrid_stats)
+        if algo_name == "SRSLM":
+            validate_srslm_stats(hybrid_stats)
+        elif algo_name in (
+            "SRSLM-NoWaitDetect",
+            "SRSLM-WaitDetectOnly",
+        ):
+            validate_srslm_ablation_stats(algo_name, hybrid_stats)
         correction_stats = (
             algo.get_action_correction_stats()
             if hasattr(algo, "get_action_correction_stats")
             else {}
+        )
+        model_provenance = (
+            algo.get_model_provenance()
+            if hasattr(algo, "get_model_provenance")
+            else None
         )
         result_record = {
             "algorithm": algo_name,
@@ -2741,6 +1765,18 @@ def run_single_experiment(task):
             "on_target": on_target,
             "run_time_seconds": run_time,
         }
+        if task.get("task_id") is not None:
+            result_record.update(
+                {
+                    "task_id": task["task_id"],
+                    "family_id": task["family_id"],
+                    "density_percent": task["density_percent"],
+                    "placement_sha256": task["placement_sha256"],
+                    "target_sequences_sha256": task.get(
+                        "target_sequences_sha256"
+                    ),
+                }
+            )
         result_record.update(
             {
                 key: value
@@ -2750,11 +1786,50 @@ def run_single_experiment(task):
         )
         result_record.update(correction_stats)
 
+        if model_provenance is not None:
+            result_record["model_provenance"] = model_provenance
+
         result_record.update(hybrid_stats)
 
         if is_restart:
             if is_replan:
                 result_record["reverse_action_rate"] = getattr(algo, "reverse_action_rate", None)
+                result_record["reverse_action_count"] = getattr(
+                    algo,
+                    "reverse_action_count",
+                    None,
+                )
+                result_record["reverse_action_denominator"] = getattr(
+                    algo,
+                    "reverse_action_denominator",
+                    None,
+                )
+                result_record["reverse_metric_version"] = getattr(
+                    algo,
+                    "reverse_metric_version",
+                    None,
+                )
+                if algo_name == "AORePlan":
+                    result_record["static_astar_query_count"] = getattr(
+                        algo,
+                        "static_astar_query_count",
+                        None,
+                    )
+                    result_record["static_astar_query_denominator"] = getattr(
+                        algo,
+                        "static_astar_query_denominator",
+                        None,
+                    )
+                    result_record["static_astar_query_rate"] = getattr(
+                        algo,
+                        "static_astar_query_rate",
+                        None,
+                    )
+                    result_record["no_path_fallback_count"] = getattr(
+                        algo,
+                        "no_path_fallback_count",
+                        None,
+                    )
 
 
         return result_record
@@ -2764,7 +1839,7 @@ def run_single_experiment(task):
         import traceback
 
 
-        return {
+        error_record = {
 
             "algorithm": algo_name,
 
@@ -2787,6 +1862,19 @@ def run_single_experiment(task):
             "traceback": traceback.format_exc(),
 
         }
+        if task.get("task_id") is not None:
+            error_record.update(
+                {
+                    "task_id": task["task_id"],
+                    "family_id": task["family_id"],
+                    "density_percent": task["density_percent"],
+                    "placement_sha256": task["placement_sha256"],
+                    "target_sequences_sha256": task.get(
+                        "target_sequences_sha256"
+                    ),
+                }
+            )
+        return error_record
 
 
 
@@ -3143,6 +2231,407 @@ def load_map_list_snapshot(path, registry_path=None):
     )
 
 
+def _canonical_json_sha256(value):
+
+    return hashlib.sha256(
+
+        json.dumps(
+
+            value,
+
+            sort_keys=True,
+
+            separators=(",", ":"),
+
+        ).encode("utf-8")
+
+    ).hexdigest()
+
+
+def load_explicit_task_manifest_snapshot(
+    path,
+    maps,
+    map_texts,
+    expected_map_list_sha256=None,
+):
+
+    """Load exact per-map starts/goals without changing legacy task grids."""
+
+    path = Path(path).resolve()
+
+    payload_bytes = path.read_bytes()
+
+    try:
+
+        payload = json.loads(payload_bytes.decode("utf-8"))
+
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+
+        raise ValueError(f"Could not parse task manifest {path}: {error}") from error
+
+    if payload.get("artifact_kind") != "paired_density_task_manifest":
+
+        raise ValueError(
+
+            "--task-manifest must be a paired_density_task_manifest"
+
+        )
+
+    protocol_id = payload.get("protocol_id")
+
+    if not isinstance(protocol_id, str) or not protocol_id:
+
+        raise ValueError("--task-manifest is missing protocol_id")
+
+    if (
+
+        expected_map_list_sha256 is not None
+
+        and payload.get("map_list_sha256") != expected_map_list_sha256
+
+    ):
+
+        raise ValueError(
+
+            "--task-manifest map_list_sha256 does not match --map-list"
+
+        )
+
+    family_rows = payload.get("families")
+
+    task_rows = payload.get("tasks")
+
+    if not isinstance(family_rows, list) or not family_rows:
+
+        raise ValueError("--task-manifest families must be a non-empty list")
+
+    if not isinstance(task_rows, list) or not task_rows:
+
+        raise ValueError("--task-manifest tasks must be a non-empty list")
+
+
+    def normalize_positions(value, label):
+
+        if not isinstance(value, list) or not value:
+
+            raise ValueError(f"{label} must be a non-empty list")
+
+        normalized = []
+
+        for position in value:
+
+            if (
+
+                not isinstance(position, list)
+
+                or len(position) != 2
+
+                or any(
+
+                    not isinstance(coordinate, int)
+
+                    or isinstance(coordinate, bool)
+
+                    for coordinate in position
+
+                )
+
+            ):
+
+                raise ValueError(f"{label} contains an invalid coordinate")
+
+            normalized.append([int(position[0]), int(position[1])])
+
+        return normalized
+
+    def normalize_target_sequences(value, label, initial_targets):
+        if value is None:
+            return None, None
+        if not isinstance(value, list) or len(value) != len(initial_targets):
+            raise ValueError(
+                f"{label} must contain one sequence per initial target"
+            )
+        sequences = []
+        for agent_index, sequence in enumerate(value):
+            if not isinstance(sequence, list) or len(sequence) < 2:
+                raise ValueError(
+                    f"{label}[{agent_index}] must contain at least two goals"
+                )
+            normalized = normalize_positions(
+                sequence,
+                f"{label}[{agent_index}]",
+            )
+            if normalized[0] != initial_targets[agent_index]:
+                raise ValueError(
+                    f"{label}[{agent_index}] does not start at the initial goal"
+                )
+            sequences.append(normalized)
+        return sequences, _canonical_json_sha256(sequences)
+
+
+    families = {}
+
+    for family in family_rows:
+
+        if not isinstance(family, dict):
+
+            raise ValueError("Every task-manifest family must be a mapping")
+
+        family_id = family.get("family_id")
+
+        if not isinstance(family_id, str) or not family_id:
+
+            raise ValueError("Every family must have a non-empty family_id")
+
+        if family_id in families:
+
+            raise ValueError(f"Duplicate family_id in task manifest: {family_id}")
+
+        agents_xy = normalize_positions(
+
+            family.get("agents_xy"),
+
+            f"{family_id}.agents_xy",
+
+        )
+
+        targets_xy = normalize_positions(
+
+            family.get("targets_xy"),
+
+            f"{family_id}.targets_xy",
+
+        )
+
+        target_sequences_xy, target_sequences_sha256 = (
+            normalize_target_sequences(
+                family.get("target_sequences_xy"),
+                f"{family_id}.target_sequences_xy",
+                targets_xy,
+            )
+        )
+        if target_sequences_xy is not None and family.get(
+            "target_sequences_sha256"
+        ) != target_sequences_sha256:
+            raise ValueError(f"{family_id}: target-sequence hash mismatch")
+
+        if len(agents_xy) != len(targets_xy):
+
+            raise ValueError(f"{family_id}: start/goal counts differ")
+
+        starts = {tuple(position) for position in agents_xy}
+
+        targets = {tuple(position) for position in targets_xy}
+
+        if len(starts) != len(agents_xy) or len(targets) != len(targets_xy):
+
+            raise ValueError(f"{family_id}: starts and goals must each be unique")
+
+        if starts & targets:
+
+            raise ValueError(f"{family_id}: starts and goals must be disjoint")
+
+        placement_sha256 = _canonical_json_sha256(
+
+            {"agents_xy": agents_xy, "targets_xy": targets_xy}
+
+        )
+
+        if family.get("placement_sha256") != placement_sha256:
+
+            raise ValueError(f"{family_id}: placement hash mismatch")
+
+        families[family_id] = {
+
+            "agents_xy": agents_xy,
+
+            "targets_xy": targets_xy,
+
+            "target_sequences_xy": target_sequences_xy,
+
+            "target_sequences_sha256": target_sequences_sha256,
+
+            "placement_sha256": placement_sha256,
+
+            "episode_seed": int(family["episode_seed"]),
+
+        }
+
+
+    task_specs = []
+
+    seen_task_ids = set()
+
+    seen_maps = set()
+
+    for row in task_rows:
+
+        if not isinstance(row, dict):
+
+            raise ValueError("Every task-manifest task must be a mapping")
+
+        task_id = row.get("task_id")
+
+        family_id = row.get("family_id")
+
+        map_name = row.get("map_name")
+
+        if not isinstance(task_id, str) or not task_id:
+
+            raise ValueError("Every explicit task must have a task_id")
+
+        if task_id in seen_task_ids:
+
+            raise ValueError(f"Duplicate task_id: {task_id}")
+
+        if family_id not in families:
+
+            raise ValueError(f"{task_id}: unknown family {family_id!r}")
+
+        if map_name not in maps or map_name not in map_texts:
+
+            raise ValueError(f"{task_id}: unknown map {map_name!r}")
+
+        if map_name in seen_maps:
+
+            raise ValueError(f"Explicit map appears in multiple tasks: {map_name}")
+
+        family = families[family_id]
+
+        num_agents = int(row["num_agents"])
+
+        episode_seed = int(row["episode_seed"])
+
+        density_percent = int(row["density_percent"])
+
+        if num_agents != len(family["agents_xy"]):
+
+            raise ValueError(f"{task_id}: num_agents does not match placements")
+
+        if episode_seed != family["episode_seed"]:
+
+            raise ValueError(f"{task_id}: episode seed differs from its family")
+
+        if row.get("placement_sha256") != family["placement_sha256"]:
+
+            raise ValueError(f"{task_id}: placement hash differs from its family")
+
+        if family["target_sequences_xy"] is not None and row.get(
+            "target_sequences_sha256"
+        ) != family["target_sequences_sha256"]:
+
+            raise ValueError(
+                f"{task_id}: target-sequence hash differs from its family"
+            )
+
+        grid_rows = map_texts[map_name].splitlines()
+
+        height = len(grid_rows)
+
+        width = len(grid_rows[0])
+
+        checked_positions = family["agents_xy"] + family["targets_xy"]
+        if family["target_sequences_xy"] is not None:
+            checked_positions += [
+                coordinate
+                for sequence in family["target_sequences_xy"]
+                for coordinate in sequence
+            ]
+        for coordinate in checked_positions:
+
+            first, second = coordinate
+
+            if (
+
+                first < 0
+
+                or first >= height
+
+                or second < 0
+
+                or second >= width
+
+                or grid_rows[first][second] != "."
+
+            ):
+
+                raise ValueError(
+
+                    f"{task_id}: placement {coordinate} is not a free map cell"
+
+                )
+
+        task_specs.append(
+
+            {
+
+                "task_id": task_id,
+
+                "family_id": family_id,
+
+                "density_percent": density_percent,
+
+                "map_name": map_name,
+
+                "num_agents": num_agents,
+
+                "seed": episode_seed,
+
+                "agents_xy": family["agents_xy"],
+
+                "targets_xy": (
+                    family["target_sequences_xy"]
+                    if family["target_sequences_xy"] is not None
+                    else family["targets_xy"]
+                ),
+
+                "initial_targets_xy": family["targets_xy"],
+
+                "target_sequences_sha256": family[
+                    "target_sequences_sha256"
+                ],
+
+                "placement_sha256": family["placement_sha256"],
+
+            }
+
+        )
+
+        seen_task_ids.add(task_id)
+
+        seen_maps.add(map_name)
+
+    if seen_maps != set(maps):
+
+        missing = sorted(set(maps) - seen_maps)
+
+        extra = sorted(seen_maps - set(maps))
+
+        raise ValueError(
+
+            "Task manifest and map list differ: "
+
+            f"missing={missing[:3]}, extra={extra[:3]}"
+
+        )
+
+    if payload.get("task_count") != len(task_specs):
+
+        raise ValueError("task_count does not match the explicit task list")
+
+    return (
+
+        task_specs,
+
+        hashlib.sha256(payload_bytes).hexdigest(),
+
+        protocol_id,
+
+        path,
+
+    )
+
+
 
 def build_tasks(
     algorithms,
@@ -3152,6 +2641,7 @@ def build_tasks(
     args,
     custom_map=None,
     map_texts=None,
+    explicit_task_specs=None,
 ):
 
     map_items = (
@@ -3172,7 +2662,9 @@ def build_tasks(
 
     )
 
-    return [
+    if explicit_task_specs is None:
+
+        return [
 
         {
 
@@ -3204,34 +2696,19 @@ def build_tasks(
 
             "caar_weights_path": args.caar_weights_path,
 
-            "caar_ra_weights_path": args.caar_ra_weights_path,
+            "switcher_weights_path": args.switcher_weights_path,
 
-            "srlsm_caar_estimator_checkpoint": (
-                args.srlsm_caar_estimator_checkpoint
+            "no_wait_detect_switcher_weights_path": (
+                args.no_wait_detect_switcher_weights_path
             ),
 
-            "srlsm_ao_estimator_checkpoint": (
-                args.srlsm_ao_estimator_checkpoint
-            ),
-
-            "srlsm_value_margin": args.srlsm_value_margin,
-
-            "srlsm_reverse_caar_override_enabled": (
-                args.srlsm_reverse_caar_override_enabled
-            ),
-
-            "notau_weights_path": args.notau_weights_path,
-
-            "dhc_weights_path": args.dhc_weights_path,
-
-            "dcc_weights_path": args.dcc_weights_path,
-
-            "scrimp_weights_path": args.scrimp_weights_path,
+            "no_reweight_weights_path": args.no_reweight_weights_path,
 
             "epom_weights_path": args.epom_weights_path,
 
-            "cache_algorithms": (
-                args.cache_algorithms and algorithm != "SRSLM"
+            "cache_algorithms": should_cache_algorithm(
+                algorithm,
+                args.cache_algorithms,
             ),
 
         }
@@ -3245,6 +2722,95 @@ def build_tasks(
         for seed in seeds
 
     ]
+
+    if custom_map is not None or map_texts is None:
+
+        raise ValueError(
+
+            "Explicit task manifests require a YAML --map-list snapshot"
+
+        )
+
+    tasks = []
+
+    for algorithm in algorithms:
+
+        for spec in explicit_task_specs:
+
+            map_name = spec["map_name"]
+
+            tasks.append(
+
+                {
+
+                    "algorithm": algorithm,
+
+                    "map_type": "paired_density",
+
+                    "map_name": map_name,
+
+                    "map_text": map_texts[map_name],
+
+                    "map_source": None,
+
+                    "num_agents": spec["num_agents"],
+
+                    "obs_radius": args.obs_radius,
+
+                    "max_steps": args.max_steps,
+
+                    "seed": spec["seed"],
+
+                    "animate": args.animate,
+
+                    "main_dir": args.main_dir,
+
+                    "on_target": args.on_target,
+
+                    "collision_system": args.collision_system,
+
+                    "caar_weights_path": args.caar_weights_path,
+
+                    "switcher_weights_path": args.switcher_weights_path,
+
+                    "no_wait_detect_switcher_weights_path": (
+                        args.no_wait_detect_switcher_weights_path
+                    ),
+
+                    "no_reweight_weights_path": (
+                        args.no_reweight_weights_path
+                    ),
+
+                    "epom_weights_path": args.epom_weights_path,
+
+                    "cache_algorithms": should_cache_algorithm(
+                        algorithm,
+                        args.cache_algorithms,
+                    ),
+
+                    "task_id": spec["task_id"],
+
+                    "family_id": spec["family_id"],
+
+                    "density_percent": spec["density_percent"],
+
+                    "agents_xy": spec["agents_xy"],
+
+                    "targets_xy": spec["targets_xy"],
+
+                    "initial_targets_xy": spec.get("initial_targets_xy"),
+
+                    "target_sequences_sha256": spec.get(
+                        "target_sequences_sha256"
+                    ),
+
+                    "placement_sha256": spec["placement_sha256"],
+
+                }
+
+            )
+
+    return tasks
 
 
 
@@ -3266,7 +2832,211 @@ def format_duration(seconds):
 
 
 
-def run_experiments(tasks, workers):
+def _journal_task_key(value):
+
+    """Return the stable identity of one experiment task/result row."""
+
+    try:
+
+        return (
+
+            str(value["algorithm"]),
+
+            str(value["map_name"]),
+
+            int(value["num_agents"]),
+
+            int(value["seed"]),
+
+            str(value.get("task_id") or ""),
+
+        )
+
+    except (KeyError, TypeError, ValueError) as error:
+
+        raise ValueError("Experiment journal entry has an invalid task key") from error
+
+
+def _append_journal_record(path, record):
+
+    encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(
+
+        "utf-8"
+
+    )
+
+    with Path(path).open("ab", buffering=0) as stream:
+
+        stream.write(encoded)
+
+        os.fsync(stream.fileno())
+
+
+def _initialize_result_journal(path, contract, total):
+
+    path = Path(path)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    record = {
+
+        "record_type": "header",
+
+        "schema": "experiment_result_journal_v1",
+
+        "contract_sha256": contract,
+
+        "expected_tasks": int(total),
+
+    }
+
+    encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(
+
+        "utf-8"
+
+    )
+
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+
+    try:
+
+        os.write(descriptor, encoded)
+
+        os.fsync(descriptor)
+
+    finally:
+
+        os.close(descriptor)
+
+
+def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
+
+    path = Path(path)
+
+    raw = path.read_bytes()
+
+    if raw and not raw.endswith(b"\n"):
+
+        last_newline = raw.rfind(b"\n")
+
+        if not repair_final_record or last_newline < 0:
+
+            raise ValueError("Result journal has a truncated final record")
+
+        raw = raw[: last_newline + 1]
+
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.repair")
+
+        with temporary.open("wb") as stream:
+
+            stream.write(raw)
+
+            stream.flush()
+
+            os.fsync(stream.fileno())
+
+        os.replace(temporary, path)
+
+    lines = raw.splitlines()
+
+    if not lines:
+
+        raise ValueError("Result journal is empty")
+
+    try:
+
+        header = json.loads(lines[0])
+
+    except json.JSONDecodeError as error:
+
+        raise ValueError("Result journal header is malformed") from error
+
+    if header != {
+
+        "record_type": "header",
+
+        "schema": "experiment_result_journal_v1",
+
+        "contract_sha256": contract,
+
+        "expected_tasks": len(tasks),
+
+    }:
+
+        raise ValueError("Result journal contract/header differs from this run")
+
+    expected_keys = {_journal_task_key(task) for task in tasks}
+
+    if len(expected_keys) != len(tasks):
+
+        raise ValueError("Experiment tasks are not uniquely journalable")
+
+    successful = {}
+
+    ordered = []
+
+    for line_number, line in enumerate(lines[1:], 2):
+
+        try:
+
+            record = json.loads(line)
+
+        except json.JSONDecodeError as error:
+
+            raise ValueError(
+
+                f"Result journal record {line_number} is malformed"
+
+            ) from error
+
+        if record.get("record_type") != "result":
+
+            raise ValueError(f"Unexpected result journal record {line_number}")
+
+        result = record.get("result")
+
+        if not isinstance(result, dict):
+
+            raise ValueError(f"Result journal record {line_number} has no result")
+
+        key = _journal_task_key(result)
+
+        if record.get("task_key") != list(key) or key not in expected_keys:
+
+            raise ValueError(f"Result journal record {line_number} has a foreign task")
+
+        if result.get("error"):
+
+            # Failed attempts remain as audit events but are safe to retry.
+
+            continue
+
+        if key in successful:
+
+            raise ValueError(f"Result journal repeats successful task {key}")
+
+        successful[key] = result
+
+        ordered.append(result)
+
+    return ordered
+
+
+def run_experiments(
+
+    tasks,
+
+    workers,
+
+    *,
+
+    result_journal=None,
+
+    journal_contract=None,
+
+    resume_result_journal=False,
+
+):
 
     results = []
 
@@ -3274,23 +3044,101 @@ def run_experiments(tasks, workers):
 
     start_time = time.time()
 
+    elapsed_offset = 0.0
+
+    journal_path = Path(result_journal) if result_journal is not None else None
+
+    if journal_path is not None:
+
+        if not isinstance(journal_contract, str) or len(journal_contract) != 64 or any(
+
+            char not in "0123456789abcdef" for char in journal_contract
+
+        ):
+
+            raise ValueError("A lowercase SHA256 --result-journal-contract is required")
+
+        if journal_path.exists():
+
+            if not resume_result_journal:
+
+                raise FileExistsError(
+
+                    f"Result journal already exists without resume permission: {journal_path}"
+
+                )
+
+            results = _load_result_journal(
+
+                journal_path,
+
+                journal_contract,
+
+                tasks,
+
+                repair_final_record=True,
+
+            )
+
+            elapsed_offset = max(
+
+                (float(row.get("elapsed_since_start_seconds", 0.0)) for row in results),
+
+                default=0.0,
+
+            )
+
+        else:
+
+            _initialize_result_journal(journal_path, journal_contract, total)
+
+        completed_keys = {_journal_task_key(row) for row in results}
+
+        tasks_to_run = [
+
+            task for task in tasks if _journal_task_key(task) not in completed_keys
+
+        ]
+
+    else:
+
+        if resume_result_journal:
+
+            raise ValueError("--resume-result-journal requires --result-journal")
+
+        tasks_to_run = list(tasks)
+
 
     print(f"Starting experiments: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    print(f"Total: {total} | Workers: {workers}")
+    print(
+
+        f"Total: {total} | Workers: {workers} | "
+
+        f"Recovered: {len(results)} | Remaining: {len(tasks_to_run)}"
+
+    )
 
     print("-" * 110, flush=True)
 
 
+    if not tasks_to_run:
+
+        return results, elapsed_offset
+
     with ProcessPoolExecutor(max_workers=workers) as executor:
 
-        futures = [executor.submit(run_single_experiment, task) for task in tasks]
+        futures = [executor.submit(run_single_experiment, task) for task in tasks_to_run]
 
-        for index, future in enumerate(as_completed(futures), start=1):
+        for index, future in enumerate(
+
+            as_completed(futures), start=len(results) + 1
+
+        ):
 
             result = future.result()
 
-            elapsed = time.time() - start_time
+            elapsed = elapsed_offset + time.time() - start_time
 
             eta = elapsed / index * (total - index) if index else 0.0
 
@@ -3306,6 +3154,24 @@ def run_experiments(tasks, workers):
 
             results.append(result)
 
+            if journal_path is not None:
+
+                _append_journal_record(
+
+                    journal_path,
+
+                    {
+
+                        "record_type": "result",
+
+                        "task_key": list(_journal_task_key(result)),
+
+                        "result": result,
+
+                    },
+
+                )
+
 
             if result.get("error"):
 
@@ -3318,10 +3184,7 @@ def run_experiments(tasks, workers):
                 gate_str = ""
 
                 if result.get("learning_ratio") is not None:
-
-                    switch_label = "epom" if result["algorithm"] == "AS" else "caar"
-
-                    gate_str += f" {switch_label}={result['learning_ratio']:.1%}"
+                    gate_str += f" caar={result['learning_ratio']:.1%}"
 
                 if result.get("planner_ratio") is not None:
 
@@ -3394,7 +3257,7 @@ def run_experiments(tasks, workers):
             )
 
 
-    return results, time.time() - start_time
+    return results, elapsed_offset + time.time() - start_time
 
 
 
@@ -3439,256 +3302,229 @@ def save_results(results, metadata, output_dir, filename=None):
 
 
 def parse_args():
-
-    parser = argparse.ArgumentParser(description="Unified Lifelong MAPF experiment runner")
-
+    parser = argparse.ArgumentParser(
+        description="Unified Lifelong MAPF experiment runner"
+    )
     parser.add_argument(
-
         "--algorithms",
-
         type=parse_algorithms,
-
         default=list(DEFAULT_ALGORITHMS),
-
         help=(
             "Comma-separated algorithms, or 'all'. "
             f"Choices: {', '.join(SUPPORTED_ALGORITHMS)}"
         ),
-
     )
-
-    parser.add_argument("--agents", type=str, default=None, help="Comma-separated agent counts, e.g. 50,100,200")
-
-    parser.add_argument("--agent-start", type=int, default=50, help="First agent count when --agents is not set")
-
-    parser.add_argument("--agent-stop", type=int, default=500, help="Last inclusive agent count when --agents is not set")
-
-    parser.add_argument("--agent-step", type=int, default=50, help="Agent count step when --agents is not set")
-
-    parser.add_argument("--workers", "--works", dest="workers", type=int, default=8, help="Parallel workers")
-
     parser.add_argument(
-
-        "--obs-radius",
-
+        "--agents",
+        type=str,
+        default=None,
+        help="Comma-separated agent counts, e.g. 50,100,200",
+    )
+    parser.add_argument(
+        "--agent-start",
         type=int,
-
-        default=None,
-
-        help="Override the local observation radius (default: environment configuration)",
-
+        default=50,
+        help="First agent count when --agents is not set",
     )
-
     parser.add_argument(
-
+        "--agent-stop",
+        type=int,
+        default=500,
+        help="Last inclusive agent count when --agents is not set",
+    )
+    parser.add_argument(
+        "--agent-step",
+        type=int,
+        default=50,
+        help="Agent count step when --agents is not set",
+    )
+    parser.add_argument(
+        "--workers",
+        "--works",
+        dest="workers",
+        type=int,
+        default=8,
+        help="Parallel workers",
+    )
+    parser.add_argument(
+        "--obs-radius",
+        type=int,
+        default=None,
+        help="Override the local observation radius",
+    )
+    parser.add_argument(
         "--cache-algorithms",
-
         action="store_true",
-
-        help="Reuse algorithm objects inside each worker. Faster, but less isolated between experiment tasks.",
-
+        help="Reuse algorithm objects only for methods with verified reset state",
     )
-
-    parser.add_argument("--animate", action="store_true", help="Generate SVG animations")
-
-    parser.add_argument("--max-steps", type=int, default=512, help="Episode length")
-
+    parser.add_argument(
+        "--animate",
+        action="store_true",
+        help="Generate SVG animations",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=512,
+        help="Episode length",
+    )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
-
-    parser.add_argument("--seeds", type=str, default=None, help="Comma-separated seeds, e.g. 0,1,2")
-
-    parser.add_argument("--main-dir", type=str, default="./", help="Project root directory")
-
-    parser.add_argument("--map-types", type=str, default="all", help="Comma-separated map types, or 'all'")
-
     parser.add_argument(
-
+        "--seeds",
+        type=str,
+        default=None,
+        help="Comma-separated seeds, e.g. 0,1,2",
+    )
+    parser.add_argument(
+        "--main-dir",
+        type=str,
+        default="./",
+        help="Project root directory",
+    )
+    parser.add_argument(
+        "--map-types",
+        type=str,
+        default="all",
+        help="Comma-separated map types, or 'all'",
+    )
+    parser.add_argument(
         "--map",
-
         action="append",
-
         default=[],
-
-        help="Override one representative map with map_type=map_name. Can be repeated.",
-
+        help="Override one representative map with map_type=map_name",
     )
-
-    parser.add_argument("--map-url", type=str, default=None, help="Custom map URL. Supports MovingAI .map files.")
-
-    parser.add_argument("--map-file", type=str, default=None, help="Custom local map file path.")
-
-    parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/eval.yaml)")
-
-    parser.add_argument("--trim-border", dest="trim_border", action="store_true", help="Trim one-cell border from custom map")
-
-    parser.add_argument("--no-trim-border", dest="trim_border", action="store_false", help="Do not trim border from custom map")
-
-    parser.set_defaults(trim_border=None)
-
     parser.add_argument(
-
-        "--on-target",
-
-        choices=("restart", "finish", "nothing"),
-
-        default=None,
-
-        help="Override Pogema on_target mode",
-
-    )
-
-    parser.add_argument(
-
-        "--collision-system",
-
-        choices=("soft", "block_both"),
-
-        default=None,
-
-        help="Override collision system",
-
-    )
-
-    parser.add_argument("--dhc-weights-path", type=str, default=None, help="Override DHC model .pth path")
-
-    parser.add_argument("--dcc-weights-path", type=str, default=None, help="Override DCC model .pth path")
-
-    parser.add_argument("--scrimp-weights-path", type=str, default=None, help="Override SCRIMP checkpoint .pkl path")
-
-    parser.add_argument(
-
-        "--epom-weights-path",
-
+        "--map-url",
         type=str,
-
         default=None,
-
-        help="Override EPOM weights directory",
-
+        help="Custom map URL; MovingAI .map files are supported",
     )
-
     parser.add_argument(
-
-        "--caar-weights-path",
-
-        dest="caar_weights_path",
-
+        "--map-file",
         type=str,
-
         default=None,
-
-        help="Override CAAR weights directory",
-
+        help="Custom local map file path",
     )
-
     parser.add_argument(
-
-        "--caar-ra-weights-path",
-
-        dest="caar_ra_weights_path",
-
+        "--map-list",
         type=str,
-
         default=None,
-
-        help="Override CAAR-RA binary gate weights directory",
-
+        help="YAML file whose top-level keys are map names",
     )
-
     parser.add_argument(
-
-        "--srlsm-caar-estimator-checkpoint",
-
-        "--srlsm-caar-checkpoint",
-
-        dest="srlsm_caar_estimator_checkpoint",
-
+        "--task-manifest",
         type=str,
-
         default=None,
-
-        help="Override the CAAR absolute-return estimator checkpoint",
-
+        help=(
+            "JSON manifest defining one explicit seed/start/goal assignment "
+            "per selected map; requires --map-list"
+        ),
     )
-
     parser.add_argument(
-
-        "--srlsm-ao-estimator-checkpoint",
-
-        "--srlsm-ao-checkpoint",
-
-        dest="srlsm_ao_estimator_checkpoint",
-
-        type=str,
-
-        default=None,
-
-        help="Override the AO-safe absolute-return estimator checkpoint",
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-value-margin",
-
-        dest="srlsm_value_margin",
-
-        type=float,
-
-        default=0.0,
-
-        help="Require V_AO > V_CAAR + margin before selecting AO",
-
-    )
-
-    parser.add_argument(
-
-        "--srlsm-reverse-caar-override",
-
-        dest="srlsm_reverse_caar_override_enabled",
-
+        "--trim-border",
+        dest="trim_border",
         action="store_true",
-
-        default=True,
-
-        help="Replace predictor-selected reverse AO proposals with CAAR",
-
+        help="Trim one-cell border from a custom map",
     )
-
     parser.add_argument(
-
-        "--no-srlsm-reverse-caar-override",
-
-        dest="srlsm_reverse_caar_override_enabled",
-
+        "--no-trim-border",
+        dest="trim_border",
         action="store_false",
-
-        help="Let the return predictors execute reverse AO proposals",
-
+        help="Do not trim a custom map border",
     )
-
+    parser.set_defaults(trim_border=None)
     parser.add_argument(
-
-        "--notau-weights-path",
-
-        dest="notau_weights_path",
-
-        type=str,
-
+        "--on-target",
+        choices=("restart", "finish", "nothing"),
         default=None,
-
-        help="Override NoTau weights directory",
-
+        help="Override the POGEMA on-target mode",
     )
-
-    parser.add_argument("--output-dir", type=str, default="exp_result", help="Directory for JSON results")
-
-    parser.add_argument("--output", type=str, default=None, help="Output filename (default: experiments_TIMESTAMP.json)")
-
-    parser.add_argument("--save", dest="save", action="store_true", default=True, help="Save JSON results")
-
-    parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
-
+    parser.add_argument(
+        "--collision-system",
+        choices=("soft", "block_both", "priority"),
+        default="block_both",
+        help="Override the collision system",
+    )
+    parser.add_argument(
+        "--epom-weights-path",
+        type=str,
+        default=None,
+        help="EPOM-L weights directory",
+    )
+    parser.add_argument(
+        "--caar-weights-path",
+        dest="caar_weights_path",
+        type=str,
+        default=None,
+        help="CAAR weights directory",
+    )
+    parser.add_argument(
+        "--caar-candidate-manifest",
+        type=str,
+        default=None,
+        help="JSON declaration pinning the CAAR and frozen EPOM-L artifacts",
+    )
+    parser.add_argument(
+        "--switcher-weights-path",
+        type=str,
+        default=None,
+        help="Wait-aware Switcher weights directory",
+    )
+    parser.add_argument(
+        "--no-wait-detect-switcher-weights-path",
+        type=str,
+        default=None,
+        help="All-state Switcher weights for SRSLM-NoWaitDetect",
+    )
+    parser.add_argument(
+        "--no-reweight-weights-path",
+        dest="no_reweight_weights_path",
+        type=str,
+        default=None,
+        help="NoReweight base-policy weights directory",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="exp_result",
+        help="Directory for JSON results",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output filename",
+    )
+    parser.add_argument(
+        "--result-journal",
+        type=str,
+        default=None,
+        help="Append each completed tuple to an fsync-backed JSONL journal",
+    )
+    parser.add_argument(
+        "--result-journal-contract",
+        type=str,
+        default=None,
+        help="Lowercase SHA256 binding a journal to one frozen protocol",
+    )
+    parser.add_argument(
+        "--resume-result-journal",
+        action="store_true",
+        help="Reuse successful tuples from a matching result journal",
+    )
+    parser.add_argument(
+        "--save",
+        dest="save",
+        action="store_true",
+        default=True,
+        help="Save JSON results",
+    )
+    parser.add_argument(
+        "--no-save",
+        dest="save",
+        action="store_false",
+        help="Do not save JSON results",
+    )
     return parser.parse_args()
 
 
@@ -3713,10 +3549,6 @@ def main():
 
         raise ValueError("--obs-radius must be at least 1")
 
-    if not np.isfinite(args.srlsm_value_margin):
-
-        raise ValueError("--srlsm-value-margin must be finite")
-
     map_sources = sum(
 
         bool(value)
@@ -3729,6 +3561,18 @@ def main():
 
         raise ValueError("--map-url, --map-file, and --map-list are mutually exclusive")
 
+    if args.task_manifest and not args.map_list:
+
+        raise ValueError("--task-manifest requires --map-list")
+
+    if args.task_manifest and (args.agents is not None or args.seeds is not None):
+
+        raise ValueError(
+
+            "--task-manifest cannot be combined with --agents or --seeds"
+
+        )
+
 
     if args.on_target is None:
 
@@ -3736,7 +3580,7 @@ def main():
 
     if args.collision_system is None:
 
-        args.collision_system = "soft"
+        args.collision_system = "block_both"
 
     if args.trim_border is None:
 
@@ -3744,39 +3588,9 @@ def main():
 
 
     algorithms = args.algorithms
-    waypoint_contract = hybrid_contract_metadata(algorithms)
-    active_yield_contract = yield_contract_metadata(algorithms)
-    probe_block_contract = pb_contract_metadata(algorithms)
-    relative_advantage_contract = ra_contract_metadata(algorithms)
-    rule_only_contract = rs_contract_metadata(algorithms)
-    absolute_return_contract = srlsm_contract_metadata(
-        algorithms,
-        value_margin=args.srlsm_value_margin,
-        reverse_caar_override_enabled=(
-            args.srlsm_reverse_caar_override_enabled
-        ),
-    )
-    active_contracts = [
-        contract
-        for contract in (
-            waypoint_contract,
-            active_yield_contract,
-            probe_block_contract,
-            relative_advantage_contract,
-            rule_only_contract,
-            absolute_return_contract,
-        )
-        if contract is not None
-    ]
-    if len(active_contracts) > 1:
-        raise ValueError(
-            "CAAR-RG, CAAR-Yield, CAAR-PB, CAAR-RA, CAAR-RS, and "
-            "SRSLM hybrids "
-            "must be evaluated "
-            "in separate runs so "
-            "each result file has one unambiguous hybrid contract."
-        )
-    hybrid_contract = active_contracts[0] if active_contracts else None
+    srslm_contract = srslm_contract_metadata(algorithms)
+    srslm_ablation_contract = srslm_ablation_contract_metadata(algorithms)
+    hybrid_contract = srslm_contract or srslm_ablation_contract
 
     agent_counts = parse_agent_counts(args)
 
@@ -3792,6 +3606,14 @@ def main():
     map_list_path = None
 
     map_texts = None
+
+    explicit_task_specs = None
+
+    task_manifest_sha256 = None
+
+    task_manifest_protocol_id = None
+
+    task_manifest_path = None
 
     if args.map_url or args.map_file:
 
@@ -3827,6 +3649,38 @@ def main():
 
         )
 
+        if args.task_manifest:
+
+            (
+
+                explicit_task_specs,
+
+                task_manifest_sha256,
+
+                task_manifest_protocol_id,
+
+                task_manifest_path,
+
+            ) = load_explicit_task_manifest_snapshot(
+
+                _project_path(args.main_dir, args.task_manifest),
+
+                maps,
+
+                map_texts,
+
+                expected_map_list_sha256=map_list_sha256,
+
+            )
+
+            agent_counts = sorted(
+
+                {spec["num_agents"] for spec in explicit_task_specs}
+
+            )
+
+            seeds = sorted({spec["seed"] for spec in explicit_task_specs})
+
     else:
 
         maps = parse_maps(args.map_types, args.map)
@@ -3848,41 +3702,20 @@ def main():
 
         map_texts=map_texts,
 
+        explicit_task_specs=explicit_task_specs,
+
     )
 
-    if absolute_return_contract is not None:
-        integrity_metadata = srlsm_integrity_metadata(
+    if srslm_contract is not None:
+        integrity_metadata = srslm_integrity_metadata(
             args,
             map_list_sha256=map_list_sha256,
             map_registry_sha256=map_registry_sha256,
         )
-    elif rule_only_contract is not None:
-        integrity_metadata = rs_integrity_metadata(
+    elif srslm_ablation_contract is not None:
+        integrity_metadata = srslm_ablation_integrity_metadata(
             args,
-            map_list_sha256=map_list_sha256,
-            map_registry_sha256=map_registry_sha256,
-        )
-    elif relative_advantage_contract is not None:
-        integrity_metadata = ra_integrity_metadata(
-            args,
-            map_list_sha256=map_list_sha256,
-            map_registry_sha256=map_registry_sha256,
-        )
-    elif active_yield_contract is not None:
-        integrity_metadata = yield_integrity_metadata(
-            args,
-            map_list_sha256=map_list_sha256,
-            map_registry_sha256=map_registry_sha256,
-        )
-    elif probe_block_contract is not None:
-        integrity_metadata = pb_integrity_metadata(
-            args,
-            map_list_sha256=map_list_sha256,
-            map_registry_sha256=map_registry_sha256,
-        )
-    elif waypoint_contract is not None:
-        integrity_metadata = hybrid_integrity_metadata(
-            args,
+            srslm_ablation_contract["algorithm"],
             map_list_sha256=map_list_sha256,
             map_registry_sha256=map_registry_sha256,
         )
@@ -3928,6 +3761,38 @@ def main():
 
         },
 
+        "contention_metric": contention_metric_metadata(),
+
+        "vertex_flow_metric": vertex_flow_metric_metadata(),
+
+        "reverse_metric": {
+
+            "version": "previous_timestep_position_target_segment_v3",
+
+            "definition": (
+
+                "a submitted movement proposes the position occupied at the "
+
+                "immediately previous timestep in the current target segment"
+
+            ),
+
+            "reverse_rate_denominator": "submitted non-wait movement actions",
+
+            "history_update": (
+
+                "the observed position is recorded every timestep, including "
+
+                "waits and blocked moves; a target change resets it"
+
+            ),
+
+        },
+
+        "static_astar_metric": static_astar_metric_metadata(),
+
+        "runtime_metric": runtime_metric_metadata(),
+
         "algorithms": algorithms,
 
         "agent_counts": agent_counts,
@@ -3954,29 +3819,17 @@ def main():
 
         "caar_weights_path": args.caar_weights_path,
 
-        "caar_ra_weights_path": args.caar_ra_weights_path,
-
-        "srlsm_caar_estimator_checkpoint": (
-            args.srlsm_caar_estimator_checkpoint
+        "caar_candidate_manifest": getattr(
+            args, "caar_candidate_manifest", None
         ),
 
-        "srlsm_ao_estimator_checkpoint": (
-            args.srlsm_ao_estimator_checkpoint
+        "switcher_weights_path": args.switcher_weights_path,
+
+        "no_wait_detect_switcher_weights_path": (
+            args.no_wait_detect_switcher_weights_path
         ),
 
-        "srlsm_value_margin": args.srlsm_value_margin,
-
-        "srlsm_reverse_caar_override_enabled": (
-            args.srlsm_reverse_caar_override_enabled
-        ),
-
-        "notau_weights_path": args.notau_weights_path,
-
-        "dhc_weights_path": args.dhc_weights_path,
-
-        "dcc_weights_path": args.dcc_weights_path,
-
-        "scrimp_weights_path": args.scrimp_weights_path,
+        "no_reweight_weights_path": args.no_reweight_weights_path,
 
         "epom_weights_path": args.epom_weights_path,
 
@@ -4018,7 +3871,41 @@ def main():
 
         "map_list": str(map_list_path) if map_list_path is not None else None,
 
+        "map_list_sha256": map_list_sha256,
+
+        "map_registry_sha256": map_registry_sha256,
+
+        "task_manifest": (
+
+            str(task_manifest_path)
+
+            if task_manifest_path is not None
+
+            else None
+
+        ),
+
+        "task_manifest_sha256": task_manifest_sha256,
+
+        "task_manifest_protocol_id": task_manifest_protocol_id,
+
+        "explicit_task_count": (
+
+            len(explicit_task_specs)
+
+            if explicit_task_specs is not None
+
+            else None
+
+        ),
+
         "trim_border": args.trim_border,
+
+        "result_journal": args.result_journal,
+
+        "result_journal_contract": args.result_journal_contract,
+
+        "resume_result_journal": args.resume_result_journal,
 
     }
 
@@ -4036,7 +3923,24 @@ def main():
 
     print(f"  on_target: {args.on_target} | collision: {args.collision_system}")
 
-    results, elapsed = run_experiments(tasks, args.workers)
+    results, elapsed = run_experiments(
+
+        tasks,
+
+        args.workers,
+
+        result_journal=args.result_journal,
+
+        journal_contract=args.result_journal_contract,
+
+        resume_result_journal=args.resume_result_journal,
+
+    )
+
+    metadata["epom_lifelong_manifest"] = epom_lifelong_result_manifest(
+        results,
+        algorithms,
+    )
 
     metadata["finished_at"] = datetime.now().isoformat(timespec="seconds")
 

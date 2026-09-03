@@ -5,8 +5,6 @@ from datetime import datetime
 from typing import Optional
 
 
-import torch
-
 from pogema.svg_animation.animation_wrapper import AnimationConfig, AnimationMonitor
 
 from pydantic import BaseModel
@@ -53,6 +51,10 @@ def run_algorithm(
     map_text=None,
 
 ):
+    # Keep lightweight planning utilities (including the SVG demo generator)
+    # usable without importing the policy-training runtime.
+    import torch
+
 
     gc_kwargs = dict(
 

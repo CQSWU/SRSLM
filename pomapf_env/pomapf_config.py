@@ -9,6 +9,6 @@ class POMAPFConfig(GridConfig):
 
     integration: Literal['SampleFactory'] = 'SampleFactory'
 
-    collision_system: Literal['block_both', 'soft'] = 'soft'
+    collision_system: Literal['block_both', 'soft', 'priority'] = 'block_both'
 
     observation_type: Literal['POMAPF', 'MAPF'] = 'POMAPF'

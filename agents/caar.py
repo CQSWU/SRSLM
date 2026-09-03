@@ -26,13 +26,17 @@ from train import register_custom_components, validate_config
 
 class CAARConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["CAAR"] = "CAAR"
-    path_to_weights: str = "weights/CAAR/radius_ablation/R5"
+    path_to_weights: str = (
+        "weights/CAAR-p-identity-r5-1b/CAAR-P-Identity-R5-1B"
+    )
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
 
 
-class NoTauConfig(AlgoBase, extra=Extra.forbid):
-    name: Literal["NoTau"] = "NoTau"
-    path_to_weights: str = "weights/NoTau/NoTau"
+class NoReweightConfig(AlgoBase, extra=Extra.forbid):
+    name: Literal["NoReweight"] = "NoReweight"
+    path_to_weights: str = (
+        "weights/NoReweight-block-1b/NoReweight-Block-R5-1B"
+    )
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
 
 
@@ -102,6 +106,7 @@ class CAAR:
         self._last_augmented_observations = None
         self._action_correction_samples = []
         self._candidate_pressure_samples = []
+        self._predicted_pressure_samples = []
         self._tau_residual_samples = []
         self._movement_adjustment_samples = []
         self._pressure_multiplier_samples = []
@@ -188,7 +193,8 @@ class CAAR:
             actor_critic.load_state_dict(checkpoint_state)
         except RuntimeError as exc:
             raise RuntimeError(
-                "Checkpoint architecture does not match this policy. CAAR and NoTau "
+                "Checkpoint architecture does not match this policy. CAAR and "
+                "NoReweight "
                 "must use checkpoints with the original three-channel policy backbone. "
                 f"Checkpoint path: {path}"
             ) from exc
@@ -213,6 +219,7 @@ class CAAR:
         self._last_augmented_observations = None
         self._action_correction_samples = []
         self._candidate_pressure_samples = []
+        self._predicted_pressure_samples = []
         self._tau_residual_samples = []
         self._movement_adjustment_samples = []
         self._pressure_multiplier_samples = []
@@ -262,17 +269,20 @@ class CAAR:
                     corrections.float().cpu().numpy().reshape(-1)
                 )
                 pressures = getattr(self.ppo, "last_candidate_pressure", None)
-                if pressures is None:
-                    raise RuntimeError("CAAR model did not expose candidate pressures.")
-                self._candidate_pressure_samples.append(
-                    pressures.float().cpu().numpy().reshape(-1)
-                )
+                if pressures is not None:
+                    self._candidate_pressure_samples.append(
+                        pressures.float().cpu().numpy().reshape(-1)
+                    )
                 residuals = getattr(self.ppo, "last_tau_residual", None)
-                if residuals is None:
-                    raise RuntimeError("CAAR model did not expose tau residuals.")
-                self._tau_residual_samples.append(
-                    residuals.float().cpu().numpy().reshape(-1)
-                )
+                if residuals is not None:
+                    self._tau_residual_samples.append(
+                        residuals.float().cpu().numpy().reshape(-1)
+                    )
+                predicted = getattr(self.ppo, "last_predicted_pressure", None)
+                if predicted is not None:
+                    self._predicted_pressure_samples.append(
+                        predicted.float().cpu().numpy().reshape(-1)
+                    )
                 adjustments = getattr(self.ppo, "last_movement_adjustment", None)
                 if adjustments is None:
                     raise RuntimeError("CAAR model did not expose movement adjustments.")
@@ -280,11 +290,10 @@ class CAAR:
                     adjustments.float().cpu().numpy().reshape(-1)
                 )
                 multipliers = getattr(self.ppo, "last_pressure_multiplier", None)
-                if multipliers is None:
-                    raise RuntimeError("CAAR model did not expose pressure multipliers.")
-                self._pressure_multiplier_samples.append(
-                    multipliers.float().cpu().numpy().reshape(-1)
-                )
+                if multipliers is not None:
+                    self._pressure_multiplier_samples.append(
+                        multipliers.float().cpu().numpy().reshape(-1)
+                    )
                 switch_tensors = {
                     "decoder_output": getattr(
                         self.ppo, "last_decoder_output", None
@@ -294,8 +303,6 @@ class CAAR:
                         self.ppo, "last_adjusted_logits", None
                     ),
                     "values": getattr(self.ppo, "last_values", None),
-                    "candidate_pressure": pressures,
-                    "tau_residual": residuals,
                 }
                 missing = [
                     name
@@ -311,6 +318,18 @@ class CAAR:
                     name: value.float().cpu().numpy().copy()
                     for name, value in switch_tensors.items()
                 }
+                if residuals is not None:
+                    self._last_switch_context["tau_residual"] = (
+                        residuals.float().cpu().numpy().copy()
+                    )
+                if predicted is not None:
+                    self._last_switch_context["predicted_pressure"] = (
+                        predicted.float().cpu().numpy().copy()
+                    )
+                if pressures is not None:
+                    self._last_switch_context["candidate_pressure"] = (
+                        pressures.float().cpu().numpy().copy()
+                    )
                 self._last_switch_context["actions"] = (
                     actions.detach().cpu().numpy().copy()
                 )
@@ -344,6 +363,16 @@ class CAAR:
                     "candidate_pressure_median": float(np.median(pressures)),
                     "candidate_pressure_p05": float(np.quantile(pressures, 0.05)),
                     "candidate_pressure_p95": float(np.quantile(pressures, 0.95)),
+                }
+            )
+        if self._predicted_pressure_samples:
+            predicted = np.concatenate(self._predicted_pressure_samples)
+            stats.update(
+                {
+                    "predicted_pressure_mean": float(predicted.mean()),
+                    "predicted_pressure_median": float(np.median(predicted)),
+                    "predicted_pressure_p05": float(np.quantile(predicted, 0.05)),
+                    "predicted_pressure_p95": float(np.quantile(predicted, 0.95)),
                 }
             )
         if self._tau_residual_samples:
@@ -401,7 +430,7 @@ class CAAR:
             self._last_switch_context = None
 
 
-class NoTau(CAAR):
+class NoReweight(CAAR):
     """The same recurrent policy without traffic memory or action reweighting."""
 
     USE_PHEROMONE = False

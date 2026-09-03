@@ -99,6 +99,16 @@ class AcoState:
         local[~free_mask] = 0.0
         return local
 
+    def extract_local_free_mask(self, x, y, radius):
+        """Return the true local map support used by a trace crop.
+
+        Free in-map cells are one. Obstacles and padding beyond the map are
+        zero. Keeping this crop beside raw ``tau`` lets a learned trace encoder
+        distinguish a genuine zero trace from an obstacle or map boundary.
+        """
+        _, free_mask = self._local_tau_and_free_mask(x, y, int(radius))
+        return free_mask.astype(np.float32, copy=False)
+
     def add_tau_observation(
         self,
         obs_batch,
@@ -185,9 +195,13 @@ class AcoState:
 
     @staticmethod
     def _positions(obs_batch, positions=None):
-        if positions is not None:
-            return AcoState._as_int_pairs(positions)
-        return AcoState._as_int_pairs([obs["xy"] for obs in obs_batch])
+        if positions is None:
+            raise RuntimeError(
+                "Shared trace memory requires global agent positions. Raw "
+                "observation coordinates are relative to each agent's initial "
+                "position and cannot index the global trace map."
+            )
+        return AcoState._as_int_pairs(positions)
 
     @staticmethod
     def _as_int_pairs(values):
