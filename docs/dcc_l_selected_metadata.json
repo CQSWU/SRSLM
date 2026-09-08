@@ -1,0 +1,203 @@
+{
+  "limits": [
+    "Source snapshot alone is not a runnable environment; install the recorded dependencies and vendor runtime.",
+    "Historical source/audit files contain original paths and are private reproducibility material, not a GitHub upload set.",
+    "The selected checkpoint is not a converged 500-update model or a predeclared update100 stopping point."
+  ],
+  "method": "DCC-L",
+  "official_initialization_sha256": "d1a2e848b75c3c94f590004d93bf33365b50ec8e1e011df26c8dc6cc638860f1",
+  "official_upstream": "https://github.com/ZiyuanMa/DCC",
+  "optimizer": {
+    "batch_size": 128,
+    "gamma": 0.99,
+    "learning_rate": 2e-05,
+    "name": "Adam"
+  },
+  "paper": "https://arxiv.org/abs/2109.05413",
+  "paper_test_used_for_selection": false,
+  "planned_max_updates": 500,
+  "reward": {
+    "goal": 3,
+    "other": 0
+  },
+  "safety_stop_update": 250,
+  "selected_checkpoint_sha256": "e3105b60f0a0b5c57bfafab756b07e55f9902e9cc5d9f275fcd98d8d5cd16915",
+  "selected_update": 100,
+  "selection_timing": "completed independent development screen, before formal test",
+  "source_files": [
+    {
+      "relative_path": "agents/__init__.py",
+      "sha256": "72b4a132005d21b9079577095e9a9fd342a33a9567f236f484f27314267c7fc8"
+    },
+    {
+      "relative_path": "agents/dcc.py",
+      "sha256": "92e6e47aa74684355014482e8bebad7663513140b9dc3e658aa32fc4db2bb5d2"
+    },
+    {
+      "relative_path": "agents/utils_agents.py",
+      "sha256": "b9fa987ac343051eaec329fe6fbe33a3bd03b7de9929ac2f9c5c80cecc06279f"
+    },
+    {
+      "relative_path": "learning/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relative_path": "learning/dcc_pogema_env.py",
+      "sha256": "3287382dabc823279d43780e6386695f852190308c7267b2055c603d48a2487b"
+    },
+    {
+      "relative_path": "learning/dcc_resume.py",
+      "sha256": "72130af3f1936c99afe50ba9e93054b47aa79c40a8f48540208989bb24319515"
+    },
+    {
+      "relative_path": "learning/grid_memory.py",
+      "sha256": "38f1ded107feaf4823b25bae795371a71405cfab3ff015781d88ae39b495bcdb"
+    },
+    {
+      "relative_path": "maps/all.yaml",
+      "sha256": "f11982152a4016c3db23dd28e7f43f4fa2f8bb1d2b5ee17b5d5bd1904ebccb51"
+    },
+    {
+      "relative_path": "maps/dcc_small_validation.yaml",
+      "sha256": "b16dc8fcad93c1f1dfc73993c4e32c7123a8fac7c6fd92bc98366c99ddd40ab9"
+    },
+    {
+      "relative_path": "maps/eval_capacity_intersection_n600.yaml",
+      "sha256": "da5c3d4cbd4cbdc8ce9f6b271ca258d4e7b69d6aa76524c6d17201718efb02f0"
+    },
+    {
+      "relative_path": "maps/train.yaml",
+      "sha256": "3436e1efb55f2a5fe0e2428f7dde2e585cdf8502b1382a8708d9f0259cd90ad0"
+    },
+    {
+      "relative_path": "otherpolicy/DCC/buffer.py",
+      "sha256": "d7de133f96dac78b38b2a602293104dfda2b95b19fe4fef5290eb7dd3aef05d1"
+    },
+    {
+      "relative_path": "otherpolicy/DCC/config.py",
+      "sha256": "f53c071d84da81fd5fe2cf7bb456cae4ffdd14781249ea5b7bb96163c799cb31"
+    },
+    {
+      "relative_path": "otherpolicy/DCC/model.py",
+      "sha256": "293741ab7a783c5c7c484ca9b373b1f0ab4f035389370f7355fb1a5ccb38b73b"
+    },
+    {
+      "relative_path": "otherpolicy/DCC/train.py",
+      "sha256": "30b9348cf24c5bab48d24209855d6db4765c531771745933456fcacd9859a9a9"
+    },
+    {
+      "relative_path": "otherpolicy/DCC/worker.py",
+      "sha256": "f362cc28e26e6385e2bec61703df6d9a655a1c4b9afc4ee880f77b051012cc29"
+    },
+    {
+      "relative_path": "pomapf_env/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "relative_path": "pomapf_env/custom_maps.py",
+      "sha256": "d1d76e44d36750eb2590e1b9cf55ba4c49f5c6efeb240bed776aa92ffb48e733"
+    },
+    {
+      "relative_path": "pomapf_env/env.py",
+      "sha256": "61527285294ddc966d28085db231107ba840d749976e427fd730e3d1ecdd3886"
+    },
+    {
+      "relative_path": "pomapf_env/pomapf_config.py",
+      "sha256": "da8b012ed344939387f871d5221d17c54b722c51ea0a53ac7490fadc019820bc"
+    },
+    {
+      "relative_path": "pomapf_env/shared_traffic.py",
+      "sha256": "32a32d2366bec7497ac8af779309bf2de360bbcdf1d85326a2fda5abae8255b4"
+    },
+    {
+      "relative_path": "pomapf_env/stigmergic.py",
+      "sha256": "d9a7747ca3a903b78f7cecb4e8d6f3ee24dd71956d63c7b25a104e45f22c3577"
+    },
+    {
+      "relative_path": "pomapf_env/switcher_caar_env.py",
+      "sha256": "c45d882027db3e78b0466d5056fe7e4fff28184e0630d81f522923c1a80c14bc"
+    },
+    {
+      "relative_path": "pomapf_env/switcher_env.py",
+      "sha256": "e35de0e16ccadef54c3bc0f95146f34167d16d82a348a8148e17fab44b3dd90f"
+    },
+    {
+      "relative_path": "pomapf_env/trace_variant.py",
+      "sha256": "43ce8de1e8cd5904d4322869784f2b035dce1e310a933c2c81b721e860f4e48b"
+    },
+    {
+      "relative_path": "pomapf_env/wrappers.py",
+      "sha256": "a9962700c8ad72538f6481b16c23fc90720651e36eb20a2852918806d6d207ce"
+    },
+    {
+      "relative_path": "README_REWARD_PILOT.md",
+      "sha256": "0912b797f903b2560f8ddf3e7f35fdafc51bb2b114179cfe2028d415032b3c0b"
+    },
+    {
+      "relative_path": "REWARD_PILOT_PLAN.json",
+      "sha256": "e5724a547fe6dec6bdf51c4884fee0bf3e08fa1637aaa4b631ab09d47db2baec"
+    },
+    {
+      "relative_path": "scripts/audit_reward_pilot.py",
+      "sha256": "8617940a90f7d05566cc8805a5ad0b78bb32214182d5d1955cb23fbcfc703869"
+    },
+    {
+      "relative_path": "scripts/preflight_dcc_reward.py",
+      "sha256": "6055544075789740dd087922b813287a86ad95349999e9fd87fa3385098f25c6"
+    },
+    {
+      "relative_path": "scripts/preflight_dcc_small.py",
+      "sha256": "278ab15af81e3a3fda0de1dc0fb071a11ff17b789eaa43b5f64cf8e5e75a2602"
+    },
+    {
+      "relative_path": "scripts/README_reward_validation.md",
+      "sha256": "7fd7ea19476c2735f625cdfa11a66c3fc374fcab14017c820964e740835a0d65"
+    },
+    {
+      "relative_path": "scripts/run_dcc_reward_pilot.sh",
+      "sha256": "f66f48177c150c9479da725f8069c7456e14406e094d4a14347e270befbdc251"
+    },
+    {
+      "relative_path": "scripts/run_dcc_reward_validation.sh",
+      "sha256": "caf320dfecd483e7801b741488c0088dfcbcfae6361e21c917bc1f148da08ede"
+    },
+    {
+      "relative_path": "scripts/run_dcc_small_finetune.sh",
+      "sha256": "00c4e161b22e9e1535b2530ff3ba792fde9c54b1f8cb40add1a72752070671a1"
+    },
+    {
+      "relative_path": "scripts/smoke_dcc_reward_ppu.py",
+      "sha256": "7da6dc8fc3cbec0ff64a7e3ff4abe4b09b376831952da36282d89ea0b7d2492a"
+    },
+    {
+      "relative_path": "scripts/test_audit_reward_pilot.py",
+      "sha256": "ffec0d14a878f23b7a1f89138a4cf581d30274924e3dabdf410c41bc7b45f053"
+    },
+    {
+      "relative_path": "tests/test_reward_pilot_control.py",
+      "sha256": "ff117e97e5304e507679f20bba610c0a21184ce354913b8c1247a1e6914aa987"
+    },
+    {
+      "relative_path": "tests/test_reward_pilot_env.py",
+      "sha256": "c8c541d3aa512362e3e43d23ce73f56e61f514c6abcd789cf99989f287ebc062"
+    },
+    {
+      "relative_path": "tests/test_sequence_alignment.py",
+      "sha256": "e5b67f3933e1526519c80e177b598001049681288e5fd89280e2c6e8f74b8f27"
+    }
+  ],
+  "train_map_sha256": "3436e1efb55f2a5fe0e2428f7dde2e585cdf8502b1382a8708d9f0259cd90ad0",
+  "training_collision_system": "block_both",
+  "training_maps": 186,
+  "upstream_license_checked_on": "2026-09-08",
+  "upstream_license_verification": "No LICENSE file or repository license metadata observed; do not relabel as permissively licensed.",
+  "validation_maps": 4,
+  "validation_populations": [
+    100,
+    200
+  ],
+  "validation_seeds": [
+    73001,
+    73002
+  ]
+}

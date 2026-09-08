@@ -7,7 +7,7 @@ from agents.switcher_core import (
     SWITCHER_FEATURE_SCHEMA,
     AllStateSwitcherController,
     SwitcherController,
-    WaitDetectOnlyController,
+    OnlyWaitController,
 )
 from planning.aoreplan_branch import AORePlanStep
 
@@ -115,7 +115,7 @@ def test_all_state_controller_sends_waits_to_the_switcher():
 
 def test_wait_detect_only_uses_no_learned_switcher_choices():
     planner = FakeAORePlan([0, 4, 0])
-    controller = WaitDetectOnlyController(FakeCAAR([1, 2, 0]), planner)
+    controller = OnlyWaitController(FakeCAAR([1, 2, 0]), planner)
     prepared = controller.prepare_actions(observations(3))
     assert prepared.switch_allowed_mask == (False, True, False)
 

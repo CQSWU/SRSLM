@@ -1,12 +1,10 @@
-"""Inference adapter for the contextual EPOM trace residual.
+"""Inference adapter for the paper CAAR correction on frozen EPOM-L.
 
-The actor-critic owns both the entropy-gated Direct rule and the learned
-residual.  This adapter only reconstructs the two recurrent observations used
-during training (EPOM grid memory and an 11x11 shared-trace crop), maintains
-the exact 11x11 free-cell mask, and records model-side diagnostics. Radius 5
-and the saved raw-versus-centred trace contract are read from the checkpoint
-and enforced at inference, so evaluation cannot silently change the learned
-representation.
+The model predicts five corrections and subtracts them from the base logits,
+with the checkpoint's entropy gate. This adapter rebuilds EPOM grid memory
+and the mean-centred 11x11 shared-trace crop, resets episode state, and records
+diagnostics. The free-cell mask is used to construct the trace observation,
+not as an input or action mask in the learned branch.
 
 Checkpoint selection is explicit.  ``latest`` and ``best`` use the normal
 Sample Factory run directory.  ``milestone`` requires an exact checkpoint file
@@ -14,7 +12,7 @@ so a screen can never silently evaluate a newer checkpoint.
 
 Registry note: ``train.register_custom_components`` must map
 ``encoder_custom=epom_trace_context`` to
-``EPOMTraceContextActorCritic``.  The model/config integration owns that hook;
+``EPOMTraceMultiplierActorCritic``.  The model/config integration owns that hook;
 it deliberately does not live in this inference-only module.
 """
 
@@ -92,6 +90,7 @@ class EPOMTraceContextConfig(EPOMTraceConfig, extra=Extra.forbid):
     # Evaluation-only ablation. ``checkpoint`` preserves the learned run's
     # entropy gate; ``all`` applies the same learned correction at every step.
     learned_gate_override: Literal["checkpoint", "all"] = "checkpoint"
+    entropy_threshold_override: Optional[float] = None
 
 
 class EPOMTraceContext(EPOMTrace):
@@ -122,6 +121,15 @@ class EPOMTraceContext(EPOMTrace):
                 "inference gate-override hook."
             )
         gate_override(algo_cfg.learned_gate_override)
+        threshold_override = getattr(
+            self.ppo, "set_inference_entropy_threshold_override", None
+        )
+        if not callable(threshold_override):
+            raise RuntimeError(
+                "EPOM-TraceContext actor-critic does not expose the required "
+                "inference entropy-threshold hook."
+            )
+        threshold_override(algo_cfg.entropy_threshold_override)
         if int(self.tau_radius) != TRACE_RADIUS:
             raise RuntimeError(
                 "Runtime tau_radius disagrees with checkpoint config: "

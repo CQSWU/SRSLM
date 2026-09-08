@@ -35,19 +35,8 @@ from train import register_custom_components, validate_config
 class SwitcherConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["Switcher"] = "Switcher"
     path_to_weights: str = (
-        "weights/SRSLM-switcher-v3-1b/SRSLM-Switcher-V3-1B"
-    )
-    checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
-    deterministic: bool = False
-
-
-class AllStateSwitcherConfig(AlgoBase, extra=Extra.forbid):
-    """Checkpoint contract for the all-state ablation policy."""
-
-    name: Literal["AllStateSwitcher"] = "AllStateSwitcher"
-    path_to_weights: str = (
-        "weights/SRSLM-no-wait-detect-switcher-v3-500m/"
-        "SRSLM-NoWaitDetect-Switcher-V3-500M"
+        "weights/SRSLM-switcher-wait-aware-caar-100m/"
+        "SRSLM-WaitAware-CAAR-100M"
     )
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
     deterministic: bool = False
@@ -80,7 +69,8 @@ class Switcher:
                 project_root,
             )
             candidate_artifact.verify_files()
-        _, flat_config = validate_config(full_config)
+        from learning.config import checkpoint_experiment_config
+        _, flat_config = validate_config(checkpoint_experiment_config(full_config))
         if flat_config.encoder_custom != self.expected_encoder_custom:
             raise RuntimeError(
                 f"Checkpoint is not a {self.policy_label} policy: expected "
@@ -302,17 +292,7 @@ class Switcher:
         return result
 
 
-class AllStateSwitcher(Switcher):
-    """A separately trained Switcher that acts on every AORePlan state."""
-
-    expected_encoder_custom = "switcher_all_state"
-    allow_aoreplan_wait = True
-    policy_label = "all-state Switcher"
-
-
 __all__ = [
-    "AllStateSwitcher",
-    "AllStateSwitcherConfig",
     "Switcher",
     "SwitcherConfig",
 ]

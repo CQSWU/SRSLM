@@ -1,401 +1,150 @@
+"""Public runner binds the paper artifacts, not the retired CAAR backbone."""
 import inspect
+import json
 import sys
-import types
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from run_experiments import (
-    ALGORITHM_ALIASES,
-    SUPPORTED_ALGORITHMS,
-    _find_caar_weights,
-    _find_no_wait_detect_switcher_weights,
-    _find_switcher_weights,
-    build_algorithm,
-    parse_algorithms,
-    run_single_experiment,
-    static_astar_metric_metadata,
-    validate_srslm_stats,
-    validate_srslm_ablation_stats,
-)
+import numpy as np
+import pytest
+
+import run_experiments as runner
+from agents.ao_replan import AORePlan, AORePlanConfig
+from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck, _SoftNoCheckWrapper
+from planning.ao_replan_algo import AORePlanWrapper
 
 
-def valid_srslm_stats():
-    return {
-        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
-        "switch_pair": ["CAAR", "AORePlan"],
-        "switcher_training": "PPO",
-        "value_predictor_loaded": False,
-        "switcher_feature_schema": "srslm_switcher_state_v3",
-        "selector_kind": "ppo_two_branch_categorical",
-        "switcher_decision_scope": "aoreplan_nonwait_only",
-        "joint_conflict_prediction_enabled": False,
-        "total_action_count": 10,
-        "switcher_choice_count": 7,
-        "switcher_model_choice_count": 7,
-        "selected_ao_count": 4,
-        "switcher_model_selected_ao_count": 4,
-        "executed_ao_count": 4,
-        "executed_caar_count": 6,
-        "aoreplan_wait_bypass_count": 3,
-        "branch_action_agreement_count": 2,
-        "static_astar_query_count": 1,
-        "aoreplan_commit_count": 4,
-        "switcher_checkpoint_sha256": "a" * 64,
-        "switcher_stochastic": True,
-        "switcher_choice_rate": 0.7,
-        "selected_ao_rate": 4 / 7,
-        "executed_ao_rate": 0.4,
-        "aoreplan_wait_bypass_rate": 0.3,
-        "branch_action_agreement_rate": 0.2,
-        "switcher_sampled_ao_rate": 4 / 7,
-        "switcher_ao_probability_mean": 0.5,
-        "switcher_ao_probability_p05": 0.1,
-        "switcher_ao_probability_p95": 0.9,
-    }
-
-
-def test_only_current_public_names_are_supported():
-    assert SUPPORTED_ALGORITHMS == (
-        "RePlan",
-        "AORePlan",
-        "NoReweight",
-        "Direct",
-        "CAAR",
-        "SRSLM-NoWaitDetect",
-        "SRSLM-WaitDetectOnly",
-        "SRSLM",
-        "EPOM-Lifelong-FT",
+def test_public_names_are_explicit_and_retired_names_are_rejected():
+    assert runner.SUPPORTED_ALGORITHMS == (
+        'RePlan', 'AORePlan', 'AORePlan-SoftNoCheck', 'EPOM-Lifelong-FT',
+        'NoReweight', 'Direct', 'CAAR', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
     )
-    assert set(ALGORITHM_ALIASES.values()) == set(SUPPORTED_ALGORITHMS)
-    for retired in (
-        "Replan",
-        "AO-RePlan",
-        "NoTau",
-        "CAAR-RS",
-        "CAAR-RG",
-        "CAAR-Yield",
-        "CAAR-PB",
-        "CAAR-RA",
-        "SRSLM-PPO",
-        "SRSLM-PPO-Only",
-        "DCC",
-        "DHC",
-        "MATS-LP",
-        "SCRIMP",
-        "Follower",
-        "CHS-Reconstructed",
-        "AS",
-        "EPOM-Direct",
-        "SRSLM-v8b",
-    ):
-        assert retired not in SUPPORTED_ALGORITHMS
-    for retired_alias in (
-        "ao-replan",
-        "notau",
-        "caar-rs",
-        "caar-rg",
-        "caar-yield",
-        "caar-pb",
-        "caar-ra",
-        "srslm-ppo",
-        "srslm-ppo-only",
-    ):
-        assert retired_alias not in ALGORITHM_ALIASES
-    assert ALGORITHM_ALIASES["replan"] == "RePlan"
-    assert not {
-        "CAAR-RG",
-        "CAAR-Yield",
-        "CAAR-PB",
-        "CAAR-RA",
-    }.intersection(parse_algorithms("all"))
+    assert set(runner.ALGORITHM_ALIASES.values()) == set(runner.SUPPORTED_ALGORITHMS)
+    for name in ('DCC', 'DHC', 'Follower', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
+        with pytest.raises(Exception):
+            runner.parse_algorithms(name)
 
 
-def test_builder_exposes_only_current_artifact_inputs():
-    assert tuple(inspect.signature(build_algorithm).parameters) == (
-        "algo_name",
-        "main_dir",
-        "seed",
-        "caar_weights_path",
-        "switcher_weights_path",
-        "no_wait_detect_switcher_weights_path",
-        "no_reweight_weights_path",
-        "epom_weights_path",
-    )
+def test_public_runner_has_no_unshipped_adapter_imports():
+    source = inspect.getsource(runner)
+    for module in ('agents.dcc', 'agents.primal2', 'agents.follower',
+                   'agents.chs', 'agents.assistant_switcher', 'agents.srslm_ablation'):
+        assert module not in source
 
 
-def test_runner_source_excludes_retired_adapter_surface():
-    source = (
-        Path(__file__).resolve().parents[1] / "run_experiments.py"
-    ).read_text(encoding="utf-8")
-    for retired in (
-        "DCC",
-        "DHC",
-        "MATS-LP",
-        "SCRIMP",
-        "Follower",
-        "CHS-Reconstructed",
-        "AssistantSwitcher",
-        "EPOM-Direct",
-        "Direct-0P",
-        "SRSLM-v8b",
-    ):
-        assert retired not in source
+def test_learned_policies_are_always_episode_fresh():
+    for name in ('Direct', 'CAAR', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'):
+        assert not runner.should_cache_algorithm(name, True)
+    assert runner.should_cache_algorithm('AORePlan', True)
 
 
-def test_switcher_default_resolution_is_wait_aware_release():
-    with patch("run_experiments._find_weight_run_dir", return_value=None) as finder:
-        try:
-            _find_switcher_weights(".")
-        except FileNotFoundError as exc:
-            assert "wait-aware" in str(exc)
-        else:
-            raise AssertionError("missing wait-aware Switcher silently fell back")
-    searched = str(finder.call_args.args[0]).replace("\\", "/")
-    assert searched.endswith("weights/SRSLM-switcher-wait-aware-caar-100m")
+@pytest.mark.parametrize('gate,transform', [('always', 'signed'), ('primal3', 'signed'), ('primal3', 'clipped_relu')])
+def test_direct_uses_epom_l_and_explicit_crop_not_old_noreweight(gate, transform):
+    with patch('agents.epom_direct_reweight.EPOMDirectReweight') as policy:
+        runner.build_algorithm('Direct', '.', 42, epom_weights_path='weights/base',
+            direct_options={'gate': gate, 'pressure_transform': transform})
+    cfg = policy.call_args.args[0]
+    assert cfg.artifact_profile == 'lifelong_finetuned'
+    assert Path(cfg.path_to_weights).is_absolute()
+    assert cfg.centering_scope == 'crop'
+    assert cfg.gate == gate
+    assert cfg.pressure_transform == transform
+    assert cfg.pressure_cap == 2.0
+    with pytest.raises(ValueError, match='EPOM-L'):
+        runner.build_algorithm('Direct', '.', 42, no_reweight_weights_path='legacy')
 
 
-def test_caar_default_resolution_is_current_trace_branch():
-    with patch("run_experiments._find_weight_run_dir", return_value=None) as finder:
-        try:
-            _find_caar_weights(".")
-        except FileNotFoundError as exc:
-            assert "current CAAR" in str(exc)
-        else:
-            raise AssertionError("missing current CAAR silently fell back")
-    searched = str(finder.call_args.args[0]).replace("\\", "/")
-    assert searched.endswith(
-        "weights/EPOM-TracePaperConvDirectCorrection-R5-500m"
-    )
+def test_direct_cli_records_all_correction_options():
+    with patch.object(sys, 'argv', ['run_experiments.py', '--algorithms', 'Direct',
+            '--direct-gate', 'primal3', '--direct-transform', 'clipped_relu']):
+        args = runner.parse_args()
+    assert args.direct_options == {'gate': 'primal3', 'centering_scope': 'crop',
+                                   'pressure_transform': 'clipped_relu'}
 
 
-def test_no_wait_detect_has_an_independent_weight_root():
-    with patch("run_experiments._find_weight_run_dir", return_value=None) as finder:
-        try:
-            _find_no_wait_detect_switcher_weights(".")
-        except FileNotFoundError as exc:
-            assert "independently trained" in str(exc)
-        else:
-            raise AssertionError("missing all-state checkpoint silently fell back")
-    searched = str(finder.call_args.args[0]).replace("\\", "/")
-    assert searched.endswith("weights/SRSLM-switcher-caar-nowait-100m")
-    assert "wait-aware" not in searched
+def _artifact():
+    return SimpleNamespace(weights_relative='weights/caar', checkpoint_relative='weights/caar/checkpoint_p0/model.pth',
+        checkpoint_sha256='a' * 64, config_sha256='b' * 64,
+        base_weights_relative='weights/base', base_checkpoint_relative='weights/base/checkpoint_p0/base.pth',
+        base_checkpoint_sha256='c' * 64, base_config_sha256='d' * 64)
 
 
-def test_srslm_validator_accepts_only_wait_bypass_contract():
-    stats = valid_srslm_stats()
-    validate_srslm_stats(stats)
-    broken = dict(stats, switcher_choice_count=8)
-    try:
-        validate_srslm_stats(broken)
-    except RuntimeError as exc:
-        assert "do not sum" in str(exc)
-    else:
-        raise AssertionError("invalid SRSLM routing was accepted")
+def test_caar_loads_exact_frozen_candidate():
+    artifact = _artifact()
+    with patch.object(runner, '_load_caar_candidate_artifact', return_value=artifact), \
+         patch('agents.switcher_caar_candidate.CaarSwitcherCandidate.load') as load:
+        runner.build_algorithm('CAAR', '.', 42, caar_candidate_manifest='manifest.json')
+    assert load.call_args.args[0] is artifact
+    assert load.call_args.kwargs['seed'] == 42
 
 
-def test_srslm_wait_ablation_validators_enforce_distinct_scopes():
-    all_state = dict(
-        valid_srslm_stats(),
-        hybrid_mode="all_state_switcher_v3",
-        ablation_name="SRSLM-NoWaitDetect",
-        switcher_decision_scope="all_states",
-        wait_detection_enabled=False,
-        learned_switcher_called=True,
-        total_action_count=10,
-        switcher_choice_count=10,
-        switcher_model_choice_count=10,
-        selected_ao_count=4,
-        switcher_model_selected_ao_count=4,
-        executed_ao_count=4,
-        executed_caar_count=6,
-        aoreplan_wait_bypass_count=0,
-    )
-    validate_srslm_ablation_stats("SRSLM-NoWaitDetect", all_state)
-
-    wait_only = dict(
-        all_state,
-        hybrid_mode="aoreplan_wait_detect_only_v3",
-        ablation_name="SRSLM-WaitDetectOnly",
-        switcher_training="none",
-        selector_kind="deterministic_wait_detect_only",
-        switcher_decision_scope="none",
-        wait_detection_enabled=True,
-        learned_switcher_called=False,
-        switcher_choice_count=0,
-        switcher_model_choice_count=0,
-        selected_ao_count=0,
-        switcher_model_selected_ao_count=0,
-        executed_ao_count=7,
-        executed_caar_count=3,
-        aoreplan_wait_bypass_count=3,
-        switcher_stochastic=False,
-        switcher_choice_rate=0.0,
-        selected_ao_rate=0.0,
-        executed_ao_rate=0.7,
-        aoreplan_wait_bypass_rate=0.3,
-    )
-    validate_srslm_ablation_stats("SRSLM-WaitDetectOnly", wait_only)
-
-    broken = dict(all_state, switcher_choice_count=7)
-    try:
-        validate_srslm_ablation_stats("SRSLM-NoWaitDetect", broken)
-    except RuntimeError as exc:
-        assert "all-state" in str(exc)
-    else:
-        raise AssertionError("all-state actor masking was accepted")
+@pytest.mark.parametrize('algorithm', ['CAAR', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'])
+def test_pinned_policies_reject_split_artifact_root_before_loading(algorithm, tmp_path):
+    with patch.object(runner, '_load_caar_candidate_artifact') as load:
+        with pytest.raises(ValueError, match='source checkout'):
+            runner.build_algorithm(algorithm, tmp_path, 0)
+    load.assert_not_called()
 
 
-def test_srslm_builder_uses_current_classes_and_names():
-    caar_module = types.ModuleType("agents.caar")
-    switcher_module = types.ModuleType("agents.switcher")
-    srslm_module = types.ModuleType("agents.srslm")
-
-    class Config:
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
-
-    class Algorithm:
-        def __init__(self, cfg, **kwargs):
-            self.cfg = cfg
-
-    caar_module.CAARConfig = Config
-    switcher_module.SwitcherConfig = Config
-    srslm_module.SRSLMConfig = Config
-    srslm_module.SRSLM = Algorithm
-    with patch.dict(sys.modules, {
-        "agents.caar": caar_module,
-        "agents.switcher": switcher_module,
-        "agents.srslm": srslm_module,
-    }):
-        algorithm = build_algorithm(
-            "SRSLM",
-            ".",
-            42,
-            caar_weights_path="caar",
-            switcher_weights_path="switcher",
-        )
-    # The wait-aware artifact contract binds the CAAR checkpoint inside the
-    # Switcher bundle, so SRSLM itself owns only the Switcher path.
-    assert not hasattr(algorithm.cfg, "caar")
-    assert algorithm.cfg.switcher.path_to_weights.endswith("switcher")
-    assert not hasattr(algorithm.cfg, "rule_guard_enabled")
-    assert not hasattr(algorithm.cfg, "value_margin")
+def test_wait_ablations_use_identical_candidate_and_distinct_switcher_contracts():
+    with patch.object(runner, '_load_caar_candidate_artifact', return_value=_artifact()), \
+         patch('agents.srslm_caar_ablation.SRSLMOnlyWait') as only, \
+         patch('agents.srslm_caar_ablation.SRSLMNoWait') as nowait:
+        runner.build_algorithm('SRSLM-OnlyWait', '.', 42, caar_candidate_manifest='manifest.json')
+        runner.build_algorithm('SRSLM-NoWait', '.', 42, caar_candidate_manifest='manifest.json',
+                               switcher_weights_path='weights/independent-nowait')
+        with pytest.raises(ValueError, match='independently trained'):
+            runner.build_algorithm('SRSLM-NoWait', '.', 42, caar_candidate_manifest='manifest.json')
+        with pytest.raises(ValueError, match='must not load'):
+            runner.build_algorithm('SRSLM-OnlyWait', '.', 42, caar_candidate_manifest='manifest.json',
+                                   switcher_weights_path='weights/full')
+    only_cfg = only.call_args.args[0]
+    nowait_cfg = nowait.call_args.args[0]
+    assert only_cfg.candidate == nowait_cfg.candidate
+    assert not hasattr(only_cfg, 'switcher')
+    assert 'independent-nowait' in nowait_cfg.switcher.path_to_weights
 
 
-def test_wait_ablation_builders_use_distinct_artifact_contracts():
-    caar_module = types.ModuleType("agents.caar")
-    ablation_module = types.ModuleType("agents.srslm_ablation")
-    switcher_module = types.ModuleType("agents.switcher")
-
-    class Config:
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
-
-    class Algorithm:
-        def __init__(self, cfg):
-            self.cfg = cfg
-
-    caar_module.CAARConfig = Config
-    ablation_module.SRSLMNoWaitDetectConfig = Config
-    ablation_module.SRSLMWaitDetectOnlyConfig = Config
-    ablation_module.SRSLMNoWaitDetect = Algorithm
-    ablation_module.SRSLMWaitDetectOnly = Algorithm
-    switcher_module.AllStateSwitcherConfig = Config
-    with patch.dict(
-        sys.modules,
-        {
-            "agents.caar": caar_module,
-            "agents.srslm_ablation": ablation_module,
-            "agents.switcher": switcher_module,
-        },
-    ):
-        no_wait = build_algorithm(
-            "SRSLM-NoWaitDetect",
-            ".",
-            42,
-            caar_weights_path="caar",
-            no_wait_detect_switcher_weights_path="all-state",
-        )
-        wait_only = build_algorithm(
-            "SRSLM-WaitDetectOnly",
-            ".",
-            42,
-            caar_weights_path="caar",
-        )
-
-    assert no_wait.cfg.switcher.path_to_weights.endswith("all-state")
-    assert wait_only.cfg.caar.path_to_weights.endswith("caar")
-    assert not hasattr(wait_only.cfg, "switcher")
+@pytest.mark.parametrize('collision', ['block_both', 'soft'])
+def test_default_aoreplan_keeps_static_occupancy_check(collision):
+    agent = AORePlan(AORePlanConfig())
+    agent.set_grid_config(SimpleNamespace(collision_system=collision))
+    assert agent.WRAPPER_CLASS is AORePlanWrapper
+    wrapper = object.__new__(agent.WRAPPER_CLASS)
+    wrapper.static_astar = SimpleNamespace(get_action=lambda obs: 4)
+    wrapper.last_static_astar_invoked_mask = [False]
+    wrapper.moves = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
+    agents = np.zeros((11, 11), dtype=int)
+    agents[5, 6] = 1
+    obs = {'obstacles': np.zeros((11, 11)), 'agents': agents}
+    assert wrapper._static_astar_action(0, obs) == 0
 
 
-def test_no_reweight_builder_uses_current_class_names():
-    module = types.ModuleType("agents.caar")
-
-    class Config:
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
-
-    class Algorithm:
-        def __init__(self, cfg):
-            self.cfg = cfg
-
-    module.NoReweightConfig = Config
-    module.NoReweight = Algorithm
-    with patch.dict(sys.modules, {"agents.caar": module}):
-        algorithm = build_algorithm(
-            "NoReweight",
-            ".",
-            42,
-            no_reweight_weights_path="weights/current",
-        )
-    assert algorithm.cfg.path_to_weights == "weights/current"
-    assert algorithm.cfg.checkpoint_kind == "latest"
+def test_search_soft_bypass_is_explicit_and_not_available_in_block_both():
+    policy = runner.build_algorithm('AORePlan-SoftNoCheck', '.', 42)
+    assert isinstance(policy, AORePlanSoftNoCheck)
+    policy.set_grid_config(SimpleNamespace(collision_system='soft'))
+    with pytest.raises(ValueError, match='standalone soft'):
+        policy.set_grid_config(SimpleNamespace(collision_system='block_both'))
+    wrapper = object.__new__(_SoftNoCheckWrapper)
+    wrapper.static_astar = SimpleNamespace(get_action=lambda obs: 4)
+    wrapper.last_static_astar_invoked_mask = [False]
+    assert wrapper._static_astar_action(0, {}) == 4
+    assert wrapper.last_static_astar_invoked_mask == [True]
 
 
-def test_aoreplan_result_uses_new_metric_names():
-    algorithm = SimpleNamespace(
-        reverse_action_rate=0.25,
-        reverse_action_count=2,
-        reverse_action_denominator=8,
-        reverse_metric_version="previous_timestep_position_target_segment_v3",
-        static_astar_query_count=3,
-        static_astar_query_denominator=10,
-        static_astar_query_rate=0.3,
-        no_path_fallback_count=4,
-    )
-    task = {
-        "algorithm": "AORePlan",
-        "main_dir": ".",
-        "seed": 42,
-        "cache_algorithms": False,
-        "map_name": "test-map",
-        "num_agents": 4,
-        "max_steps": 512,
-        "obs_radius": 5,
-        "animate": False,
-        "on_target": "restart",
-        "collision_system": "block_both",
-        "map_text": "....\n....",
-    }
-    run_result = {
-        "algorithm": "AORePlan",
-        "avg_throughput": 1.0,
-        "environment_step_count_observed": 512,
-    }
-    with patch("run_experiments.build_algorithm", return_value=algorithm), patch(
-        "run_experiments.run_algorithm", return_value=run_result
-    ):
-        result = run_single_experiment(task)
-    assert result["static_astar_query_count"] == 3
-    assert result["static_astar_query_denominator"] == 10
-    assert result["static_astar_query_rate"] == 0.3
-    assert result["no_path_fallback_count"] == 4
-    assert "probe_invocation_rate" not in result
+def test_public_manifest_is_path_relative_and_hash_pinned():
+    root = Path(__file__).resolve().parents[1]
+    data = json.loads((root / 'configs/caar_final_candidate.json').read_text())
+    from agents.switcher_caar_candidate import CaarCandidateArtifact
+    artifact = CaarCandidateArtifact.from_mapping(data, root)
+    assert artifact.checkpoint_sha256 == '497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b'
+    assert artifact.base_checkpoint_sha256 == 'f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2'
 
 
-def test_static_astar_metadata_matches_reported_fields():
-    metadata = static_astar_metric_metadata()
-    assert metadata["version"] == "aoreplan_static_astar_query_v3"
-    assert "static_astar_query_rate_denominator" in metadata
-    assert "no_path_fallback_count" in metadata
+def test_optional_caar_path_is_an_assertion_not_an_override(tmp_path):
+    artifact = SimpleNamespace(weights_path=(tmp_path / 'weights/pinned').resolve())
+    runner._assert_candidate_weights(tmp_path, 'weights/pinned', artifact)
+    with pytest.raises(ValueError, match='hash-pinned'):
+        runner._assert_candidate_weights(tmp_path, 'weights/other', artifact)

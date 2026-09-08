@@ -18,7 +18,7 @@ from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.utils import log
 
 from agents.utils_agents import AlgoBase
-from learning.config import Environment
+from learning.config import Environment, checkpoint_experiment_config
 from pomapf_env.stigmergic import AcoState
 from pomapf_env.wrappers import MatrixObservationWrapper
 from train import register_custom_components, validate_config
@@ -56,7 +56,7 @@ class CAAR:
         config, self.config_sha256 = self._load_config_snapshot(
             self.config_path
         )
-        _, flat_config = validate_config(config["full_config"])
+        _, flat_config = validate_config(checkpoint_experiment_config(config["full_config"]))
 
         env = create_env(flat_config.env, cfg=flat_config, env_config={})
         self.model_uses_tau = "tau" in env.observation_space.spaces

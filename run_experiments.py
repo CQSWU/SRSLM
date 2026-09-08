@@ -59,35 +59,28 @@ DEFAULT_MAPS = {
 
 
 SUPPORTED_ALGORITHMS = (
-    "RePlan",
-    "AORePlan",
-    "NoReweight",
-    "Direct",
-    "CAAR",
-    "SRSLM-NoWaitDetect",
-    "SRSLM-WaitDetectOnly",
-    "SRSLM",
-    "EPOM-Lifelong-FT",
+    "RePlan", "AORePlan", "AORePlan-SoftNoCheck",
+    "EPOM-Lifelong-FT", "NoReweight", "Direct", "CAAR",
+    "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
 )
 
-
-# Methods that require explicit artifacts or distinct evaluation protocols
-# remain opt-in so the default/"all" batch stays unambiguous.
+# Learned methods always require their explicit, hash-pinned artifacts.
 DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
 ALGORITHM_ALIASES = {
     "replan": "RePlan",
     "aoreplan": "AORePlan",
+    "aoreplan-softnocheck": "AORePlan-SoftNoCheck",
+    "aoreplan-soft-no-check": "AORePlan-SoftNoCheck",
+    "epom-l": "EPOM-Lifelong-FT",
+    "epom-lifelong-ft": "EPOM-Lifelong-FT",
+    "epom_lifelong_ft": "EPOM-Lifelong-FT",
     "noreweight": "NoReweight",
     "no-reweight": "NoReweight",
     "direct": "Direct",
     "caar": "CAAR",
+    "srslm-nowait": "SRSLM-NoWait",
+    "srslm-onlywait": "SRSLM-OnlyWait",
     "srslm": "SRSLM",
-    "srslm-nowaitdetect": "SRSLM-NoWaitDetect",
-    "srslm-no-wait-detect": "SRSLM-NoWaitDetect",
-    "srslm-waitdetectonly": "SRSLM-WaitDetectOnly",
-    "srslm-wait-detect-only": "SRSLM-WaitDetectOnly",
-    "epom-lifelong-ft": "EPOM-Lifelong-FT",
-    "epom_lifelong_ft": "EPOM-Lifelong-FT",
 }
 
 
@@ -100,8 +93,7 @@ _worker_algo_cache = {}
 
 def canonical_algorithm_name(value):
 
-    canonical = ALGORITHM_ALIASES.get(value.strip().lower())
-    return canonical if canonical in SUPPORTED_ALGORITHMS else None
+    return ALGORITHM_ALIASES.get(value.strip().lower())
 
 
 
@@ -109,11 +101,12 @@ def canonical_algorithm_name(value):
 
 
 def epom_lifelong_result_manifest(results, algorithms):
-    """Pin the EPOM-L artifact used by the public lifelong baseline."""
-    selected = (
-        ["EPOM-Lifelong-FT"]
-        if "EPOM-Lifelong-FT" in algorithms
-        else []
+    """Pin the one EPOM-L artifact shared by all lifelong hybrid rows."""
+    selected = sorted(
+        set(algorithms)
+        & {
+            "EPOM-Lifelong-FT",
+        }
     )
     if not selected:
         return None
@@ -138,7 +131,11 @@ def epom_lifelong_result_manifest(results, algorithms):
             continue
         rows_by_algorithm[algorithm] += 1
         provenance = row.get("model_provenance") or {}
-        epom = provenance
+        epom = (
+            provenance
+            if algorithm == "EPOM-Lifelong-FT"
+            else provenance.get("epom_provenance") or {}
+        )
         if epom.get("artifact_profile") != "lifelong_finetuned":
             raise RuntimeError(
                 f"{algorithm} row is missing lifelong_finetuned EPOM provenance"
@@ -174,7 +171,7 @@ def epom_lifelong_result_manifest(results, algorithms):
     unique = {json.dumps(item, sort_keys=True) for item in manifests}
     if len(unique) != 1:
         raise RuntimeError(
-            "EPOM-L rows did not use one identical artifact."
+            "Lifelong hybrids did not use one identical EPOM-L artifact."
         )
     return {
         "validated": True,
@@ -182,8 +179,6 @@ def epom_lifelong_result_manifest(results, algorithms):
         "shared_artifact": json.loads(next(iter(unique))),
         "rows_by_algorithm": rows_by_algorithm,
     }
-
-
 
 
 def srslm_contract_metadata(algorithms):
@@ -214,64 +209,6 @@ def srslm_contract_metadata(algorithms):
 
 
 
-def srslm_ablation_contract_metadata(algorithms):
-    """Describe one current-V3 wait-detector ablation."""
-    selected = [
-        name
-        for name in ("SRSLM-NoWaitDetect", "SRSLM-WaitDetectOnly")
-        if name in algorithms
-    ]
-    if not selected:
-        return None
-    if len(selected) != 1 or "SRSLM" in algorithms:
-        raise ValueError(
-            "Run each SRSLM wait-detector ablation in a separate invocation "
-            "so its artifact contract stays unambiguous."
-        )
-    algorithm = selected[0]
-    if algorithm == "SRSLM-NoWaitDetect":
-        return {
-            "strategy_kind": "hybrid_switching_ablation",
-            "algorithm": algorithm,
-            "hybrid_mode": "all_state_switcher_v3",
-            "branch_algorithms": ["CAAR", "AORePlan"],
-            "hybrid_components": {
-                "learning_branch": "CAAR",
-                "planning_branch": "AORePlan",
-                "selector": "AllStateSwitcher",
-            },
-            "action_policy": "CAAR-or-AORePlan",
-            "guide_algorithm": "AORePlan",
-            "deployment": {
-                "wait_rule": "disabled",
-                "switcher_scope": "all_states",
-                "switcher_output": "two_branch_categorical_logits",
-                "selection": "softmax_sampling",
-                "joint_conflict_prediction_enabled": False,
-                "simulator_collision_system": "block_both",
-            },
-        }
-    return {
-        "strategy_kind": "hybrid_switching_ablation",
-        "algorithm": algorithm,
-        "hybrid_mode": "aoreplan_wait_detect_only_v3",
-        "branch_algorithms": ["CAAR", "AORePlan"],
-        "hybrid_components": {
-            "learning_branch": "CAAR",
-            "planning_branch": "AORePlan",
-            "selector": "deterministic_wait_detector",
-        },
-        "action_policy": "CAAR-on-wait-otherwise-AORePlan",
-        "guide_algorithm": "AORePlan",
-        "deployment": {
-            "wait_rule": "aoreplan_wait_directly_uses_caar",
-            "switcher_scope": "none",
-            "selection": "deterministic",
-            "learned_switcher_called": False,
-            "joint_conflict_prediction_enabled": False,
-            "simulator_collision_system": "block_both",
-        },
-    }
 
 
 def quiet_model_logs():
@@ -305,20 +242,6 @@ def _has_checkpoints(path):
 
 
 
-def _find_caar_weights(main_dir):
-    root = Path(main_dir).resolve()
-    current = _find_weight_run_dir(
-        root / "weights" / "EPOM-TracePaperConvDirectCorrection-R5-500m"
-    )
-    if current is None:
-        raise FileNotFoundError(
-            "No current CAAR checkpoint was found under "
-            f"{root / 'weights' / 'EPOM-TracePaperConvDirectCorrection-R5-500m'}. "
-            "Train CAAR or pass --caar-weights-path explicitly."
-        )
-    return str(current)
-
-
 def _find_no_reweight_weights(main_dir):
     root = Path(main_dir).resolve()
     candidate = _find_weight_run_dir(root / "weights" / "NoReweight-block-1b")
@@ -339,35 +262,9 @@ def _find_switcher_weights(main_dir):
     )
     if candidate is None:
         raise FileNotFoundError(
-            "No current wait-aware SRSLM Switcher checkpoint was found under "
-            f"{root / 'weights' / 'SRSLM-switcher-wait-aware-caar-100m'}. "
-            "Train the Switcher or pass --switcher-weights-path explicitly."
+            "The selected wait-aware SRSLM Switcher checkpoint is missing."
         )
     return str(candidate)
-
-
-def _find_no_wait_detect_switcher_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = _find_weight_run_dir(
-        root / "weights" / "SRSLM-switcher-caar-nowait-100m"
-    )
-    if candidate is None:
-        raise FileNotFoundError(
-            "No independently trained SRSLM-NoWaitDetect checkpoint was "
-            "found under "
-            f"{root / 'weights' / 'SRSLM-switcher-caar-nowait-100m'}. "
-            "Train the all-state policy or pass "
-            "--no-wait-detect-switcher-weights-path explicitly."
-        )
-    return str(candidate)
-
-
-
-
-
-
-
-
 
 
 
@@ -497,6 +394,27 @@ def _project_path(main_dir, value):
     return path.resolve()
 
 
+def _load_caar_candidate_artifact(main_dir, manifest_path):
+    """Load and verify the one explicit CAAR milestone used by SRSLM."""
+
+    if manifest_path is None:
+        raise ValueError(
+            "The final SRSLM variants require --caar-candidate-manifest."
+        )
+    path = _project_path(main_dir, manifest_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"CAAR candidate manifest is missing: {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("CAAR candidate manifest must be a JSON object.")
+    from agents.switcher_caar_candidate import CaarCandidateArtifact
+
+    artifact = CaarCandidateArtifact.from_mapping(
+        payload,
+        Path(main_dir).resolve(),
+    )
+    artifact.verify_files()
+    return artifact
 
 
 _EPISODE_FRESH_ALGORITHMS = frozenset(
@@ -504,9 +422,9 @@ _EPISODE_FRESH_ALGORITHMS = frozenset(
         "CAAR",
         "NoReweight",
         "Direct",
-        "SRSLM-NoWaitDetect",
-        "SRSLM-WaitDetectOnly",
         "SRSLM",
+        "SRSLM-NoWait",
+        "SRSLM-OnlyWait",
     )
 )
 
@@ -536,16 +454,6 @@ def cache_algorithm_metadata(algorithms, requested):
     }
 
 
-def _latest_caar_checkpoint(weights_path):
-    checkpoint_dir = Path(weights_path) / "checkpoint_p0"
-    checkpoints = sorted(checkpoint_dir.glob("checkpoint_*.pth"))
-    if not checkpoints:
-        raise FileNotFoundError(
-            f"No latest CAAR checkpoint under {checkpoint_dir}."
-        )
-    return checkpoints[-1].resolve()
-
-
 def srslm_integrity_metadata(
     args,
     map_list_sha256=None,
@@ -555,23 +463,39 @@ def srslm_integrity_metadata(
 
     root = Path(args.main_dir).resolve()
     code_root = Path(__file__).resolve().parent
-    caar_weights = _project_path(
-        root,
-        args.caar_weights_path or _find_caar_weights(root),
-    )
     switcher_weights = _project_path(
         root,
         args.switcher_weights_path or _find_switcher_weights(root),
     )
-    caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    switcher_checkpoint = _latest_caar_checkpoint(switcher_weights)
+    # Hash the candidate actually bound by the Switcher, not an independently
+    # discovered latest CAAR that the deployed policy never loads.
+    serialized = json.loads((switcher_weights / "config.json").read_text(encoding="utf-8"))
+    full_config = serialized.get("full_config", serialized)
+    from agents.switcher_caar_candidate import CaarCandidateArtifact
+    from agents.switcher import Switcher
+    artifact = CaarCandidateArtifact.from_mapping(full_config.get("candidate_policy", {}), root)
+    artifact.verify_files()
+    _assert_candidate_weights(root, getattr(args, "caar_weights_path", None), artifact)
+    if getattr(args, "caar_candidate_manifest", None):
+        declared = _load_caar_candidate_artifact(root, args.caar_candidate_manifest)
+        if declared.as_dict() != artifact.as_dict():
+            raise ValueError("CAAR manifest differs from the candidate pinned by Switcher.")
+    caar_weights = artifact.weights_path
+    caar_checkpoint = artifact.checkpoint_path
+    switcher_checkpoint = Switcher._resolve_checkpoint(switcher_weights / "checkpoint_p0", "auto")
     files = {
         "caar_config": caar_weights / "config.json",
         "caar_checkpoint": caar_checkpoint,
+        "base_config": artifact.base_config_path,
+        "base_checkpoint": artifact.base_checkpoint_path,
         "switcher_config": switcher_weights / "config.json",
         "switcher_checkpoint": switcher_checkpoint,
         "run_experiments.py": code_root / "run_experiments.py",
         "agents/caar.py": code_root / "agents/caar.py",
+        "agents/epom_trace_context.py": code_root / "agents/epom_trace_context.py",
+        "agents/switcher_caar_candidate.py": code_root / "agents/switcher_caar_candidate.py",
+        "learning/epom_trace_context_actor_critic.py": code_root / "learning/epom_trace_context_actor_critic.py",
+        "learning/epom_trace_multiplier_actor_critic.py": code_root / "learning/epom_trace_multiplier_actor_critic.py",
         "agents/srslm.py": code_root / "agents/srslm.py",
         "agents/switcher.py": code_root / "agents/switcher.py",
         "agents/switcher_core.py": code_root / "agents/switcher_core.py",
@@ -618,95 +542,7 @@ def srslm_integrity_metadata(
 
 
 
-def srslm_ablation_integrity_metadata(
-    args,
-    algorithm,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Bind a V3 wait-detector ablation to its exact code and artifacts."""
-    root = Path(args.main_dir).resolve()
-    code_root = Path(__file__).resolve().parent
-    caar_weights = _project_path(
-        root,
-        args.caar_weights_path or _find_caar_weights(root),
-    )
-    caar_checkpoint = _latest_caar_checkpoint(caar_weights)
-    files = {
-        "caar_config": caar_weights / "config.json",
-        "caar_checkpoint": caar_checkpoint,
-        "run_experiments.py": code_root / "run_experiments.py",
-        "agents/caar.py": code_root / "agents/caar.py",
-        "agents/srslm_ablation.py": code_root / "agents/srslm_ablation.py",
-        "agents/switcher_core.py": code_root / "agents/switcher_core.py",
-        "agents/reverse_metrics.py": code_root / "agents/reverse_metrics.py",
-        "planning/ao_replan_algo.py": code_root / "planning/ao_replan_algo.py",
-        "planning/aoreplan_branch.py": code_root / "planning/aoreplan_branch.py",
-    }
-    switcher_weights = None
-    switcher_checkpoint = None
-    if algorithm == "SRSLM-NoWaitDetect":
-        switcher_weights = _project_path(
-            root,
-            args.no_wait_detect_switcher_weights_path
-            or _find_no_wait_detect_switcher_weights(root),
-        )
-        switcher_checkpoint = _latest_caar_checkpoint(switcher_weights)
-        files.update(
-            {
-                "switcher_config": switcher_weights / "config.json",
-                "switcher_checkpoint": switcher_checkpoint,
-                "agents/switcher.py": code_root / "agents/switcher.py",
-                "learning/encoder.py": code_root / "learning/encoder.py",
-                "learning/switcher_actor_critic.py": (
-                    code_root / "learning/switcher_actor_critic.py"
-                ),
-            }
-        )
-    if getattr(args, "map_list", None):
-        files["map_list"] = _project_path(root, args.map_list)
-    missing = [
-        f"{label}={path}"
-        for label, path in files.items()
-        if not path.is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create SRSLM ablation integrity metadata; missing "
-            + ", ".join(missing)
-        )
-    hashes = {label: _sha256_file(path) for label, path in files.items()}
-    aggregate = hashlib.sha256(
-        json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    ).hexdigest()
-    mode = (
-        "all_state_switcher_v3"
-        if algorithm == "SRSLM-NoWaitDetect"
-        else "aoreplan_wait_detect_only_v3"
-    )
-    return {
-        "strategy_kind": "hybrid_switching_ablation",
-        "algorithm": algorithm,
-        "hybrid_mode": mode,
-        "caar_weights_path": str(caar_weights),
-        "caar_checkpoint_sha256": hashes["caar_checkpoint"],
-        "switcher_weights_path": (
-            str(switcher_weights) if switcher_weights is not None else None
-        ),
-        "switcher_checkpoint_sha256": (
-            hashes.get("switcher_checkpoint")
-        ),
-        "artifact_sha256": hashes,
-        "aggregate_sha256": aggregate,
-        "map_list_sha256": (
-            map_list_sha256
-            if map_list_sha256 is not None
-            else hashes.get("map_list")
-        ),
-        "map_registry_sha256": map_registry_sha256,
-    }
+
 
 def _find_weight_run_dir(root):
     root = Path(root)
@@ -721,23 +557,6 @@ def _find_weight_run_dir(root):
         if _has_checkpoints(candidate):
             return candidate
     return None
-
-
-
-def _caar_cfg(caar_path, seed):
-
-    from agents.caar import CAARConfig
-
-
-    return CAARConfig(
-
-        path_to_weights=caar_path,
-
-        seed=seed,
-
-        checkpoint_kind="latest",
-
-    )
 
 
 
@@ -790,81 +609,147 @@ def _ao_replan_cfg(
     )
 
 
+def _assert_candidate_weights(main_dir, requested, artifact):
+    """An old CLI path may assert identity, but may not replace a pinned CAAR."""
+    if requested is not None and _project_path(main_dir, requested).resolve() != artifact.weights_path:
+        raise ValueError("--caar-weights-path differs from the hash-pinned CAAR candidate.")
+
+
 def build_algorithm(
+
     algo_name,
+
     main_dir,
+
     seed,
+
     caar_weights_path=None,
+
+    caar_candidate_manifest=None,
+
     switcher_weights_path=None,
-    no_wait_detect_switcher_weights_path=None,
+
     no_reweight_weights_path=None,
+
+
     epom_weights_path=None,
+
+
+
+
+
+
+    direct_options=None,
+
 ):
+
     algo_name = canonical_algorithm_name(algo_name) or algo_name
+    if algo_name not in SUPPORTED_ALGORITHMS:
+        raise ValueError(f"Unsupported public algorithm: {algo_name}")
+
+    if algo_name in {"CAAR", "SRSLM", "SRSLM-NoWait", "SRSLM-OnlyWait"}:
+        # Their saved relative paths and embedded candidate declaration share
+        # this checkout as their root. Do not partly redirect those identities
+        # with --main-dir while loading the frozen base from a different tree.
+        if Path(main_dir).resolve() != Path(__file__).resolve().parent:
+            raise ValueError(
+                f"{algo_name} requires --main-dir to be this source checkout. "
+                "Place its hash-pinned weights under the documented relative "
+                "paths; a separate artifact-only root is not supported."
+            )
+
 
     if algo_name == "RePlan":
+
         from agents.replan import RePlan
+
 
         return RePlan(_replan_cfg(seed))
 
+
     if algo_name == "AORePlan":
+
         from agents.ao_replan import AORePlan
+
 
         return AORePlan(_ao_replan_cfg(seed))
 
-    if algo_name in ("SRSLM-NoWaitDetect", "SRSLM-WaitDetectOnly"):
-        from agents.caar import CAARConfig
-        from agents.srslm_ablation import (
-            SRSLMNoWaitDetect,
-            SRSLMNoWaitDetectConfig,
-            SRSLMWaitDetectOnly,
-            SRSLMWaitDetectOnlyConfig,
-        )
+    if algo_name == "AORePlan-SoftNoCheck":
+        from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck
+        return AORePlanSoftNoCheck(_ao_replan_cfg(seed))
 
-        caar_config = CAARConfig(
-            path_to_weights=str(
-                _project_path(
-                    main_dir,
-                    caar_weights_path or _find_caar_weights(main_dir),
-                )
-            ),
-            checkpoint_kind="latest",
+
+
+
+    if algo_name in (
+        "SRSLM-NoWait",
+        "SRSLM-OnlyWait",
+    ):
+        from agents.srslm_caar_ablation import (
+            SRSLMNoWait,
+            SRSLMNoWaitConfig,
+            SRSLMOnlyWait,
+            SRSLMOnlyWaitConfig,
+        )
+        from agents.switcher_caar import AllStateCaarSwitcherConfig
+        from agents.switcher_caar_candidate import CaarSwitcherCandidateConfig
+
+        artifact = _load_caar_candidate_artifact(
+            main_dir,
+            caar_candidate_manifest,
+        )
+        _assert_candidate_weights(main_dir, caar_weights_path, artifact)
+        candidate = CaarSwitcherCandidateConfig(
+            path_to_weights=artifact.weights_relative,
+            milestone_checkpoint=artifact.checkpoint_relative,
+            checkpoint_sha256=artifact.checkpoint_sha256,
+            config_sha256=artifact.config_sha256,
+            base_weights_path=artifact.base_weights_relative,
+            base_checkpoint_path=artifact.base_checkpoint_relative,
+            base_checkpoint_sha256=artifact.base_checkpoint_sha256,
+            base_config_sha256=artifact.base_config_sha256,
+            seed=seed,
             device="auto",
         )
-        if algo_name == "SRSLM-WaitDetectOnly":
-            return SRSLMWaitDetectOnly(
-                SRSLMWaitDetectOnlyConfig(
-                    caar=caar_config,
-                    seed=seed,
+        if algo_name == "SRSLM-OnlyWait":
+            if switcher_weights_path is not None:
+                raise ValueError(
+                    "SRSLM-OnlyWait is deterministic and must not load "
+                    "--switcher-weights-path."
                 )
+            return SRSLMOnlyWait(
+                SRSLMOnlyWaitConfig(candidate=candidate, seed=seed, device="auto"),
+                project_root=Path(main_dir).resolve(),
             )
-
-        from agents.switcher import AllStateSwitcherConfig
-
-        return SRSLMNoWaitDetect(
-            SRSLMNoWaitDetectConfig(
-                caar=caar_config,
-                switcher=AllStateSwitcherConfig(
-                    path_to_weights=str(
-                        _project_path(
-                            main_dir,
-                            no_wait_detect_switcher_weights_path
-                            or _find_no_wait_detect_switcher_weights(main_dir),
-                        )
-                    ),
-                    checkpoint_kind="auto",
-                    device="auto",
-                    deterministic=False,
-                ),
-                seed=seed,
+        if switcher_weights_path is None:
+            raise ValueError(
+                f"{algo_name} requires the independently trained NoWait "
+                "--switcher-weights-path."
             )
+        switcher = AllStateCaarSwitcherConfig(
+            path_to_weights=str(_project_path(main_dir, switcher_weights_path)),
+            checkpoint_kind="latest",
+            deterministic=False,
+            seed=seed,
+            device="auto",
         )
+        if algo_name == "SRSLM-NoWait":
+            return SRSLMNoWait(
+                SRSLMNoWaitConfig(
+                    candidate=candidate,
+                    switcher=switcher,
+                    seed=seed,
+                    device="auto",
+                ),
+                project_root=Path(main_dir).resolve(),
+            )
+        raise ValueError(f"Unsupported SRSLM ablation: {algo_name}")
 
     if algo_name == "SRSLM":
         from agents.srslm import SRSLM, SRSLMConfig
         from agents.switcher import SwitcherConfig
 
-        return SRSLM(
+        policy = SRSLM(
             SRSLMConfig(
                 switcher=SwitcherConfig(
                     path_to_weights=str(
@@ -882,60 +767,102 @@ def build_algorithm(
             ),
             project_root=Path(main_dir).resolve(),
         )
+        _assert_candidate_weights(main_dir, caar_weights_path, policy.candidate.artifact)
+        return policy
+
+
 
     if algo_name == "EPOM-Lifelong-FT":
+
         from agents.epom import EPOM, EPOMConfig
 
         if not epom_weights_path:
             raise ValueError(
                 "EPOM-Lifelong-FT requires an explicit --epom-weights-path."
             )
+
         return EPOM(
+
             EPOMConfig(
-                path_to_weights=epom_weights_path,
+
+                path_to_weights=str(_project_path(main_dir, epom_weights_path)),
+
                 seed=seed,
+
                 device="auto",
+
                 artifact_profile="lifelong_finetuned",
+
             )
+
         )
 
+
+
+
+
+
+
+
     if algo_name == "NoReweight":
+
         from agents.caar import NoReweight, NoReweightConfig
 
         weights_path = (
             no_reweight_weights_path or _find_no_reweight_weights(main_dir)
         )
+
         return NoReweight(
+
             NoReweightConfig(
+
                 path_to_weights=weights_path,
+
                 seed=seed,
+
                 checkpoint_kind="latest",
+
                 device="auto",
+
             )
+
         )
+
 
     if algo_name == "Direct":
-        from agents.direct import Direct, DirectConfig
-
-        weights_path = (
-            no_reweight_weights_path or _find_no_reweight_weights(main_dir)
+        from agents.epom_direct_reweight import (
+            EPOMDirectReweight, EPOMDirectReweightConfig,
         )
-        return Direct(
-            DirectConfig(
-                path_to_weights=weights_path,
-                name="Direct",
-                pressure_scale=1.0,
-                seed=seed,
-                checkpoint_kind="latest",
-                device="auto",
+        if not epom_weights_path:
+            raise ValueError(
+                "Paper Direct requires the frozen EPOM-L weights via "
+                "--epom-weights-path; it is not the old NoReweight backbone."
             )
-        )
+        options = dict(direct_options or {})
+        return EPOMDirectReweight(EPOMDirectReweightConfig(
+            path_to_weights=str(_project_path(main_dir, epom_weights_path)),
+            artifact_profile="lifelong_finetuned", seed=seed, device="auto",
+            gate=options.get("gate", "always"),
+            centering_scope=options.get("centering_scope", "crop"),
+            pressure_transform=options.get("pressure_transform", "signed"),
+            pressure_cap=2.0, reweight_scale=1.0,
+        ))
+
 
     if algo_name == "CAAR":
-        from agents.caar import CAAR
+        from agents.switcher_caar_candidate import CaarSwitcherCandidate
 
-        caar_path = caar_weights_path or _find_caar_weights(main_dir)
-        return CAAR(_caar_cfg(caar_path, seed))
+        manifest = caar_candidate_manifest or str(
+            Path(main_dir).resolve() / "artifacts" / "caar_final_candidate.json"
+        )
+        artifact = _load_caar_candidate_artifact(main_dir, manifest)
+        _assert_candidate_weights(main_dir, caar_weights_path, artifact)
+        return CaarSwitcherCandidate.load(
+            artifact,
+            seed=int(seed),
+            device="auto",
+        )
+
 
     raise ValueError(f"Unsupported algorithm: {algo_name}")
 
@@ -1038,9 +965,22 @@ def validate_srslm_stats(stats):
 
 
 
-def validate_srslm_ablation_stats(algorithm, stats):
-    """Reject rows that do not implement the named V3 wait ablation."""
-    common = (
+
+
+def validate_final_srslm_ablation_stats(algorithm, stats):
+    """Validate the two retained ablations that share one CAAR candidate."""
+
+    from agents.switcher_caar import CAAR_SWITCHER_LOADER_SCHEMA
+    from agents.switcher_caar_candidate import CAAR_CANDIDATE_SCHEMA
+    from agents.switcher_core import SWITCHER_FEATURE_SCHEMA
+
+    expected_modes = {
+        "SRSLM-NoWait": "all_state_switcher_caar",
+        "SRSLM-OnlyWait": "aoreplan_wait_detect_only_caar",
+    }
+    if algorithm not in expected_modes:
+        raise ValueError(f"Unknown final SRSLM ablation {algorithm!r}.")
+    required = (
         "hybrid_mode",
         "ablation_name",
         "switch_pair",
@@ -1060,94 +1000,115 @@ def validate_srslm_ablation_stats(algorithm, stats):
         "executed_ao_count",
         "executed_caar_count",
         "aoreplan_wait_bypass_count",
-        "branch_action_agreement_count",
-        "static_astar_query_count",
         "aoreplan_commit_count",
-        "switcher_stochastic",
+        "branch_action_agreement_count",
+        "candidate_provenance",
     )
-    missing = [key for key in common if key not in stats]
+    missing = [key for key in required if key not in stats]
     if missing:
         raise RuntimeError(
             f"{algorithm} diagnostics are incomplete: " + ", ".join(missing)
         )
     total = int(stats["total_action_count"])
     choices = int(stats["switcher_choice_count"])
+    model_choices = int(stats["switcher_model_choice_count"])
     selected_ao = int(stats["selected_ao_count"])
+    model_selected_ao = int(stats["switcher_model_selected_ao_count"])
     executed_ao = int(stats["executed_ao_count"])
     executed_caar = int(stats["executed_caar_count"])
     bypasses = int(stats["aoreplan_wait_bypass_count"])
     violations = []
+    if stats["hybrid_mode"] != expected_modes[algorithm]:
+        violations.append("hybrid mode differs")
     if stats["ablation_name"] != algorithm:
-        violations.append("ablation label differs")
+        violations.append("ablation name differs")
     if stats["switch_pair"] != ["CAAR", "AORePlan"]:
         violations.append("branch names differ")
     if stats["value_predictor_loaded"] is not False:
-        violations.append("a retired value predictor was loaded")
-    if stats["switcher_feature_schema"] != "srslm_switcher_state_v3":
-        violations.append("feature schema differs")
+        violations.append("retired value predictor was loaded")
+    if stats["switcher_feature_schema"] != SWITCHER_FEATURE_SCHEMA:
+        violations.append("Switcher feature schema differs")
     if stats["joint_conflict_prediction_enabled"] is not False:
-        violations.append("retired joint-conflict prediction is active")
-    if executed_ao + executed_caar != total:
+        violations.append("retired joint conflict predictor is active")
+    if total <= 0 or executed_ao + executed_caar != total:
         violations.append("executed branch counts do not sum")
     if int(stats["aoreplan_commit_count"]) > total:
-        violations.append("AORePlan commit count exceeds total actions")
+        violations.append("AORePlan commits exceed action count")
     if int(stats["branch_action_agreement_count"]) > total:
-        violations.append("branch agreement count exceeds total actions")
+        violations.append("branch agreements exceed action count")
 
-    if algorithm == "SRSLM-NoWaitDetect":
-        if stats["hybrid_mode"] != "all_state_switcher_v3":
-            violations.append("hybrid mode differs")
+    learned = algorithm != "SRSLM-OnlyWait"
+    if learned:
         if stats["switcher_training"] != "PPO":
-            violations.append("Switcher training is not PPO")
+            violations.append("learned selector is not PPO")
         if stats["selector_kind"] != "ppo_two_branch_categorical":
-            violations.append("selector is not categorical PPO")
-        if stats["switcher_decision_scope"] != "all_states":
-            violations.append("Switcher does not cover all states")
-        if stats["wait_detection_enabled"] is not False:
-            violations.append("wait detector is still enabled")
+            violations.append("learned selector is not categorical")
         if stats["learned_switcher_called"] is not True:
             violations.append("learned Switcher was not called")
+        if stats.get("switcher_loader_schema") != CAAR_SWITCHER_LOADER_SCHEMA:
+            violations.append("wrong Switcher loader schema")
+        if stats.get("switcher_stochastic") is not True:
+            violations.append("learned Switcher is not stochastic")
+        if stats.get("switcher_weight_source_algorithm") != "SRSLM-NoWait":
+            violations.append("learned deployment did not use NoWait weights")
+        if stats.get("switcher_training_decision_scope") != "all_states":
+            violations.append("Switcher training scope is not all states")
+        if model_choices != choices or model_selected_ao != selected_ao:
+            violations.append("model and router counts differ")
+        if selected_ao != executed_ao or selected_ao > choices:
+            violations.append("selected and executed AO counts differ")
+        if stats["switcher_decision_scope"] != "all_states":
+            violations.append("NoWait did not route all states")
+        if stats["wait_detection_enabled"] is not False:
+            violations.append("NoWait still has wait detection")
         if choices != total or bypasses != 0:
-            violations.append("all-state choice accounting differs")
-        if selected_ao != executed_ao:
-            violations.append("selected and executed AORePlan counts differ")
-        if int(stats["switcher_model_choice_count"]) != total:
-            violations.append("model did not receive every state")
-        if int(stats["switcher_model_selected_ao_count"]) != selected_ao:
-            violations.append("model/router AO counts differ")
-        if stats["switcher_stochastic"] is not True:
-            violations.append("all-state Switcher is not stochastic")
+            violations.append("NoWait did not invoke the network everywhere")
         digest = str(stats.get("switcher_checkpoint_sha256", ""))
-        if len(digest) != 64 or any(
-            char not in "0123456789abcdef" for char in digest
-        ):
-            violations.append("all-state checkpoint SHA256 is invalid")
-    elif algorithm == "SRSLM-WaitDetectOnly":
-        if stats["hybrid_mode"] != "aoreplan_wait_detect_only_v3":
-            violations.append("hybrid mode differs")
-        if stats["switcher_training"] != "none":
-            violations.append("a learned Switcher was declared")
-        if stats["selector_kind"] != "deterministic_wait_detect_only":
-            violations.append("selector is not the wait detector")
-        if stats["switcher_decision_scope"] != "none":
-            violations.append("a learned decision scope was declared")
-        if stats["wait_detection_enabled"] is not True:
-            violations.append("wait detector is disabled")
-        if stats["learned_switcher_called"] is not False:
-            violations.append("learned Switcher was called")
-        if choices or selected_ao:
-            violations.append("Switcher choice counters are nonzero")
-        if int(stats["switcher_model_choice_count"]) or int(
-            stats["switcher_model_selected_ao_count"]
-        ):
-            violations.append("Switcher model counters are nonzero")
-        if executed_caar != bypasses or executed_ao + bypasses != total:
-            violations.append("deterministic wait routing differs")
-        if stats["switcher_stochastic"] is not False:
-            violations.append("deterministic ablation is marked stochastic")
+        if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+            violations.append("Switcher checkpoint SHA256 is invalid")
     else:
-        raise ValueError(f"Unknown SRSLM ablation {algorithm!r}.")
+        if stats["switcher_training"] != "none":
+            violations.append("OnlyWait unexpectedly declares training")
+        if stats["selector_kind"] != "deterministic_wait_detect_only":
+            violations.append("OnlyWait selector differs")
+        if stats["switcher_decision_scope"] != "none":
+            violations.append("OnlyWait declares a learned decision scope")
+        if stats["wait_detection_enabled"] is not True:
+            violations.append("OnlyWait disabled wait detection")
+        if stats["learned_switcher_called"] is not False:
+            violations.append("OnlyWait called a learned Switcher")
+        if any((choices, model_choices, selected_ao, model_selected_ao)):
+            violations.append("OnlyWait recorded learned choices")
+        if executed_caar != bypasses:
+            violations.append("OnlyWait CAAR executions differ from waits")
+        if stats.get("switcher_stochastic") is not False:
+            violations.append("OnlyWait is not deterministic")
 
+    candidate = stats.get("candidate_provenance") or {}
+    frozen = candidate.get("frozen_verification") or {}
+    if candidate.get("schema") != CAAR_CANDIDATE_SCHEMA:
+        violations.append("candidate provenance schema differs")
+    if frozen.get("verified") is not True or frozen.get(
+        "trainable_parameter_count"
+    ) != 0:
+        violations.append("candidate is not verified frozen")
+    artifact = candidate.get("candidate") or {}
+    if artifact.get("frozen") is not True:
+        violations.append("candidate artifact is not frozen")
+    for key in (
+        "checkpoint_sha256",
+        "config_sha256",
+        "base_checkpoint_sha256",
+        "base_config_sha256",
+    ):
+        value = str(artifact.get(key, ""))
+        if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+            violations.append(f"candidate {key} is invalid")
+        if learned:
+            if (stats.get("switcher_candidate_policy") or {}).get(key) != value:
+                violations.append(f"Switcher candidate declaration {key} differs")
+            if (stats.get("switcher_candidate_artifact") or {}).get(key) != value:
+                violations.append(f"Switcher candidate artifact {key} differs")
     for key in (
         "switcher_choice_rate",
         "selected_ao_rate",
@@ -1159,9 +1120,8 @@ def validate_srslm_ablation_stats(algorithm, stats):
         if value is None or not np.isfinite(value) or not 0.0 <= value <= 1.0:
             violations.append(f"{key} is not a probability")
     if violations:
-        raise RuntimeError(
-            f"{algorithm} contract failed: " + "; ".join(violations)
-        )
+        raise RuntimeError(f"{algorithm} contract failed: " + "; ".join(violations))
+
 
 
 
@@ -1647,20 +1607,32 @@ def run_single_experiment(task):
         task.get("cache_algorithms", False),
     )
 
-    algorithm_kwargs = {
-        "caar_weights_path": task.get("caar_weights_path"),
-        "switcher_weights_path": task.get("switcher_weights_path"),
-        "no_wait_detect_switcher_weights_path": task.get(
-            "no_wait_detect_switcher_weights_path"
-        ),
-        "no_reweight_weights_path": task.get("no_reweight_weights_path"),
-        "epom_weights_path": task.get("epom_weights_path"),
-    }
     cache_key = (
+
         algo_name,
+
         str(Path(main_dir).resolve()),
+
         seed,
-        *algorithm_kwargs.values(),
+
+        task.get("caar_weights_path"),
+
+        task.get("caar_candidate_manifest"),
+
+        task.get("switcher_weights_path"),
+
+        task.get("no_reweight_weights_path"),
+
+
+        task.get("epom_weights_path"),
+
+
+
+
+
+
+        json.dumps(task.get("direct_options") or {}, sort_keys=True),
+
     )
 
 
@@ -1677,7 +1649,28 @@ def run_single_experiment(task):
                     main_dir,
 
                     seed,
-                    **algorithm_kwargs,
+
+                    caar_weights_path=task.get("caar_weights_path"),
+
+                    caar_candidate_manifest=task.get(
+                        "caar_candidate_manifest"
+                    ),
+
+                    switcher_weights_path=task.get("switcher_weights_path"),
+
+                    no_reweight_weights_path=task.get(
+                        "no_reweight_weights_path"
+                    ),
+
+
+                    epom_weights_path=task.get("epom_weights_path"),
+
+
+
+
+
+                    direct_options=task.get("direct_options"),
+
                 )
 
             algo = _worker_algo_cache[cache_key]
@@ -1691,7 +1684,28 @@ def run_single_experiment(task):
                 main_dir,
 
                 seed,
-                **algorithm_kwargs,
+
+                caar_weights_path=task.get("caar_weights_path"),
+
+                caar_candidate_manifest=task.get(
+                    "caar_candidate_manifest"
+                ),
+
+                switcher_weights_path=task.get("switcher_weights_path"),
+
+                no_reweight_weights_path=task.get(
+                    "no_reweight_weights_path"
+                ),
+
+
+                epom_weights_path=task.get("epom_weights_path"),
+
+
+
+
+
+                direct_options=task.get("direct_options"),
+
             )
 
 
@@ -1731,7 +1745,7 @@ def run_single_experiment(task):
 
         on_target = task.get("on_target", "restart")
         is_restart = on_target == "restart"
-        is_replan = algo_name in ("RePlan", "AORePlan")
+        is_replan = algo_name in ("RePlan", "AORePlan", "AORePlan-SoftNoCheck")
 
         if hasattr(algo, "get_hybrid_stats"):
             hybrid_stats = algo.get_hybrid_stats()
@@ -1742,10 +1756,10 @@ def run_single_experiment(task):
         if algo_name == "SRSLM":
             validate_srslm_stats(hybrid_stats)
         elif algo_name in (
-            "SRSLM-NoWaitDetect",
-            "SRSLM-WaitDetectOnly",
+            "SRSLM-NoWait",
+            "SRSLM-OnlyWait",
         ):
-            validate_srslm_ablation_stats(algo_name, hybrid_stats)
+            validate_final_srslm_ablation_stats(algo_name, hybrid_stats)
         correction_stats = (
             algo.get_action_correction_stats()
             if hasattr(algo, "get_action_correction_stats")
@@ -1809,7 +1823,7 @@ def run_single_experiment(task):
                     "reverse_metric_version",
                     None,
                 )
-                if algo_name == "AORePlan":
+                if algo_name in ("AORePlan", "AORePlan-SoftNoCheck"):
                     result_record["static_astar_query_count"] = getattr(
                         algo,
                         "static_astar_query_count",
@@ -2696,15 +2710,22 @@ def build_tasks(
 
             "caar_weights_path": args.caar_weights_path,
 
-            "switcher_weights_path": args.switcher_weights_path,
-
-            "no_wait_detect_switcher_weights_path": (
-                args.no_wait_detect_switcher_weights_path
+            "caar_candidate_manifest": getattr(
+                args, "caar_candidate_manifest", None
             ),
+
+            "switcher_weights_path": args.switcher_weights_path,
 
             "no_reweight_weights_path": args.no_reweight_weights_path,
 
+
             "epom_weights_path": args.epom_weights_path,
+
+
+
+
+
+            "direct_options": getattr(args, "direct_options", None),
 
             "cache_algorithms": should_cache_algorithm(
                 algorithm,
@@ -2771,17 +2792,24 @@ def build_tasks(
 
                     "caar_weights_path": args.caar_weights_path,
 
-                    "switcher_weights_path": args.switcher_weights_path,
-
-                    "no_wait_detect_switcher_weights_path": (
-                        args.no_wait_detect_switcher_weights_path
+                    "caar_candidate_manifest": getattr(
+                        args, "caar_candidate_manifest", None
                     ),
+
+                    "switcher_weights_path": args.switcher_weights_path,
 
                     "no_reweight_weights_path": (
                         args.no_reweight_weights_path
                     ),
 
+
                     "epom_weights_path": args.epom_weights_path,
+
+
+
+
+
+                    "direct_options": getattr(args, "direct_options", None),
 
                     "cache_algorithms": should_cache_algorithm(
                         algorithm,
@@ -3184,7 +3212,10 @@ def run_experiments(
                 gate_str = ""
 
                 if result.get("learning_ratio") is not None:
-                    gate_str += f" caar={result['learning_ratio']:.1%}"
+
+                    switch_label = "caar"
+
+                    gate_str += f" {switch_label}={result['learning_ratio']:.1%}"
 
                 if result.get("planner_ratio") is not None:
 
@@ -3302,230 +3333,256 @@ def save_results(results, metadata, output_dir, filename=None):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Unified Lifelong MAPF experiment runner"
-    )
+
+    parser = argparse.ArgumentParser(description="Unified Lifelong MAPF experiment runner")
+
     parser.add_argument(
+
         "--algorithms",
+
         type=parse_algorithms,
+
         default=list(DEFAULT_ALGORITHMS),
+
         help=(
             "Comma-separated algorithms, or 'all'. "
             f"Choices: {', '.join(SUPPORTED_ALGORITHMS)}"
         ),
+
     )
+
+    parser.add_argument("--agents", type=str, default=None, help="Comma-separated agent counts, e.g. 50,100,200")
+
+    parser.add_argument("--agent-start", type=int, default=50, help="First agent count when --agents is not set")
+
+    parser.add_argument("--agent-stop", type=int, default=500, help="Last inclusive agent count when --agents is not set")
+
+    parser.add_argument("--agent-step", type=int, default=50, help="Agent count step when --agents is not set")
+
+    parser.add_argument("--workers", "--works", dest="workers", type=int, default=8, help="Parallel workers")
+
     parser.add_argument(
-        "--agents",
-        type=str,
-        default=None,
-        help="Comma-separated agent counts, e.g. 50,100,200",
-    )
-    parser.add_argument(
-        "--agent-start",
-        type=int,
-        default=50,
-        help="First agent count when --agents is not set",
-    )
-    parser.add_argument(
-        "--agent-stop",
-        type=int,
-        default=500,
-        help="Last inclusive agent count when --agents is not set",
-    )
-    parser.add_argument(
-        "--agent-step",
-        type=int,
-        default=50,
-        help="Agent count step when --agents is not set",
-    )
-    parser.add_argument(
-        "--workers",
-        "--works",
-        dest="workers",
-        type=int,
-        default=8,
-        help="Parallel workers",
-    )
-    parser.add_argument(
+
         "--obs-radius",
+
         type=int,
+
         default=None,
-        help="Override the local observation radius",
+
+        help="Override the local observation radius (default: environment configuration)",
+
     )
+
     parser.add_argument(
+
         "--cache-algorithms",
+
         action="store_true",
-        help="Reuse algorithm objects only for methods with verified reset state",
+
+        help="Reuse algorithm objects inside each worker. Faster, but less isolated between experiment tasks.",
+
     )
-    parser.add_argument(
-        "--animate",
-        action="store_true",
-        help="Generate SVG animations",
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=512,
-        help="Episode length",
-    )
+
+    parser.add_argument("--animate", action="store_true", help="Generate SVG animations")
+
+    parser.add_argument("--max-steps", type=int, default=512, help="Episode length")
+
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
+
+    parser.add_argument("--seeds", type=str, default=None, help="Comma-separated seeds, e.g. 0,1,2")
+
+    parser.add_argument("--main-dir", type=str, default="./", help="Project root directory")
+
+    parser.add_argument("--map-types", type=str, default="all", help="Comma-separated map types, or 'all'")
+
     parser.add_argument(
-        "--seeds",
-        type=str,
-        default=None,
-        help="Comma-separated seeds, e.g. 0,1,2",
-    )
-    parser.add_argument(
-        "--main-dir",
-        type=str,
-        default="./",
-        help="Project root directory",
-    )
-    parser.add_argument(
-        "--map-types",
-        type=str,
-        default="all",
-        help="Comma-separated map types, or 'all'",
-    )
-    parser.add_argument(
+
         "--map",
+
         action="append",
+
         default=[],
-        help="Override one representative map with map_type=map_name",
+
+        help="Override one representative map with map_type=map_name. Can be repeated.",
+
     )
+
+    parser.add_argument("--map-url", type=str, default=None, help="Custom map URL. Supports MovingAI .map files.")
+
+    parser.add_argument("--map-file", type=str, default=None, help="Custom local map file path.")
+
+    parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/eval.yaml)")
+
     parser.add_argument(
-        "--map-url",
-        type=str,
-        default=None,
-        help="Custom map URL; MovingAI .map files are supported",
-    )
-    parser.add_argument(
-        "--map-file",
-        type=str,
-        default=None,
-        help="Custom local map file path",
-    )
-    parser.add_argument(
-        "--map-list",
-        type=str,
-        default=None,
-        help="YAML file whose top-level keys are map names",
-    )
-    parser.add_argument(
+
         "--task-manifest",
+
         type=str,
+
         default=None,
+
         help=(
+
             "JSON manifest defining one explicit seed/start/goal assignment "
-            "per selected map; requires --map-list"
+
+            "per selected map; requires --map-list and bypasses the legacy "
+
+            "map/agent/seed Cartesian product"
+
         ),
+
     )
-    parser.add_argument(
-        "--trim-border",
-        dest="trim_border",
-        action="store_true",
-        help="Trim one-cell border from a custom map",
-    )
-    parser.add_argument(
-        "--no-trim-border",
-        dest="trim_border",
-        action="store_false",
-        help="Do not trim a custom map border",
-    )
+
+    parser.add_argument("--trim-border", dest="trim_border", action="store_true", help="Trim one-cell border from custom map")
+
+    parser.add_argument("--no-trim-border", dest="trim_border", action="store_false", help="Do not trim border from custom map")
+
     parser.set_defaults(trim_border=None)
+
     parser.add_argument(
+
         "--on-target",
+
         choices=("restart", "finish", "nothing"),
+
         default=None,
-        help="Override the POGEMA on-target mode",
+
+        help="Override Pogema on_target mode",
+
     )
+
     parser.add_argument(
+
         "--collision-system",
+
         choices=("soft", "block_both", "priority"),
+
         default="block_both",
-        help="Override the collision system",
+
+        help="Override collision system",
+
     )
+
+
     parser.add_argument(
+
         "--epom-weights-path",
+
         type=str,
+
         default=None,
-        help="EPOM-L weights directory",
+
+        help="Override EPOM weights directory",
+
+    )
+
+
+
+    parser.add_argument(
+        "--direct-gate", choices=("always", "primal3", "never"), default="always",
+        help="EPOM-L Direct gate: always (plain Direct), primal3 (policy entropy), or never (control).",
     )
     parser.add_argument(
-        "--caar-weights-path",
-        dest="caar_weights_path",
-        type=str,
-        default=None,
-        help="CAAR weights directory",
+        "--direct-centering", choices=("crop", "candidate"), default="crop",
+        help="Direct mean: all free cells of the 11x11 crop, or explicit historical five-candidate ablation.",
     )
+    parser.add_argument(
+        "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
+        help="Direct pressure transform; clipped_relu uses cap 2. Learned CAAR output is not clipped.",
+    )
+    parser.add_argument(
+
+        "--caar-weights-path",
+
+        dest="caar_weights_path",
+
+        type=str,
+
+        default=None,
+
+        help="Optional identity assertion: must match the hash-pinned CAAR candidate, never overrides it.",
+
+    )
+
     parser.add_argument(
         "--caar-candidate-manifest",
         type=str,
         default=None,
-        help="JSON declaration pinning the CAAR and frozen EPOM-L artifacts",
+        help=(
+            "JSON declaration that pins the selected CAAR milestone and its "
+            "frozen EPOM-L base for SRSLM-NoWait/OnlyWait evaluations"
+        ),
     )
+
     parser.add_argument(
         "--switcher-weights-path",
         type=str,
         default=None,
-        help="Wait-aware Switcher weights directory",
+        help="Override the Switcher weights directory",
     )
-    parser.add_argument(
-        "--no-wait-detect-switcher-weights-path",
-        type=str,
-        default=None,
-        help="All-state Switcher weights for SRSLM-NoWaitDetect",
-    )
+
     parser.add_argument(
         "--no-reweight-weights-path",
         dest="no_reweight_weights_path",
         type=str,
         default=None,
-        help="NoReweight base-policy weights directory",
+        help="Override the NoReweight weights directory",
     )
+    parser.add_argument("--output-dir", type=str, default="exp_result", help="Directory for JSON results")
+
+    parser.add_argument("--output", type=str, default=None, help="Output filename (default: experiments_TIMESTAMP.json)")
+
     parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="exp_result",
-        help="Directory for JSON results",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=None,
-        help="Output filename",
-    )
-    parser.add_argument(
+
         "--result-journal",
+
         type=str,
+
         default=None,
-        help="Append each completed tuple to an fsync-backed JSONL journal",
+
+        help=(
+
+            "Append every completed tuple to a fsync-backed JSONL journal so "
+
+            "an interrupted formal run can be resumed"
+
+        ),
+
     )
+
     parser.add_argument(
+
         "--result-journal-contract",
+
         type=str,
+
         default=None,
-        help="Lowercase SHA256 binding a journal to one frozen protocol",
+
+        help="Lowercase SHA256 binding a result journal to one frozen protocol",
+
     )
+
     parser.add_argument(
+
         "--resume-result-journal",
+
         action="store_true",
-        help="Reuse successful tuples from a matching result journal",
+
+        help="Reuse successful tuples from an existing matching result journal",
+
     )
-    parser.add_argument(
-        "--save",
-        dest="save",
-        action="store_true",
-        default=True,
-        help="Save JSON results",
-    )
-    parser.add_argument(
-        "--no-save",
-        dest="save",
-        action="store_false",
-        help="Do not save JSON results",
-    )
-    return parser.parse_args()
+
+    parser.add_argument("--save", dest="save", action="store_true", default=True, help="Save JSON results")
+
+    parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
+
+    args = parser.parse_args()
+    args.direct_options = {
+        "gate": args.direct_gate,
+        "centering_scope": args.direct_centering,
+        "pressure_transform": args.direct_transform,
+    }
+    return args
 
 
 
@@ -3589,8 +3646,7 @@ def main():
 
     algorithms = args.algorithms
     srslm_contract = srslm_contract_metadata(algorithms)
-    srslm_ablation_contract = srslm_ablation_contract_metadata(algorithms)
-    hybrid_contract = srslm_contract or srslm_ablation_contract
+    hybrid_contract = srslm_contract
 
     agent_counts = parse_agent_counts(args)
 
@@ -3712,13 +3768,6 @@ def main():
             map_list_sha256=map_list_sha256,
             map_registry_sha256=map_registry_sha256,
         )
-    elif srslm_ablation_contract is not None:
-        integrity_metadata = srslm_ablation_integrity_metadata(
-            args,
-            srslm_ablation_contract["algorithm"],
-            map_list_sha256=map_list_sha256,
-            map_registry_sha256=map_registry_sha256,
-        )
     else:
         integrity_metadata = None
 
@@ -3732,6 +3781,8 @@ def main():
         "started_at": datetime.now().isoformat(timespec="seconds"),
 
         "runtime_provenance": runtime_provenance(),
+
+
 
         "congestion_metric": {
 
@@ -3825,13 +3876,16 @@ def main():
 
         "switcher_weights_path": args.switcher_weights_path,
 
-        "no_wait_detect_switcher_weights_path": (
-            args.no_wait_detect_switcher_weights_path
-        ),
-
         "no_reweight_weights_path": args.no_reweight_weights_path,
 
+
         "epom_weights_path": args.epom_weights_path,
+
+
+
+
+
+        "direct_options": args.direct_options,
 
         "hybrid_mode": (
             hybrid_contract["hybrid_mode"]

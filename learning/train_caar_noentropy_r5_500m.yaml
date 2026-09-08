@@ -1,7 +1,7 @@
-name: EPOM-TracePaperConvDirectCorrection-R5-Smoke
+name: CAAR-NoEntropy-FromScratch-R5-500M
 
 global_settings:
-  train_dir: weights/EPOM-TracePaperConvDirectCorrection-R5-smoke
+  train_dir: weights/CAAR-noentropy-retrain
   device: gpu
   seed: 0
 
@@ -9,17 +9,17 @@ evaluation:
   env_frameskip: 1
 
 experiment_settings:
-  save_every_sec: 300
-  save_best_every_sec: 300
-  save_best_after: 100000
+  save_every_sec: 600
+  save_best_every_sec: 600
+  save_best_after: 1000000
   save_best_metric: avg_throughput
-  keep_checkpoints: 3
-  save_milestones_sec: 300
+  keep_checkpoints: 20
+  save_milestones_sec: 600
   encoder_custom: epom_trace_context
   trace_context_architecture: paper_entropy_fusion
   epom_base_weights_path: weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5
-  train_for_env_steps: 1000000
-  train_for_seconds: 86400
+  train_for_env_steps: 500000000
+  train_for_seconds: 2592000
   learning_rate: 0.0001
   lr_schedule: constant
   normalize_input: false
@@ -29,7 +29,7 @@ experiment_settings:
   encoder_extra_fc_layers: 1
   trace_rule_scale: 1.0
   trace_gate_threshold: 0.46371241
-  trace_context_learned_gate: entropy
+  trace_context_learned_gate: all
 
 async_ppo:
   experiment_summaries_interval: 20

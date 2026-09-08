@@ -15,6 +15,8 @@ from typing import Mapping, Sequence
 import numpy as np
 
 
+#: execution models this project has audited end to end
+AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
 CAAR_BRANCH = 0
 AO_BRANCH = 1
 NUM_BRANCHES = 2
@@ -154,8 +156,13 @@ class SwitcherController:
         self.after_reset()
 
     def set_grid_config(self, grid_config) -> None:
-        if getattr(grid_config, "collision_system", None) != "block_both":
-            raise ValueError("SRSLM requires collision_system='block_both'.")
+        collision_system = getattr(grid_config, "collision_system", None)
+        if collision_system not in AUDITED_COLLISION_SYSTEMS:
+            raise ValueError(
+                "SRSLM runs only under an audited execution model; received "
+                f"collision_system={collision_system!r}, audited "
+                f"{AUDITED_COLLISION_SYSTEMS}."
+            )
         self.caar.set_grid_config(grid_config)
 
     def set_env(self, env) -> None:
@@ -436,7 +443,7 @@ class AllStateSwitcherController(SwitcherController):
         return tuple(True for _ in aoreplan_actions)
 
 
-class WaitDetectOnlyController(SwitcherController):
+class OnlyWaitController(SwitcherController):
     """Use CAAR on AORePlan waits and AORePlan on every non-wait state."""
 
     selector_kind = "deterministic_wait_detect_only"
@@ -475,6 +482,6 @@ __all__ = [
     "PreparedSwitcherStep",
     "ResolvedSwitcherStep",
     "SwitcherController",
-    "WaitDetectOnlyController",
+    "OnlyWaitController",
     "build_switcher_state",
 ]

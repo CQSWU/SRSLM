@@ -47,38 +47,6 @@ from pomapf_env.wrappers import (
 
 _CUSTOM_COMPONENTS_REGISTERED = False
 
-_LEGACY_CONFIG_KEYS = {
-    'async_ppo': {
-        'num_minibatches_to_accumulate',
-        'traj_buffers_excess_ratio',
-        'reset_timeout_seconds',
-        'train_in_background_thread',
-        'learner_main_loop_num_cores',
-        'pbt_optimize_batch_size',
-        'use_cpc',
-        'cpc_forward_steps',
-        'cpc_time_subsample',
-        'cpc_forward_subsample',
-        'sampler_only',
-    },
-    'experiment_settings': {
-        'caar_freeze_backbone',
-        'encoder_type',
-        'use_spectral_norm',
-        'warm_start_from',
-    },
-    'global_settings': {
-        'experiments_root',
-        'use_wandb',
-    },
-    'evaluation': {
-        'render_action_repeat',
-        'record_to',
-        'continuous_actions_sample',
-        'eval_config',
-    },
-}
-
 
 def _patch_checkpoint_loading():
 
@@ -158,6 +126,13 @@ def make_env(env_cfg: Environment | None = None):
 def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None):
     del render_mode
 
+    if full_env_name in ('POMAPF-SRSLM-v0', 'POMAPF-SRSLM-NoWait-v0'):
+        raise RuntimeError(
+            'Switcher training requires a hash-pinned CAAR candidate. '
+            'Use train_switcher_wait_caar.py for Full or '
+            'train_switcher_nowait.py for NoWait, not generic train.py.'
+        )
+
     _ensure_patched()
 
     environment_config: Environment = Environment(**cfg.full_config['environment'])
@@ -189,39 +164,6 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
         ]
         environment_config = environment_config.copy(
             update={'grid_config': worker_grid_config}
-        )
-
-    if full_env_name in (
-        'POMAPF-SRSLM-v0',
-        'POMAPF-SRSLM-NoWaitDetect-v0',
-    ):
-        from pomapf_env.switcher_env import (
-            AllStateSwitcherEnv,
-            SwitcherEnv,
-        )
-
-        environment_class = (
-            AllStateSwitcherEnv
-            if full_env_name == 'POMAPF-SRSLM-NoWaitDetect-v0'
-            else SwitcherEnv
-        )
-
-        return environment_class(
-            grid_config=environment_config.grid_config,
-            caar_weights_path=(
-                environment_config.switcher_caar_weights_path
-            ),
-            caar_checkpoint_kind=(
-                environment_config.switcher_caar_checkpoint_kind
-            ),
-            caar_device=environment_config.switcher_caar_device,
-            max_planning_steps=(
-                environment_config.switcher_max_planning_steps
-            ),
-            team_reward_coefficient=(
-                environment_config.switcher_team_reward_coefficient
-            ),
-            feature_schema=environment_config.switcher_feature_schema,
         )
 
     env = make_env(environment_config)
@@ -328,9 +270,7 @@ def register_custom_components():
 
     global_env_registry()['POMAPF-SRSLM-v0'] = create_pogema_env
 
-    global_env_registry()[
-        'POMAPF-SRSLM-NoWaitDetect-v0'
-    ] = create_pogema_env
+    global_env_registry()['POMAPF-SRSLM-NoWait-v0'] = create_pogema_env
 
     _ensure_patched()
 
@@ -340,41 +280,10 @@ def register_custom_components():
 
 
 
-def _migrate_legacy_config(config):
-    """Translate serialized pre-cleanup configs without weakening YAML validation."""
+def validate_config(config):
     if not isinstance(config, dict):
         raise ValueError('Training config must be a mapping')
-    migrated = deepcopy(config)
-    async_config = migrated.get('async_ppo')
-    global_config = migrated.get('global_settings')
-    evaluation_config = migrated.get('evaluation')
-    is_serialized_legacy_config = (
-        isinstance(async_config, dict)
-        and 'num_minibatches_to_accumulate' in async_config
-        and isinstance(global_config, dict)
-        and 'experiments_root' in global_config
-        and isinstance(evaluation_config, dict)
-        and 'record_to' in evaluation_config
-    )
-    if not is_serialized_legacy_config:
-        return migrated
-
-    if 'ppo_epochs' in async_config:
-        async_config.setdefault('num_epochs', async_config['ppo_epochs'])
-        async_config.pop('ppo_epochs')
-
-    for section, keys in _LEGACY_CONFIG_KEYS.items():
-        section_config = migrated.get(section)
-        if not isinstance(section_config, dict):
-            continue
-        for key in keys:
-            section_config.pop(key, None)
-    return migrated
-
-
-def validate_config(config):
-
-    exp = Experiment(**_migrate_legacy_config(config))
+    exp = Experiment(**config)
     train_dir = Path(exp.global_settings.train_dir).expanduser()
     if not train_dir.is_absolute():
         train_dir = Path(__file__).resolve().parent / train_dir

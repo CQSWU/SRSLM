@@ -3,8 +3,15 @@ from sample_factory.model.actor_critic import default_make_actor_critic_func
 from sample_factory.model.encoder import default_make_encoder_func
 
 
+def _require_retained_encoder(cfg):
+    kind = getattr(cfg, 'encoder_custom', None)
+    if kind not in {None, 'pogema_residual', 'epom_finetune', 'caar',
+                    'epom_trace_context', 'switcher', 'switcher_all_state'}:
+        raise ValueError(f'Unsupported or retired encoder_custom: {kind!r}')
+
 
 def make_encoder(cfg, obs_space):
+    _require_retained_encoder(cfg)
 
     if getattr(cfg, 'encoder_custom', None) in (
         'switcher',
@@ -15,16 +22,8 @@ def make_encoder(cfg, obs_space):
 
         return SwitcherEncoder(cfg, obs_space)
 
-    if getattr(cfg, 'encoder_custom', None) == 'caar_ra_gate':
-
-        from learning.caar_ra_actor_critic import CAARRAGateEncoder
-
-        return CAARRAGateEncoder(cfg, obs_space)
-
     if getattr(cfg, 'encoder_custom', None) in (
         'pogema_residual',
-        'epom_trace',
-        'epom_trace_residual',
         'epom_trace_context',
         'epom_finetune',
     ):
@@ -39,38 +38,11 @@ def make_encoder(cfg, obs_space):
 
         return CAAREncoder(cfg, obs_space)
 
-    if getattr(cfg, 'encoder_custom', None) == 'trace_residual':
-
-        from learning.caar_encoder import CAAREncoder
-
-        return CAAREncoder(cfg, obs_space)
-
-    if getattr(cfg, 'encoder_custom', None) == 'mast':
-
-        from learning.mast_encoder import MASTEncoder
-
-        return MASTEncoder(cfg, obs_space)
-
     return default_make_encoder_func(cfg, obs_space)
 
 
 def make_actor_critic(cfg, obs_space, action_space):
-
-    if getattr(cfg, 'encoder_custom', None) == 'trace_residual':
-
-        from learning.trace_residual_actor_critic import TraceResidualActorCritic
-
-        return TraceResidualActorCritic(
-
-            global_model_factory(),
-
-            obs_space,
-
-            action_space,
-
-            cfg,
-
-        )
+    _require_retained_encoder(cfg)
 
     if getattr(cfg, 'encoder_custom', None) == 'epom_finetune':
 
@@ -120,85 +92,13 @@ def make_actor_critic(cfg, obs_space, action_space):
 
         )
 
-    if getattr(cfg, 'encoder_custom', None) == 'epom_trace_residual':
-
-        from learning.epom_trace_residual_actor_critic import (
-            EPOMTraceResidualActorCritic,
-        )
-
-        return EPOMTraceResidualActorCritic(
-            global_model_factory(), obs_space, action_space, cfg,
-        )
-
     if getattr(cfg, 'encoder_custom', None) == 'epom_trace_context':
-
-        if getattr(cfg, 'trace_context_architecture', 'context') in (
-            'multiplier',
-            'coefficient',
-            'scalar_gate',
-            'factorized_gate',
-            'entropy_scalar',
-            'entropy_direction',
-            'tiny_residual16',
-            'linear_spatial_residual',
-            'linear_gain',
-            'conv_residual64',
-            'conv_residual_linear',
-            'conv_residual32',
-            'conv_residual64_p_only',
-            'conv_residual64_hlinear_critic',
-            'conv_residual64_hmlp_critic',
-            'conv_residual64_linear_value_critic',
-            'paper_entropy_multiplier',
-            'paper_entropy_fusion',
-        ):
-
-            from learning.epom_trace_multiplier_actor_critic import (
-                EPOMTraceMultiplierActorCritic,
-            )
-
-            return EPOMTraceMultiplierActorCritic(
-                global_model_factory(), obs_space, action_space, cfg,
-            )
-
-        from learning.epom_trace_context_actor_critic import (
-            EPOMTraceContextActorCritic,
+        from learning.epom_trace_multiplier_actor_critic import (
+            EPOMTraceMultiplierActorCritic,
         )
 
-        return EPOMTraceContextActorCritic(
+        return EPOMTraceMultiplierActorCritic(
             global_model_factory(), obs_space, action_space, cfg,
-        )
-
-    if getattr(cfg, 'encoder_custom', None) == 'epom_trace':
-
-        from learning.epom_trace_actor_critic import EPOMTraceActorCritic
-
-        return EPOMTraceActorCritic(
-
-            global_model_factory(),
-
-            obs_space,
-
-            action_space,
-
-            cfg,
-
-        )
-
-    if getattr(cfg, 'encoder_custom', None) == 'caar_ra_gate':
-
-        from learning.caar_ra_actor_critic import CAARRAActorCritic
-
-        return CAARRAActorCritic(
-
-            global_model_factory(),
-
-            obs_space,
-
-            action_space,
-
-            cfg,
-
         )
 
     if getattr(cfg, 'encoder_custom', None) == 'caar' and 'tau' in obs_space.spaces:

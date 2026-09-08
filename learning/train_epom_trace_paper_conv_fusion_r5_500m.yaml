@@ -29,7 +29,6 @@ experiment_settings:
   encoder_extra_fc_layers: 1
   trace_rule_scale: 1.0
   trace_gate_threshold: 0.46371241
-  trace_context_residual_cap: 2.0
   trace_context_learned_gate: entropy
 
 async_ppo:

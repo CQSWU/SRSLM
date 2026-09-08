@@ -1,123 +1,20 @@
-"""Training environment for the SRSLM Switcher."""
+"""Shared runtime methods for the hash-pinned Switcher environments."""
 
 from __future__ import annotations
-
-from copy import deepcopy
 
 import gymnasium as gym
 import numpy as np
 
-from agents.caar import CAAR, CAARConfig
-from agents.switcher_core import (
-    AllStateSwitcherController,
-    NUM_PRIMITIVE_ACTIONS,
-    SWITCHER_COORD_DIM,
-    SWITCHER_FEATURE_SCHEMA,
-    SWITCHER_SPATIAL_SHAPE,
-    SwitcherController,
-)
-from planning.aoreplan_branch import AORePlanBranch
-from pomapf_env.env import make_pomapf
-
-
 class SwitcherEnv(gym.Env):
-    """Translate Switcher choices into CAAR/AORePlan primitive actions.
-
-    CAAR and AORePlan are frozen candidate generators.  Only the outer
-    two-action policy created by Sample Factory is trainable.
-    """
+    """Runtime base; construct CaarSwitcherEnv or CaarNoWaitSwitcherEnv."""
 
     metadata = {"render_modes": []}
-    controller_class = SwitcherController
 
-    def __init__(
-        self,
-        *,
-        grid_config,
-        caar_weights_path: str,
-        caar_checkpoint_kind: str = "latest",
-        caar_device: str = "auto",
-        max_planning_steps: int = 10_000,
-        team_reward_coefficient: float = 1.0,
-        feature_schema: str = SWITCHER_FEATURE_SCHEMA,
-    ):
-        super().__init__()
-        if feature_schema != SWITCHER_FEATURE_SCHEMA:
-            raise ValueError(
-                f"Unsupported switcher feature schema {feature_schema!r}."
-            )
-        if getattr(grid_config, "collision_system", None) != "block_both":
-            raise ValueError(
-                "Switcher training requires collision_system='block_both'."
-            )
-        if not np.isfinite(team_reward_coefficient):
-            raise ValueError("team_reward_coefficient must be finite.")
-
-        self.base_env = make_pomapf(
-            grid_config=deepcopy(grid_config),
-            with_animations=False,
+    def __init__(self, *args, **kwargs):
+        raise TypeError(
+            'SwitcherEnv is a runtime base, not a standalone environment. '
+            'Use CaarSwitcherEnv or CaarNoWaitSwitcherEnv with a pinned candidate.'
         )
-        caar = CAAR(
-            CAARConfig(
-                path_to_weights=str(caar_weights_path),
-                checkpoint_kind=caar_checkpoint_kind,
-                device=caar_device,
-                seed=int(grid_config.seed or 0),
-            )
-        )
-        for parameter in caar.ppo.parameters():
-            parameter.requires_grad_(False)
-        planner = AORePlanBranch(
-            max_steps=int(max_planning_steps),
-            seed=int(grid_config.seed or 0),
-        )
-        self.controller = self.controller_class(
-            caar,
-            planner,
-        )
-        self.team_reward_coefficient = float(team_reward_coefficient)
-        self.feature_schema = feature_schema
-        self.observation_space = gym.spaces.Dict(
-            {
-                "obs": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=SWITCHER_SPATIAL_SHAPE,
-                    dtype=np.float32,
-                ),
-                "xy": gym.spaces.Box(
-                    low=-1024.0,
-                    high=1024.0,
-                    shape=(SWITCHER_COORD_DIM,),
-                    dtype=np.float32,
-                ),
-                "target_xy": gym.spaces.Box(
-                    low=-1024.0,
-                    high=1024.0,
-                    shape=(SWITCHER_COORD_DIM,),
-                    dtype=np.float32,
-                ),
-                "caar_action": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(NUM_PRIMITIVE_ACTIONS,),
-                    dtype=np.float32,
-                ),
-                "aoreplan_action": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(NUM_PRIMITIVE_ACTIONS,),
-                    dtype=np.float32,
-                ),
-            }
-        )
-        self.action_space = gym.spaces.Discrete(2)
-        self.num_agents = int(grid_config.num_agents)
-        self.is_multiagent = True
-        self._prepared = None
-        self._last_rewards = None
-        self._last_dones = None
-        self._last_infos = None
 
     @property
     def grid_config(self):
@@ -244,10 +141,4 @@ class SwitcherEnv(gym.Env):
         return self.base_env.close()
 
 
-class AllStateSwitcherEnv(SwitcherEnv):
-    """Train a selector on every state without deterministic wait routing."""
-
-    controller_class = AllStateSwitcherController
-
-
-__all__ = ["AllStateSwitcherEnv", "SwitcherEnv"]
+__all__ = ["SwitcherEnv"]

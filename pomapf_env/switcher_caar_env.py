@@ -67,6 +67,9 @@ def switcher_observation_space() -> gym.spaces.Dict:
     )
 
 
+#: execution models this project has audited end to end
+AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
+
 class CaarSwitcherEnv(SwitcherEnv):
     """Keep the established Switcher reward/state and replace branch zero."""
 
@@ -86,14 +89,18 @@ class CaarSwitcherEnv(SwitcherEnv):
         planner_factory=AORePlanBranch,
         base_env_factory=make_pomapf,
     ):
-        # SwitcherEnv.__init__ constructs the legacy CAAR class.  Initialise
-        # its shared runtime fields directly so this environment uses exactly
-        # the milestone declared in candidate_artifact.
+        # Initialise shared runtime fields here; the base is not directly
+        # constructible. This environment owns the pinned candidate lifecycle.
         gym.Env.__init__(self)
         if feature_schema != SWITCHER_FEATURE_SCHEMA:
             raise ValueError(f"Unsupported Switcher feature schema {feature_schema!r}.")
-        if getattr(grid_config, "collision_system", None) != "block_both":
-            raise ValueError("Switcher training requires collision_system='block_both'.")
+        collision_system = getattr(grid_config, "collision_system", None)
+        if collision_system not in AUDITED_COLLISION_SYSTEMS:
+            raise ValueError(
+                "Switcher training runs only under an audited execution "
+                f"model; received {collision_system!r}, audited "
+                f"{AUDITED_COLLISION_SYSTEMS}."
+            )
         if not np.isfinite(team_reward_coefficient):
             raise ValueError("team_reward_coefficient must be finite.")
 

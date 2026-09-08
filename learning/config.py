@@ -1,10 +1,46 @@
 import multiprocessing
+from copy import deepcopy
 from typing import Any, Dict, List, Literal, Optional
 
 import numpy as np
 from pydantic import BaseModel, Extra, Field, root_validator, validator
 
 from pomapf_env.pomapf_config import POMAPFConfig
+
+# Both protocols are explicitly supported; saved configs still select one.
+AUDITED_COLLISION_SYSTEMS = ('block_both', 'soft')
+
+# Immutable checkpoint JSONs contain these former defaults. Drop them only
+# when reading saved checkpoints; new YAMLs still reject unused fields.
+OBSOLETE_SAVED_SETTINGS = frozenset({
+    'trace_residual_base_weights_path', 'trace_residual_filters',
+    'trace_residual_hidden', 'trace_residual_use_agents',
+    'trace_residual_use_base_logits', 'trace_residual_gate',
+    'trace_residual_gate_threshold', 'trace_residual_gate_temperature',
+    'trace_residual_gate_rate', 'trace_spatial_input_contract',
+    'trace_spatial_hidden_dim', 'trace_spatial_trace_view',
+    'epom_trace_num_filters', 'epom_trace_num_res_blocks',
+    'epom_trace_embedding_size', 'epom_trace_epom_feature_size',
+    'epom_trace_fusion_size', 'epom_trace_head_size',
+    'trace_context_filters', 'trace_context_embedding_size',
+    'trace_context_hidden_projection', 'trace_context_fusion_size',
+    'trace_context_head_size', 'trace_context_residual_cap',
+})
+
+
+def checkpoint_experiment_config(config):
+    """Read retained checkpoints without modifying original config files."""
+    normalized = deepcopy(config)
+    settings = normalized.get('experiment_settings', {})
+    for key in OBSOLETE_SAVED_SETTINGS:
+        settings.pop(key, None)
+    if settings.get('encoder_custom') in {
+        'pogema_residual', 'epom_finetune', 'caar', 'epom_trace_context',
+    }:
+        # An unused Switcher default leaked into early base-policy configs.
+        # Do not migrate actual Switcher configs: there it can change routing.
+        normalized.get('environment', {}).pop('switcher_rule_guard_enabled', None)
+    return normalized
 
 class AsyncPPO(BaseModel, extra=Extra.forbid):
 
@@ -146,7 +182,10 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
     reward_clip: float = 10.0
 
 
-    encoder_custom: Optional[str] = None
+    encoder_custom: Optional[Literal[
+        'pogema_residual', 'epom_finetune', 'caar', 'epom_trace_context',
+        'switcher', 'switcher_all_state',
+    ]] = None
 
     encoder_subtype: str = 'resnet_impala'
 
@@ -191,21 +230,6 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     caar_pressure_init: float = Field(0.1, ge=0.0)
 
-    # ---- stage-two trace residual (B0-B3 / G0-G3) ----
-    # The pretrained policy the residual corrects.  It is frozen during
-    # stage two, so it must be a trained CAAR-backbone checkpoint; the default
-    # is the reweight-free base, which is also the B0 control.
-    trace_residual_base_weights_path: str = Field(
-        'weights/NoReweight-block-1b/NoReweight-Block-R5-1B')
-    trace_residual_filters: int = Field(16, ge=1)
-    trace_residual_hidden: int = Field(64, ge=1)
-    trace_residual_use_agents: bool = True
-    trace_residual_use_base_logits: bool = False
-    trace_residual_gate: str = Field('none')
-    trace_residual_gate_threshold: float = Field(0.0)
-    trace_residual_gate_temperature: float = Field(0.05, gt=0.0)
-    trace_residual_gate_rate: float = Field(0.2, ge=0.0, le=1.0)
-
     # ``None`` keeps legacy checkpoints compatible: fixed Direct uses all five
     # actions, while the older contextual CAAR keeps its four movement actions.
     # New contextual runs set this explicitly to ``true``.
@@ -219,88 +243,21 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
         'normalized_linear',
     ] = 'normalized_linear'
 
-    # learned refinement of the analytic trace rule; reuses
-    # trace_residual_hidden declared above
+    # Direct baseline and CAAR entropy threshold.
     trace_rule_scale: float = Field(1.0, ge=0.0)
     trace_gate_threshold: float = Field(0.46371241)
 
-    # Contextual trace refinement. The EPOM-L backbone remains frozen; these
-    # dimensions describe the actor and independent critic trace branches.
-    trace_context_filters: int = Field(32, ge=1)
-
-    trace_context_embedding_size: int = Field(128, ge=1)
-
-    trace_context_hidden_projection: int = Field(128, ge=1)
-
-    trace_context_fusion_size: int = Field(256, ge=1)
-
-    trace_context_head_size: int = Field(128, ge=1)
-
-    trace_context_residual_cap: float = Field(2.0, gt=0.0)
-
-    # Every light architecture keeps the audited raw 11x11 trace contract.
-    # ``tiny_residual16`` and ``linear_spatial_residual`` preserve all 121
-    # trace locations and fuse them only with frozen policy probabilities and
-    # normalized entropy; neither learned path accepts a legality mask.  The
-    # v5/v6 convolutional residuals use only conv32(P), optionally followed by
-    # the five mean-centred relative action preferences.
+    # "context" is inert metadata in saved non-Trace checkpoints; it cannot
+    # instantiate a trace model. The only retained trainable branch is below.
     trace_context_architecture: Literal[
         'context',
-        'multiplier',
-        'coefficient',
-        'scalar_gate',
-        'factorized_gate',
-        'entropy_scalar',
-        'entropy_direction',
-        'tiny_residual16',
-        'linear_spatial_residual',
-        'linear_gain',
-        'conv_residual64',
-        'conv_residual_linear',
-        'conv_residual32',
-        'conv_residual64_p_only',
-        'conv_residual64_hlinear_critic',
-        'conv_residual64_hmlp_critic',
-        'conv_residual64_linear_value_critic',
-        'paper_entropy_multiplier',
         'paper_entropy_fusion',
     ] = 'context'
-
-    # v4 spatial-residual ablations.  P is always real, raw local trace;
-    # q is the frozen policy probability vector; H is its normalized entropy.
-    # The architecture names retain their frozen hidden widths: 16 for the
-    # tiny MLP and 0 for the direct linear head.  ``None`` preserves configs
-    # written before these explicit contract fields were introduced.
-    trace_spatial_input_contract: Literal[
-        'P+q+H',
-        'P+q',
-        'P+H',
-        'P-only',
-    ] = 'P+q+H'
-
-    trace_spatial_hidden_dim: Optional[Literal[0, 16]] = None
-
-    trace_spatial_trace_view: Literal[
-        'P121',
-        'center-P5',
-    ] = 'P121'
 
     trace_context_learned_gate: Literal[
         'entropy',
         'all',
     ] = 'entropy'
-
-    epom_trace_num_filters: int = Field(32, ge=1)
-
-    epom_trace_num_res_blocks: int = Field(2, ge=0)
-
-    epom_trace_embedding_size: int = Field(32, ge=1)
-
-    epom_trace_epom_feature_size: int = Field(64, ge=1)
-
-    epom_trace_fusion_size: int = Field(128, ge=1)
-
-    epom_trace_head_size: int = Field(64, ge=1)
 
     hidden_size: int = 512
 
@@ -378,7 +335,6 @@ class Environment(BaseModel, extra=Extra.forbid):
         "POMAPF-EPOM-v0",
         "POMAPF-EPOM-ST-v0",
         "POMAPF-SRSLM-v0",
-        "POMAPF-SRSLM-NoWaitDetect-v0",
         "POMAPF-SRSLM-NoWait-v0",
     ] = "POMAPF-v0"
 
@@ -475,9 +431,11 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     "EPOM fine-tuning requires on_target='restart'."
                 )
-            if grid.collision_system != 'block_both':
+            if grid.collision_system not in AUDITED_COLLISION_SYSTEMS:
                 raise ValueError(
-                    "EPOM fine-tuning requires collision_system='block_both'."
+                    'EPOM fine-tuning runs only under an audited execution '
+                    f'model; received {grid.collision_system!r}, audited '
+                    f'{AUDITED_COLLISION_SYSTEMS}.'
                 )
             if str(grid.map_name).replace('\\', '/') != 'maps/train.yaml':
                 raise ValueError(
@@ -549,39 +507,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError('EPOM fine-tuning requires a constant LR schedule.')
             return values
 
-        if settings.encoder_custom == 'epom_trace':
-            if environment is None or environment.name != 'POMAPF-EPOM-ST-v0':
-                raise ValueError(
-                    "EPOM-Trace requires environment.name='POMAPF-EPOM-ST-v0'."
-                )
-            if environment.grid_memory_obs_radius != 7:
-                raise ValueError('Official EPOM requires grid_memory_obs_radius=7.')
-            if environment.tau_radius != 5:
-                raise ValueError('EPOM-Trace experiments require tau_radius=5.')
-            normalized_keys = settings.normalize_input_keys
-            if (
-                settings.normalize_input
-                and normalized_keys
-                and 'tau' in normalized_keys
-            ):
-                raise ValueError(
-                    'EPOM-Trace pressure must not be running-normalized.'
-                )
-            if settings.hidden_size != 512:
-                raise ValueError('Official EPOM requires hidden_size=512.')
-            if settings.pogema_encoder_num_filters != 64:
-                raise ValueError('Official EPOM requires 64 encoder filters.')
-            if settings.pogema_encoder_num_res_blocks != 3:
-                raise ValueError('Official EPOM requires 3 encoder residual blocks.')
-            if settings.encoder_extra_fc_layers != 1:
-                raise ValueError('Official EPOM requires one encoder FC layer.')
-            async_ppo = values.get('async_ppo')
-            if async_ppo is None or not async_ppo.use_rnn:
-                raise ValueError('Official EPOM requires its recurrent policy.')
-            if async_ppo.rnn_type != 'gru' or async_ppo.rnn_num_layers != 1:
-                raise ValueError('Official EPOM requires a single-layer GRU.')
-            return values
-
         if settings.encoder_custom == 'epom_trace_context':
             if environment is None or environment.name != 'POMAPF-EPOM-ST-v0':
                 raise ValueError(
@@ -599,16 +524,13 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     'Paper EPOM trace-context training requires tau_radius=5 '
                     '(an 11x11 trace crop).'
                 )
-            centered_paper_architecture = (
-                settings.trace_context_architecture
-                in {'paper_entropy_multiplier', 'paper_entropy_fusion'}
-            )
-            expected_tau_raw = not centered_paper_architecture
-            if environment.tau_raw is not expected_tau_raw:
+            if settings.trace_context_architecture != 'paper_entropy_fusion':
+                raise ValueError('Only the paper_entropy_fusion CAAR architecture is retained.')
+            if environment.tau_raw is not False:
                 raise ValueError(
                     'EPOM trace-context architecture '
                     f'{settings.trace_context_architecture!r} requires '
-                    f'tau_raw={str(expected_tau_raw).lower()}.'
+                    'tau_raw=false.'
                 )
             if environment.trace_variant != 'real':
                 raise ValueError(
@@ -637,81 +559,17 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     "EPOM trace-context training requires on_target='restart'."
                 )
-            if grid.collision_system != 'block_both':
+            if grid.collision_system not in AUDITED_COLLISION_SYSTEMS:
                 raise ValueError(
-                    'EPOM trace-context training requires '
-                    "collision_system='block_both'."
+                    'EPOM trace-context training runs only under an audited '
+                    f'execution model; received {grid.collision_system!r}, '
+                    f'audited {AUDITED_COLLISION_SYSTEMS}.'
                 )
-            capacity_safe_architectures = {
-                'scalar_gate',
-                'factorized_gate',
-                'entropy_scalar',
-                'entropy_direction',
-                'tiny_residual16',
-                'linear_spatial_residual',
-                'linear_gain',
-                'conv_residual64',
-                'conv_residual_linear',
-                'conv_residual32',
-                'conv_residual64_p_only',
-                'conv_residual64_hlinear_critic',
-                'conv_residual64_hmlp_critic',
-                'conv_residual64_linear_value_critic',
-                'paper_entropy_multiplier',
-                'paper_entropy_fusion',
-            }
-            spatial_residual_architectures = {
-                'tiny_residual16',
-                'linear_spatial_residual',
-            }
-            if settings.trace_context_architecture in spatial_residual_architectures:
-                expected_hidden_dim = (
-                    16
-                    if settings.trace_context_architecture == 'tiny_residual16'
-                    else 0
-                )
-                if (
-                    settings.trace_spatial_hidden_dim is not None
-                    and settings.trace_spatial_hidden_dim != expected_hidden_dim
-                ):
-                    raise ValueError(
-                        'EPOM v4 spatial architecture '
-                        f'{settings.trace_context_architecture!r} fixes '
-                        'trace_spatial_hidden_dim='
-                        f'{expected_hidden_dim}; got '
-                        f'{settings.trace_spatial_hidden_dim}.'
-                    )
-            elif (
-                settings.trace_spatial_input_contract != 'P+q+H'
-                or settings.trace_spatial_hidden_dim is not None
-                or settings.trace_spatial_trace_view != 'P121'
-            ):
-                raise ValueError(
-                    'trace_spatial_* settings are only valid for the v4 '
-                    'tiny_residual16 and linear_spatial_residual architectures.'
-                )
-            if centered_paper_architecture:
-                if settings.trace_context_learned_gate != 'entropy':
-                    raise ValueError(
-                        'The paper entropy architectures require '
-                        "trace_context_learned_gate='entropy'."
-                    )
-                if settings.trace_gate_threshold != 0.46371241:
-                    raise ValueError(
-                        'The paper entropy architectures fix '
-                        'trace_gate_threshold=0.46371241.'
-                    )
-                if settings.trace_rule_scale != 1.0:
-                    raise ValueError(
-                        'The paper entropy architectures fix '
-                        'trace_rule_scale=1.0.'
-                    )
-            expected_map_name = (
-                'maps/train_capacity_n600.yaml'
-                if settings.trace_context_architecture
-                in capacity_safe_architectures
-                else 'maps/train.yaml'
-            )
+            if settings.trace_gate_threshold != 0.46371241:
+                raise ValueError('Paper CAAR fixes trace_gate_threshold=0.46371241.')
+            if settings.trace_rule_scale != 1.0:
+                raise ValueError('Paper CAAR fixes trace_rule_scale=1.0.')
+            expected_map_name = 'maps/train_capacity_n600.yaml'
             if str(grid.map_name).replace('\\', '/') != expected_map_name:
                 raise ValueError(
                     'EPOM trace-context architecture '
@@ -819,10 +677,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
             expected_environments = (
                 {'POMAPF-SRSLM-v0'}
                 if settings.encoder_custom == 'switcher'
-                else {
-                    'POMAPF-SRSLM-NoWaitDetect-v0',
-                    'POMAPF-SRSLM-NoWait-v0',
-                }
+                else {'POMAPF-SRSLM-NoWait-v0'}
             )
             if environment is None or environment.name not in expected_environments:
                 raise ValueError(
@@ -830,9 +685,12 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     "environment.name in "
                     f"{sorted(expected_environments)!r}."
                 )
-            if environment.grid_config.collision_system != 'block_both':
+            if environment.grid_config.collision_system not in AUDITED_COLLISION_SYSTEMS:
                 raise ValueError(
-                    "Switcher training requires collision_system='block_both'."
+                    'Switcher training runs only under an audited execution '
+                    f'model; received '
+                    f'{environment.grid_config.collision_system!r}, audited '
+                    f'{AUDITED_COLLISION_SYSTEMS}.'
                 )
             if environment.switcher_feature_schema != 'srslm_switcher_state_v3':
                 raise ValueError('Unsupported Switcher state schema.')

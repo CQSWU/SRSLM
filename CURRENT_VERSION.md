@@ -11,11 +11,14 @@ files are intentionally not committed to Git.
 | `RePlan` | Original dynamic replanning baseline |
 | `AORePlan` | RePlan plus a static-map A* check for reverse proposals |
 | `EPOM-Lifelong-FT` | Lifelong fine-tuned recurrent base policy, abbreviated EPOM-L |
-| `NoReweight` | Base-policy runner without trace correction |
-| `Direct` | Fixed capped-ReLU trace correction |
+| `NoReweight` | Historical independently trained backbone, not paper EPOM-L |
+| `Direct` | Explicit EPOM-L signed trace correction; entropy and clipped ReLU are separate options |
 | `CAAR` | Learned entropy-gated five-logit trace correction |
 | `Switcher` | Learned categorical selector between CAAR and AORePlan |
 | `SRSLM` | Wait-aware composition of CAAR, AORePlan, and Switcher |
+| `SRSLM-NoWait` | Independently trained all-state Switcher using the same CAAR |
+| `SRSLM-OnlyWait` | Deterministic wait-only ablation using the same CAAR |
+| `AORePlan-SoftNoCheck` | Standalone soft search ablation only; does not change SRSLM |
 
 ## CAAR architecture
 
@@ -63,6 +66,34 @@ weights/SRSLM-switcher-wait-aware-caar-100m/SRSLM-WaitAware-CAAR-100M
 artifacts/caar_final_candidate.json
 ```
 
+The same safe declaration is included at `configs/caar_final_candidate.json`.
+Pass it explicitly for CAAR/NoWait/OnlyWait evaluation. The archived server
+launcher uses the `artifacts/` location, so copy that one JSON there when
+using the launcher; do not copy a private artifacts directory into Git.
+
+### Independently trained ablations
+
+The no-entropy CAAR is a separate 500M training run, not the gated CAAR with
+its gate disabled during inference. Its declaration is
+`configs/caar_noentropy_candidate.json`; it uses the same EPOM-L base above.
+
+| Artifact | Frames | SHA-256 |
+| --- | ---: | --- |
+| No-entropy CAAR checkpoint | 500,015,104 | `bba7aafffe46f081da1e14b4bdafd4dc6c4a53c97c51ca7550afba7e35ea2dc4` |
+| No-entropy CAAR config | - | `b51ad91fdff118f0b95bd214db14d1b3a96d611be5ee6f5ec3de5f27b662895d` |
+| NoWait Switcher checkpoint | 100,016,128 | `222ac356ad073605d048d4fb4e1186446a28e983005439e51b34398e2a4ae905` |
+| NoWait Switcher config | - | `facb3e553530e7f47da5b6c3a83044db0d147738a94ae63c4bb2782fe270a3db` |
+
+NoWait uses the **gated** CAAR candidate, the same one used by OnlyWait and
+Full SRSLM. Its Switcher directory is
+`weights/SRSLM-switcher-caar-nowait-100m/SRSLM-NoWait-CAAR-100M`, containing
+`checkpoint_p0/checkpoint_000024418_100016128.pth` and the config above.
+The NoWait loader selects the latest regular checkpoint in that directory;
+keep the selected reproduction directory separate from new training runs,
+and verify the emitted checkpoint SHA against this table. OnlyWait has no
+Switcher checkpoint. Newly retrained models need their own identities and
+must not be labelled as these retained paper artifacts.
+
 ## Validated exact960 result
 
 Protocol: 32 held-out capacity-compatible maps; populations 100, 200, 300,
@@ -86,7 +117,12 @@ SHA-256 is
 
 The archived formal code snapshot is
 `3cd786dc58a86aa1ad982207d1788fc175e4f93e9c3658b3a7157c3056dd397f`.
-Of its 34 non-binary tracked files, 33 are byte-for-byte identical in this
-curated tree. The only deliberate difference is `run_experiments.py`, whose
-public algorithm allowlist was reduced; the retained algorithm execution and
-validation paths were not changed.
+This public tree has subsequently been curated: retired model branches were
+removed, immutable checkpoint configs are normalised on read, and the CLI now
+binds the paper's hash-pinned CAAR instead of the legacy independent model.
+It is not byte-for-byte identical to the original training snapshot.
+
+The main soft result uses the same block-trained weights and the conservative
+static-step occupancy check: mean throughput **2.644156901041667**. The
+separate AORePlan search ablation uses `AORePlan-SoftNoCheck`. Do not substitute
+that standalone rule inside SRSLM when reproducing the retained main result.

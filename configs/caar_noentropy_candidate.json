@@ -1,0 +1,14 @@
+{
+  "kind": "epom_trace_context_caar_milestone",
+  "schema": "switcher_candidate_caar_v1",
+  "weights_path": "weights/CAAR-noentropy-formal/CAAR-NoEntropy-FromScratch-R5-formal-S0-20260905",
+  "checkpoint_path": "weights/CAAR-noentropy-formal/CAAR-NoEntropy-FromScratch-R5-formal-S0-20260905/checkpoint_p0/checkpoint_000122074_500015104.pth",
+  "checkpoint_sha256": "bba7aafffe46f081da1e14b4bdafd4dc6c4a53c97c51ca7550afba7e35ea2dc4",
+  "config_sha256": "b51ad91fdff118f0b95bd214db14d1b3a96d611be5ee6f5ec3de5f27b662895d",
+  "base_weights_path": "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5",
+  "base_checkpoint_path": "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5/checkpoint_p0/checkpoint_000024418_100016128.pth",
+  "base_checkpoint_sha256": "f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2",
+  "base_config_sha256": "74c5cc0f1c5fdc0043bfcaa2e48e3be9c46c2c652f489a2b83379788e5da69b9",
+  "checkpoint_selection": "exact_milestone",
+  "frozen": true
+}
