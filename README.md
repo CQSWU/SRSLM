@@ -213,6 +213,10 @@ missing historical evidence rather than reconstructing it as if it were
 original. A completion marker or a curated source checkout alone is not a
 complete result audit. See [Reproducibility](docs/REPRODUCIBILITY.md).
 
+The completed two-rule [Switcher ablation summary](docs/SWITCHER_ABLATION_RESULTS.md)
+reports OnlyWait, NoWait and Full SRSLM, including the low-population exception
+and the distinction between separately trained configurations.
+
 ## Tests
 
 ```bash
