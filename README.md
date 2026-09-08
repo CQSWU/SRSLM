@@ -75,7 +75,8 @@ To reproduce the retained paper models, use the checkpoint files and immutable
 configs identified in [CURRENT_VERSION.md](CURRENT_VERSION.md), together with
 the public candidate declarations. This is inference-only reproduction; do not
 resume training in those artifact directories. Weights are distributed
-separately from Git.
+separately from Git. A candidate declaration records required paths and hashes;
+it does not download or install the corresponding artifacts.
 
 For CAAR, Full SRSLM, NoWait and OnlyWait, put the weight directories at their
 declared paths relative to this source checkout. `--main-dir` must be this
@@ -128,7 +129,8 @@ checkpoint hashing, and postflight validation for the audited server setup.
 The retained formal result uses 32 held-out maps, populations
 100/200/300/400/500/600, seeds 0/42/123/2024/3407, `block_both` collisions,
 lifelong `restart`, 512 steps, and observation radius 5. This is exactly 960
-map-population-seed episodes.
+map-population-seed episodes per method and execution rule. The soft comparison
+uses this same grid and the same selected block-trained weights.
 
 The validated SRSLM run contains all 960 unique finite error-free rows and has
 mean throughput **1.8608784993**. The complete artifact identities and
@@ -200,6 +202,16 @@ an explicit historical five-cell ablation, not the current paper default.
 External DCC-L provenance and redistribution limits are documented in
 [DCC-L reproduction notes](docs/DCC_L_REPRODUCTION.md). Its implementation and
 weights are not vendored into this public source tree.
+
+### Result audit boundary
+
+Audit each rule and ablation separately before adding its numbers to a table.
+Require all 960 unique, finite, error-free rows, the exact protocol and selected
+checkpoint/config identities, and the run's original source and validation
+evidence. Compare the raw rows with their journal when available; report any
+missing historical evidence rather than reconstructing it as if it were
+original. A completion marker or a curated source checkout alone is not a
+complete result audit. See [Reproducibility](docs/REPRODUCIBILITY.md).
 
 ## Tests
 
