@@ -50,6 +50,18 @@ otherpolicy/
 data/
 renders/
 
+# Only the reviewed, sanitized long-horizon release is public data.
+!/docs/data/
+/docs/data/*
+!/docs/data/long_horizon_20260908/
+/docs/data/long_horizon_20260908/*
+!/docs/data/long_horizon_20260908/B_episode_windows.csv
+!/docs/data/long_horizon_20260908/B_window_throughput.csv
+!/docs/data/long_horizon_20260908/B_window_by_population.csv
+!/docs/data/long_horizon_20260908/B_tail_comparison.csv
+!/docs/data/long_horizon_20260908/B_tail_by_population.csv
+!/docs/data/long_horizon_20260908/PROVENANCE.json
+
 # IDE and operating-system files
 .idea/
 .vscode/

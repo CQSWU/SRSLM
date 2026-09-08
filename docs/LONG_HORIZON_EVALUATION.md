@@ -2,8 +2,60 @@
 
 This experiment checks how throughput changes within longer lifelong episodes.
 It is separate from the paper's exact960 comparison and from a controlled
-runtime benchmark. Results should be reported only after every method and
-execution rule passes the complete independent audit.
+runtime benchmark. All 288 episodes have completed and passed the original
+collection audit. The released counts and summaries are below.
+
+## Completed results
+
+Mean throughput is completed goals per environment step, averaged over all
+48 episodes in each method/rule arm. These are 4,096-step results, not the
+separate 512-step exact960 comparison.
+
+| Method | `block_both` | `soft` |
+| --- | ---: | ---: |
+| EPOM-L | 1.486099 | 2.451884 |
+| CAAR | 1.586904 | 2.467250 |
+| SRSLM | 1.868739 | 2.724431 |
+
+![Non-cumulative throughput in eight 512-step windows, by rule and population](assets/B_window_throughput_both_soft.png)
+
+[Vector PDF](assets/B_window_throughput_both_soft.pdf)
+
+SRSLM has the highest overall mean under both rules. CAAR improves the
+`block_both` mean, but its overall gain under `soft` is small. At 600 agents
+under `soft`, CAAR and EPOM-L are nearly tied: 2.626567 and 2.630280.
+All six arms have a lower last-window mean than first-window mean. The
+recorded decline does not, on its own, prove that congestion caused it or
+that any method eliminates congestion.
+
+### Released data
+
+- [Episode counts](data/long_horizon_20260908/B_episode_windows.csv): 288 rows,
+  one per method/rule/map/population/seed tuple. The eight `window_*_goals`
+  columns are the actual integer goal counts. `completed_targets` is their
+  sum; `avg_throughput` is that sum divided by 4,096.
+- [Window means by population](data/long_horizon_20260908/B_window_by_population.csv):
+  the 96 points used in the figure, averaging 24 episodes per point.
+- [Pooled window means](data/long_horizon_20260908/B_window_throughput.csv):
+  48 points, averaging both populations equally.
+- [First/last-window comparison](data/long_horizon_20260908/B_tail_comparison.csv)
+  and [the same comparison by population](data/long_horizon_20260908/B_tail_by_population.csv):
+  the mean changes and counts of episodes that decreased, tied or increased.
+- [Provenance](data/long_horizon_20260908/PROVENANCE.json): selected model
+  identities, original raw/journal/audit hashes, and hashes of these public files.
+
+The four aggregate CSVs and the figures are unchanged copies of the accepted
+outputs. The episode CSV is a field-limited export, with no runtime measurements
+or machine details. Verify its complete tuple grid, integer counts, all four
+aggregates and file hashes with Python's standard library:
+
+```bash
+python scripts/verify_long_horizon_release.py
+```
+
+This public check verifies the released data and arithmetic. It does not
+re-run the private raw-journal, source-stability or runtime-environment audit;
+the provenance hashes identify that separately retained evidence.
 
 ## Protocol
 

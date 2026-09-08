@@ -217,8 +217,11 @@ The completed two-rule [Switcher ablation summary](docs/SWITCHER_ABLATION_RESULT
 reports OnlyWait, NoWait and Full SRSLM, including the low-population exception
 and the distinction between separately trained configurations.
 
-The separate [long-horizon evaluation protocol](docs/LONG_HORIZON_EVALUATION.md)
-defines the fixed-step window counts and the limits of their interpretation.
+The completed [long-horizon evaluation](docs/LONG_HORIZON_EVALUATION.md)
+includes 288 episodes, eight non-cumulative 512-step windows per episode,
+the two-rule figure and downloadable counts. SRSLM's mean throughput is
+1.868739 under `block_both` and 2.724431 under `soft`; this is a separate
+4,096-step experiment, not a runtime benchmark or the exact960 comparison.
 
 ## Tests
 

@@ -1,0 +1,164 @@
+{
+  "schema": "public_long_horizon_counts_v1",
+  "experiment": "B",
+  "original_collection_sha256": "a747ffb56051ce607eca6fc5a6dc0318957cbb7d786986796ff28e8310fc7a85",
+  "protocol": {
+    "methods": [
+      "EPOM-L",
+      "CAAR",
+      "SRSLM"
+    ],
+    "collision_systems": [
+      "block_both",
+      "soft"
+    ],
+    "maps": [
+      "mazes-s40_wc4_od30",
+      "mazes-s45_wc4_od55",
+      "random-s40_d0.15",
+      "random-s44_d0.35",
+      "sc1-TheFrozenSea",
+      "sc1-Turbo",
+      "street-Shanghai_0",
+      "street-Sydney_0"
+    ],
+    "populations": [
+      200,
+      600
+    ],
+    "seeds": [
+      0,
+      42,
+      123
+    ],
+    "max_steps": 4096,
+    "window_steps": 512,
+    "obs_radius": 5,
+    "on_target": "restart",
+    "episodes": 288,
+    "episode_windows": 2304,
+    "weights_trained_under": "block_both",
+    "caar_entropy_gate": true,
+    "srslm_static_step_occupancy_check": "enabled_under_both_rules"
+  },
+  "selected_models": {
+    "EPOM-L": {
+      "checkpoint_sha256": "f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2",
+      "config_sha256": "74c5cc0f1c5fdc0043bfcaa2e48e3be9c46c2c652f489a2b83379788e5da69b9"
+    },
+    "CAAR": {
+      "checkpoint_sha256": "497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b",
+      "config_sha256": "e76a2b238f196752ec358ce8946eb353caa3a4fe3e4df2a92cf812506d008747"
+    },
+    "Switcher": {
+      "checkpoint_sha256": "4973fa420a093e043d2aafb2340863a2be3ad7dda3362ef278a98ef8c1a75185",
+      "config_sha256": "de387d7b00f7cb0d56b11d78389d702d301a39fb33a7f3f666189c685e7c0bc6"
+    }
+  },
+  "original_arms": [
+    {
+      "method": "EPOM-L",
+      "collision_system": "block_both",
+      "episodes": 48,
+      "results_sha256": "9fb028514315783bba427054af371992ce315886b50b385167c678097ddb17c1",
+      "journal_sha256": "7939d4a4399e3938f8cc3684d403869bf5ccb5f1e779b90c7389958b778bc33b",
+      "contract_sha256": "d23ff579c1ffd210e00efa520fe4df7cc3324bc4870e7e275e380f74ad67fead",
+      "validation_sha256": "65ce659745ef00063c37f725eeafcc1fb0b205b8091ce26235eb088bae540bb9"
+    },
+    {
+      "method": "EPOM-L",
+      "collision_system": "soft",
+      "episodes": 48,
+      "results_sha256": "b8475c00a3ad560f40234b0b60d231aa29630e704e7da3dca51f5aed240b6700",
+      "journal_sha256": "d78e00a328eebd6c3129e633be8ba4e9925918dbb78c3fc35927024a31bb2380",
+      "contract_sha256": "5fff19ffaaa7c6297b2b3c9c3876be7db10c9ac92ea815d5dcab99f4d7f96d0e",
+      "validation_sha256": "6fa60998885dce505fdb6d961141e553bf009bb93081b47a102edb6dfc73c26f"
+    },
+    {
+      "method": "CAAR",
+      "collision_system": "block_both",
+      "episodes": 48,
+      "results_sha256": "54c6910a83a3ca4de5e2dfefca0eb9f53185292537d08da3d6a991b9e67c499f",
+      "journal_sha256": "acf4f0989a8d1043ab3b3c51f2b60557aebe798a07ce6bae938b536d6f0cefe1",
+      "contract_sha256": "a2c61abad1b3e4754b137b91c4a159a3a480d060b147e0c80768113f6203c58c",
+      "validation_sha256": "b7d16f0e80713a5c54e6b25d5d5a087b19820de04931a05c459e439659f31517"
+    },
+    {
+      "method": "CAAR",
+      "collision_system": "soft",
+      "episodes": 48,
+      "results_sha256": "4bba180e8c2d05abb64021c3cc61d4093caaed4abd1952b15b9ae2930c156fd9",
+      "journal_sha256": "4b57912722aa1556f963801e50e7ef93479430b3a6611351793da3d5f607954f",
+      "contract_sha256": "f7e6b3c220f12cfb331b4f35c14efe22cc69dcdb42bfc8a0f96c8d3ef02b7ec2",
+      "validation_sha256": "8ba91b840d702e1a37ad5f4b094dbd321988bd9e1424d20a2de0a5e01473bb02"
+    },
+    {
+      "method": "SRSLM",
+      "collision_system": "block_both",
+      "episodes": 48,
+      "results_sha256": "584e55e7de553c2b6e9e8d3621bf851d3cbfb4466d10d53813cd0f71ca840e68",
+      "journal_sha256": "5a51f0b797213db5e9a6805f37926efb69cd2c0364024074b47000ee70d66588",
+      "contract_sha256": "4ecaf7cfa13e63da49afb45267a633ef71e8a20381a9ac653121377aadbb299c",
+      "validation_sha256": "32a7fb362b27badb3b0e57baad31885760f2c0645de75aa5243f2354f3a74fbc"
+    },
+    {
+      "method": "SRSLM",
+      "collision_system": "soft",
+      "episodes": 48,
+      "results_sha256": "0e217e3e60127fa3c077974a3d803e44c57aef491e595789e7c085ebc8025e04",
+      "journal_sha256": "1105363ad725bec1e92178513435d50df880a330a30b06eb29fd4ab3b431def8",
+      "contract_sha256": "ca1fa13c03a5fca1c4f087518d91826a164edba73d500aeae3a8015dfe59c952",
+      "validation_sha256": "a79b8190f9efdbe5132b15b7f0739fabf0789e99b53756f93b665f36a6fde2d4"
+    }
+  ],
+  "data_sha256": {
+    "B_episode_windows.csv": "9461505c1cfe5f743c0685eedcbca7d1077039eb18dd92eba7d5ac4ef92fd9b9",
+    "B_window_throughput.csv": "ea3d6856d73c631543cae90dd69531a674fc7e001b9e39a2562c35a837ddd357",
+    "B_window_by_population.csv": "9ee3499e0adb9e4833ae23b6bd3c66743987393ab09a50df182ee53eb304a488",
+    "B_tail_comparison.csv": "78bbeadf08932631666bdd9ce0522efac563ebf7122931cfe8aa42985d348c48",
+    "B_tail_by_population.csv": "916e3dd25fbd33215cf42c45811907c103f8fc7ccfc042e194e2bae89bcf1c4f"
+  },
+  "figure_sha256": {
+    "B_window_throughput_both_soft.png": "8f4096d84c5736fa5e7bd0f72dea14daeeeae001781f35a436ad1082911a4290",
+    "B_window_throughput_both_soft.pdf": "9f99337321271e586364ba42d1d314b02da4977c013a0410b2564dd6af6956e0"
+  },
+  "means": [
+    {
+      "method": "EPOM-L",
+      "collision_system": "block_both",
+      "episodes": 48,
+      "mean_throughput": 1.4860992431640625
+    },
+    {
+      "method": "EPOM-L",
+      "collision_system": "soft",
+      "episodes": 48,
+      "mean_throughput": 2.4518839518229165
+    },
+    {
+      "method": "CAAR",
+      "collision_system": "block_both",
+      "episodes": 48,
+      "mean_throughput": 1.5869038899739583
+    },
+    {
+      "method": "CAAR",
+      "collision_system": "soft",
+      "episodes": 48,
+      "mean_throughput": 2.467249552408854
+    },
+    {
+      "method": "SRSLM",
+      "collision_system": "block_both",
+      "episodes": 48,
+      "mean_throughput": 1.8687388102213542
+    },
+    {
+      "method": "SRSLM",
+      "collision_system": "soft",
+      "episodes": 48,
+      "mean_throughput": 2.724431355794271
+    }
+  ],
+  "evidence_boundary": "The sanitized episode CSV retains only tuple identifiers, eight original integer goal counts, their sum and episode throughput. Four aggregate CSVs and two figures are byte-identical copies of the accepted outputs. Original raw/journal/contract/validation hashes identify retained private evidence, which is not included. The public checker verifies published counts and arithmetic, not private runtime or source provenance. No timing data or congestion-causation claim is released."
+}

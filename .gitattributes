@@ -1,0 +1,4 @@
+# Preserve the hash-bound release bytes on Windows and Linux checkouts.
+docs/data/long_horizon_20260908/* -text
+docs/assets/B_window_throughput_both_soft.png -text
+docs/assets/B_window_throughput_both_soft.pdf -text
