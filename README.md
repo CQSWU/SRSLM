@@ -217,6 +217,9 @@ The completed two-rule [Switcher ablation summary](docs/SWITCHER_ABLATION_RESULT
 reports OnlyWait, NoWait and Full SRSLM, including the low-population exception
 and the distinction between separately trained configurations.
 
+The separate [long-horizon evaluation protocol](docs/LONG_HORIZON_EVALUATION.md)
+defines the fixed-step window counts and the limits of their interpretation.
+
 ## Tests
 
 ```bash
@@ -233,7 +236,9 @@ uv run python -m pytest \
   tests/test_srslm_caar_ablation.py \
   tests/test_public_training_contracts.py \
   tests/test_switcher_training_entrypoints.py \
-  tests/test_runner_current_contracts.py
+  tests/test_runner_current_contracts.py \
+  tests/test_runner_window_metrics.py \
+  tests/test_runner_window_integration.py
 ```
 
 See [CURRENT_VERSION.md](CURRENT_VERSION.md) for the frozen artifact hashes and

@@ -339,6 +339,25 @@ def runtime_metric_metadata():
             "cumulative batch time when a result completed; this is not an "
             "individual run duration"
         ),
+        "policy_decision_timing_scope": "algo.act_only_perf_counter_v1",
+        "policy_decision_seconds": (
+            "sum of wall-clock durations around algo.act only; excludes reset, "
+            "environment steps, metric collection and algo.after_step; no extra "
+            "accelerator synchronization is inserted. This scope does not "
+            "establish CPU isolation or make runs comparable across hardware/load"
+        ),
+        "policy_decision_calls": "number of completed joint-action algo.act calls",
+        "policy_decision_ms_per_joint_action": (
+            "1000 * policy_decision_seconds / policy_decision_calls"
+        ),
+        "throughput_segments": {
+            "applies_to": "lifelong restart only",
+            "event": "PogemaLifeLong.was_on_goal_after_each_env_step",
+            "window_steps": 512,
+            "step_count": "actual window length; the final window may be shorter than 512",
+            "throughput": "completed goals in this non-overlapping window / step_count",
+            "cumulative_throughput": "cross-check only: completed goals so far / steps so far",
+        },
     }
 
 
@@ -1548,9 +1567,18 @@ def run_algorithm(
         dones = [False for _ in observations]
         infos = [{"is_active": True} for _ in observations]
         rewards = [0 for _ in observations]
+        decision_seconds = 0.0
+        decision_calls = 0
+        completed_targets = 0
+        previous_segment_targets = 0
+        previous_segment_end = 0
+        throughput_segments = []
         with torch.no_grad():
             while True:
+                decision_started = time.perf_counter()
                 actions = algo.act(observations, rewards, dones, infos)
+                decision_seconds += time.perf_counter() - decision_started
+                decision_calls += 1
                 pending = tracker.capture(
                     actions,
                     observations,
@@ -1561,6 +1589,10 @@ def run_algorithm(
                 observations, rewards, terminated, truncated, infos = env.step(
                     actions
                 )
+                # Same event as LifeLongAverageThroughputMetric; goals have already
+                # been reassigned here, so do not infer completion from rewards/goals.
+                if on_target == "restart":
+                    completed_targets += int(sum(env.unwrapped.was_on_goal))
                 tracker.commit(
                     pending,
                     observations,
@@ -1575,10 +1607,37 @@ def run_algorithm(
                 ]
                 results_holder.after_step(infos)
                 algo.after_step(dones)
+                if on_target == "restart" and (
+                    decision_calls % 512 == 0 or all(dones)
+                ):
+                    segment_steps = decision_calls - previous_segment_end
+                    segment_targets = completed_targets - previous_segment_targets
+                    throughput_segments.append({
+                        "start_step": previous_segment_end + 1,
+                        "end_step": decision_calls,
+                        "step_count": segment_steps,
+                        "completed_targets": segment_targets,
+                        "throughput": segment_targets / segment_steps,
+                        "cumulative_throughput": completed_targets / decision_calls,
+                    })
+                    previous_segment_end = decision_calls
+                    previous_segment_targets = completed_targets
                 if all(dones):
                     break
         results = results_holder.get_final()
         results.update(tracker.metrics())
+        results["policy_decision_seconds"] = decision_seconds
+        results["policy_decision_calls"] = decision_calls
+        results["policy_decision_ms_per_joint_action"] = (
+            1000.0 * decision_seconds / decision_calls if decision_calls else None
+        )
+        results["policy_decision_timing_scope"] = "algo.act_only_perf_counter_v1"
+        results["throughput_segments"] = throughput_segments
+        results["completed_targets_observed"] = completed_targets if on_target == "restart" else None
+        if on_target == "restart":
+            reported_targets = float(results["avg_throughput"]) * max_episode_steps
+            if not np.isfinite(reported_targets) or abs(reported_targets - completed_targets) > 1e-6:
+                raise RuntimeError("Segment goal events disagree with POGEMA throughput")
         results["algorithm"] = type(algo).__name__
         return results
     finally:
@@ -1870,6 +1929,13 @@ def run_single_experiment(task):
             "avg_throughput": None,
 
             "run_time_seconds": 0.0,
+
+            "policy_decision_seconds": None,
+            "policy_decision_calls": 0,
+            "policy_decision_ms_per_joint_action": None,
+            "policy_decision_timing_scope": "algo.act_only_perf_counter_v1",
+            "throughput_segments": [],
+            "completed_targets_observed": None,
 
             "error": str(exc),
 
