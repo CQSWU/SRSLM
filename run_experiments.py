@@ -181,7 +181,7 @@ def epom_lifelong_result_manifest(results, algorithms):
     }
 
 
-def srslm_contract_metadata(algorithms):
+def srslm_contract_metadata(algorithms, collision_system="block_both"):
     """Describe the fixed AORePlan-wait bypass and learned Switcher."""
     if "SRSLM" not in algorithms:
         return None
@@ -202,7 +202,7 @@ def srslm_contract_metadata(algorithms):
             "switcher_output": "two_branch_categorical_logits",
             "selection": "softmax_sampling",
             "joint_conflict_prediction_enabled": False,
-            "simulator_collision_system": "block_both",
+            "simulator_collision_system": collision_system,
         },
     }
 
@@ -3645,7 +3645,7 @@ def main():
 
 
     algorithms = args.algorithms
-    srslm_contract = srslm_contract_metadata(algorithms)
+    srslm_contract = srslm_contract_metadata(algorithms, args.collision_system)
     hybrid_contract = srslm_contract
 
     agent_counts = parse_agent_counts(args)

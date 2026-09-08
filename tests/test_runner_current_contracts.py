@@ -39,6 +39,25 @@ def test_learned_policies_are_always_episode_fresh():
     assert runner.should_cache_algorithm('AORePlan', True)
 
 
+@pytest.mark.parametrize('collision', ['block_both', 'soft', 'priority'])
+def test_srslm_contract_records_actual_execution_rule(collision):
+    contract = runner.srslm_contract_metadata(['SRSLM'], collision)
+    assert contract['deployment']['simulator_collision_system'] == collision
+    assert contract['deployment']['wait_rule'] == 'aoreplan_wait_directly_uses_caar'
+    assert not contract['deployment']['joint_conflict_prediction_enabled']
+    assert runner.srslm_contract_metadata(['RePlan'], collision) is None
+
+
+def test_main_supplies_selected_rule_to_srslm_contract():
+    import ast
+    module = ast.parse(inspect.getsource(runner))
+    calls = [node for node in ast.walk(module)
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+             and node.func.id == 'srslm_contract_metadata']
+    assert len(calls) == 1
+    assert ast.unparse(calls[0].args[1]) == 'args.collision_system'
+
+
 @pytest.mark.parametrize('gate,transform', [('always', 'signed'), ('primal3', 'signed'), ('primal3', 'clipped_relu')])
 def test_direct_uses_epom_l_and_explicit_crop_not_old_noreweight(gate, transform):
     with patch('agents.epom_direct_reweight.EPOMDirectReweight') as policy:
