@@ -126,6 +126,12 @@ def make_env(env_cfg: Environment | None = None):
 def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None):
     del render_mode
 
+    if full_env_name == 'POMAPF-ST-v0':
+        raise RuntimeError(
+            'POMAPF-ST-v0 is retired. NoReweight uses POMAPF-v0; '
+            'the paper CAAR uses POMAPF-EPOM-ST-v0.'
+        )
+
     if full_env_name in ('POMAPF-SRSLM-v0', 'POMAPF-SRSLM-NoWait-v0'):
         raise RuntimeError(
             'Switcher training requires a hash-pinned CAAR candidate. '
@@ -177,7 +183,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
 
     env = MatrixObservationWrapper(env)
 
-    if full_env_name in ('POMAPF-ST-v0', 'POMAPF-EPOM-ST-v0'):
+    if full_env_name == 'POMAPF-EPOM-ST-v0':
         is_trace_context = (
             getattr(cfg, 'encoder_custom', None) == 'epom_trace_context'
         )
@@ -261,8 +267,6 @@ def register_custom_components():
 
 
     global_env_registry()['POMAPF-v0'] = create_pogema_env
-
-    global_env_registry()['POMAPF-ST-v0'] = create_pogema_env
 
     global_env_registry()['POMAPF-EPOM-v0'] = create_pogema_env
 

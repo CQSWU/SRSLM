@@ -3,15 +3,20 @@ from sample_factory.model.actor_critic import default_make_actor_critic_func
 from sample_factory.model.encoder import default_make_encoder_func
 
 
-def _require_retained_encoder(cfg):
+def _require_retained_encoder(cfg, obs_space=None):
     kind = getattr(cfg, 'encoder_custom', None)
     if kind not in {None, 'pogema_residual', 'epom_finetune', 'caar',
                     'epom_trace_context', 'switcher', 'switcher_all_state'}:
         raise ValueError(f'Unsupported or retired encoder_custom: {kind!r}')
+    if kind == 'caar' and obs_space is not None and 'tau' in obs_space.spaces:
+        raise ValueError(
+            'The caar+tau actor is retired. The retained caar encoder is '
+            'the no-tau NoReweight backbone; use epom_trace_context for CAAR.'
+        )
 
 
 def make_encoder(cfg, obs_space):
-    _require_retained_encoder(cfg)
+    _require_retained_encoder(cfg, obs_space)
 
     if getattr(cfg, 'encoder_custom', None) in (
         'switcher',
@@ -42,7 +47,7 @@ def make_encoder(cfg, obs_space):
 
 
 def make_actor_critic(cfg, obs_space, action_space):
-    _require_retained_encoder(cfg)
+    _require_retained_encoder(cfg, obs_space)
 
     if getattr(cfg, 'encoder_custom', None) == 'epom_finetune':
 
@@ -99,22 +104,6 @@ def make_actor_critic(cfg, obs_space, action_space):
 
         return EPOMTraceMultiplierActorCritic(
             global_model_factory(), obs_space, action_space, cfg,
-        )
-
-    if getattr(cfg, 'encoder_custom', None) == 'caar' and 'tau' in obs_space.spaces:
-
-        from learning.caar_actor_critic import CAARActorCritic
-
-        return CAARActorCritic(
-
-            global_model_factory(),
-
-            obs_space,
-
-            action_space,
-
-            cfg,
-
         )
 
     return default_make_actor_critic_func(cfg, obs_space, action_space)

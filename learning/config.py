@@ -25,6 +25,14 @@ OBSOLETE_SAVED_SETTINGS = frozenset({
     'trace_context_filters', 'trace_context_embedding_size',
     'trace_context_hidden_projection', 'trace_context_fusion_size',
     'trace_context_head_size', 'trace_context_residual_cap',
+    # Serialized defaults from the retired caar+tau actor. They are inert in
+    # the retained NoReweight, EPOM-L, CAAR and Switcher checkpoints.
+    'caar_tau_num_filters', 'caar_tau_num_conv_layers',
+    'caar_tau_num_res_blocks', 'caar_tau_hidden_size',
+    'caar_learn_residual', 'caar_contextual_pressure',
+    'caar_pressure_head_mode', 'caar_pressure_output_transform',
+    'caar_pressure_cap', 'caar_pressure_init', 'caar_reweight_wait_action',
+    'trace_correction_mode',
 })
 
 
@@ -204,44 +212,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     pogema_encoder_num_res_blocks: int = Field(3, ge=0)
 
-    caar_tau_num_filters: int = 8
-
-    caar_tau_num_conv_layers: int = 1
-
-    caar_tau_num_res_blocks: int = 0
-
-    caar_tau_hidden_size: int = 0
-
-    caar_learn_residual: bool = True
-
-    caar_contextual_pressure: bool = False
-
-    caar_pressure_head_mode: Literal[
-        'legacy_multiplier',
-        'direct_pressure',
-    ] = 'legacy_multiplier'
-
-    caar_pressure_output_transform: Literal[
-        'clipped_relu',
-        'identity',
-    ] = 'clipped_relu'
-
-    caar_pressure_cap: float = Field(2.0, gt=0.0)
-
-    caar_pressure_init: float = Field(0.1, ge=0.0)
-
-    # ``None`` keeps legacy checkpoints compatible: fixed Direct uses all five
-    # actions, while the older contextual CAAR keeps its four movement actions.
-    # New contextual runs set this explicitly to ``true``.
-    caar_reweight_wait_action: Optional[bool] = None
-
     epom_base_weights_path: str = 'weights/EPOM/EPOM'
-
-    trace_correction_mode: Literal[
-        'raw_linear',
-        'raw_smooth',
-        'normalized_linear',
-    ] = 'normalized_linear'
 
     # Direct baseline and CAAR entropy threshold.
     trace_rule_scale: float = Field(1.0, ge=0.0)
@@ -331,7 +302,6 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     name: Literal[
         "POMAPF-v0",
-        "POMAPF-ST-v0",
         "POMAPF-EPOM-v0",
         "POMAPF-EPOM-ST-v0",
         "POMAPF-SRSLM-v0",
@@ -726,41 +696,10 @@ class Experiment(BaseModel, extra=Extra.forbid):
         if settings.encoder_custom != 'caar':
             return values
 
-        normalized_keys = settings.normalize_input_keys
-        if (
-            settings.normalize_input
-            and normalized_keys
-            and 'tau' in normalized_keys
-        ):
+        if environment is None or environment.name != 'POMAPF-v0':
             raise ValueError(
-                'CAAR tau must not be running-normalized because its signed '
-                'pressure values are applied directly to action logits.'
-            )
-        if settings.caar_contextual_pressure and not settings.caar_learn_residual:
-            raise ValueError(
-                'caar_contextual_pressure requires caar_learn_residual=true.'
-            )
-        if settings.caar_pressure_head_mode == 'direct_pressure':
-            if not settings.caar_contextual_pressure:
-                raise ValueError(
-                    f'{settings.caar_pressure_head_mode} requires '
-                    'caar_contextual_pressure=true.'
-                )
-            if settings.caar_reweight_wait_action is not True:
-                raise ValueError(
-                    f'{settings.caar_pressure_head_mode} must reweight all five '
-                    'actions; set '
-                    'caar_reweight_wait_action=true.'
-                )
-        if (
-            environment is not None
-            and environment.name == 'POMAPF-ST-v0'
-            and settings.caar_learn_residual
-            and not settings.caar_contextual_pressure
-        ):
-            raise ValueError(
-                'Legacy CAAR residual mode is retired; use the current CAAR '
-                'configuration (both flags true).'
+                "The retained caar encoder is NoReweight and requires "
+                "environment.name='POMAPF-v0' without tau."
             )
         return values
 
