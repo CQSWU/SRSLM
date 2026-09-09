@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import agents.srslm_caar_ablation as module
+import agents.srslm_arpe_ablation as module
 
 
 class _Candidate:

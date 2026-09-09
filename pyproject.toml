@@ -38,7 +38,7 @@ packages = [
 py-modules = [
     "run_experiments",
     "train",
-    "train_switcher_wait_caar",
+    "train_switcher_wait_arpe",
     "train_switcher_nowait",
 ]
 

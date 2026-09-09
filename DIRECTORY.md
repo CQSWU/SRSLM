@@ -14,26 +14,26 @@ binaries, and third-party repositories stay outside Git.
 | `agents/direct.py` | Historical independent-backbone fixed reweighting |
 | `agents/epom_direct_reweight.py` | Paper EPOM-L Direct, with explicit entropy/transform/centring options |
 | `agents/ao_replan_soft_ablation.py` | Standalone soft search exception; not used inside SRSLM |
-| `agents/epom_trace_context.py` | Current CAAR inference adapter |
+| `agents/epom_trace_context.py` | Current ARPE inference adapter |
 | `learning/epom_trace_multiplier_actor_critic.py` | Current learned trace branch and independent critic |
-| `agents/switcher_caar_candidate.py` | Hash-pinned frozen CAAR candidate loader |
+| `agents/arpe.py` | Hash-pinned frozen ARPE candidate loader |
 | `agents/switcher_core.py` | Shared wait-aware routing and Switcher state construction |
 | `agents/switcher.py` | Switcher checkpoint loader and inference |
 | `learning/switcher_actor_critic.py` | Feed-forward two-branch actor-critic |
 | `learning/switcher_learner_patch.py` | PPO masking for states where Switcher acts |
-| `pomapf_env/switcher_caar_env.py` | Wait-aware Switcher training environment |
+| `pomapf_env/switcher_arpe_env.py` | Wait-aware Switcher training environment |
 | `agents/srslm.py` | Deployed SRSLM composition |
-| `agents/srslm_caar_ablation.py` | NoWait and OnlyWait with the paper's pinned CAAR |
-| `agents/switcher_caar.py` | Independently trained NoWait Switcher loader |
+| `agents/srslm_arpe_ablation.py` | NoWait and OnlyWait with the paper's pinned ARPE |
+| `agents/switcher_arpe.py` | Independently trained NoWait Switcher loader |
 | `run_experiments.py` | Evaluation runner with a restricted public method allowlist |
 | `train.py` | Shared Sample Factory training entry point |
-| `train_switcher_wait_caar.py` | Wait-aware Switcher training entry point |
+| `train_switcher_wait_arpe.py` | Wait-aware Switcher training entry point |
 | `train_switcher_nowait.py` | Independently trained all-state Switcher entry point |
-| `configs/caar_final_candidate.json` | Public path-relative CAAR/base checkpoint identities |
-| `learning/*.yaml` | Current EPOM-L, CAAR, and Switcher smoke/formal recipes |
+| `configs/arpe_final_candidate.json` | Public path-relative ARPE/base checkpoint identities |
+| `learning/*.yaml` | Current EPOM-L, ARPE, and Switcher smoke/formal recipes |
 | `maps/eval_capacity_intersection_n600.yaml` | Exact960 32-map list |
-| `scripts/run_srslm_wait_aware_caar_100m_exact960_server1.sh` | Hash-pinned formal SRSLM launcher |
-| `scripts/validate_srslm_wait_aware_caar_100m_exact960.py` | Formal result and artifact validator |
+| `scripts/run_srslm_wait_aware_arpe_100m_exact960_server1.sh` | Hash-pinned formal SRSLM launcher |
+| `scripts/validate_srslm_wait_aware_arpe_100m_exact960.py` | Formal result and artifact validator |
 | `tests/` | Focused regression and artifact-contract tests |
 
 The old dual absolute-return-estimator selector and its data-collection,

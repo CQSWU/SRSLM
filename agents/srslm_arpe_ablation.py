@@ -1,4 +1,4 @@
-"""Final SRSLM wait ablations using one selected CAAR and NoWait checkpoint."""
+"""Final SRSLM wait ablations using one selected ARPE and NoWait checkpoint."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from typing import Callable, Literal
 import numpy as np
 from pydantic import Extra, Field
 
-from agents.switcher_caar import AllStateCaarSwitcher, AllStateCaarSwitcherConfig
-from agents.switcher_caar_candidate import (
-    CAAR_CANDIDATE_LABEL,
-    CaarCandidateArtifact,
-    CaarSwitcherCandidate,
-    CaarSwitcherCandidateConfig,
+from agents.switcher_arpe import AllStateArpeSwitcher, AllStateArpeSwitcherConfig
+from agents.arpe import (
+    ARPE_CANDIDATE_LABEL,
+    ArpeCandidateArtifact,
+    ARPE,
+    ARPEConfig,
 )
 from agents.switcher_core import (
     AllStateSwitcherController,
@@ -30,19 +30,19 @@ ONLY_WAIT_MODE = "aoreplan_wait_detect_only_caar"
 
 class SRSLMNoWaitConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["SRSLM-NoWait"] = "SRSLM-NoWait"
-    candidate: CaarSwitcherCandidateConfig
-    switcher: AllStateCaarSwitcherConfig
+    candidate: ARPEConfig
+    switcher: AllStateArpeSwitcherConfig
     max_planning_steps: int = Field(10_000, gt=0)
 
 
 class SRSLMOnlyWaitConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["SRSLM-OnlyWait"] = "SRSLM-OnlyWait"
-    candidate: CaarSwitcherCandidateConfig
+    candidate: ARPEConfig
     max_planning_steps: int = Field(10_000, gt=0)
 
 
 def _frozen_candidate(cfg, project_root: Path, factory: Callable):
-    artifact = CaarCandidateArtifact.from_config(cfg.candidate, project_root)
+    artifact = ArpeCandidateArtifact.from_config(cfg.candidate, project_root)
     candidate = factory(
         artifact,
         seed=int(cfg.seed or 0),
@@ -79,9 +79,9 @@ class SRSLMNoWait(_BaseDeployment):
         cfg: SRSLMNoWaitConfig,
         *,
         project_root: Path | None = None,
-        candidate_factory: Callable = CaarSwitcherCandidate.load,
+        candidate_factory: Callable = ARPE.load,
         planner_factory: Callable = AORePlanBranch,
-        switcher_factory: Callable = AllStateCaarSwitcher,
+        switcher_factory: Callable = AllStateArpeSwitcher,
     ):
         self.cfg = cfg
         root = (
@@ -99,7 +99,7 @@ class SRSLMNoWait(_BaseDeployment):
         if candidate_artifact is None or switcher_artifact is None:
             raise RuntimeError("NoWait requires both candidate artifact declarations.")
         if candidate_artifact.as_dict() != switcher_artifact.as_dict():
-            raise RuntimeError("NoWait CAAR differs from the candidate pinned by its Switcher.")
+            raise RuntimeError("NoWait ARPE differs from the candidate pinned by its Switcher.")
         planner = planner_factory(max_steps=cfg.max_planning_steps, seed=cfg.seed)
         self.controller = AllStateSwitcherController(self.candidate, planner)
         self.device = getattr(self.candidate, "device", cfg.device)
@@ -117,7 +117,7 @@ class SRSLMNoWait(_BaseDeployment):
         result = {
             "hybrid_mode": NO_WAIT_MODE,
             "ablation_name": "SRSLM-NoWait",
-            "switch_pair": [CAAR_CANDIDATE_LABEL, "AORePlan"],
+            "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
             "switcher_training": "PPO",
             "switcher_weight_source_algorithm": "SRSLM-NoWait",
             "switcher_training_decision_scope": "all_states",
@@ -130,14 +130,14 @@ class SRSLMNoWait(_BaseDeployment):
 
 
 class SRSLMOnlyWait(_BaseDeployment):
-    """Use CAAR on AORePlan waits and AORePlan on every non-wait state."""
+    """Use ARPE on AORePlan waits and AORePlan on every non-wait state."""
 
     def __init__(
         self,
         cfg: SRSLMOnlyWaitConfig,
         *,
         project_root: Path | None = None,
-        candidate_factory: Callable = CaarSwitcherCandidate.load,
+        candidate_factory: Callable = ARPE.load,
         planner_factory: Callable = AORePlanBranch,
     ):
         self.cfg = cfg
@@ -162,7 +162,7 @@ class SRSLMOnlyWait(_BaseDeployment):
         result = {
             "hybrid_mode": ONLY_WAIT_MODE,
             "ablation_name": "SRSLM-OnlyWait",
-            "switch_pair": [CAAR_CANDIDATE_LABEL, "AORePlan"],
+            "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
             "switcher_training": "none",
             "value_predictor_loaded": False,
             "switcher_model_choice_count": 0,

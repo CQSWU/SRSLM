@@ -27,7 +27,7 @@ from agents.switcher_core import (
     SWITCHER_COORD_DIM,
     SWITCHER_SPATIAL_SHAPE,
 )
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from agents.utils_agents import AlgoBase
 from train import register_custom_components, validate_config
 
@@ -43,7 +43,7 @@ class SwitcherConfig(AlgoBase, extra=Extra.forbid):
 
 
 class Switcher:
-    """Choose between CAAR and AORePlan for non-wait AORePlan actions."""
+    """Choose between ARPE and AORePlan for non-wait AORePlan actions."""
 
     expected_encoder_custom = "switcher"
     allow_aoreplan_wait = False
@@ -64,7 +64,7 @@ class Switcher:
         candidate_artifact = None
         if declaration is not None:
             project_root = Path(__file__).resolve().parents[1]
-            candidate_artifact = CaarCandidateArtifact.from_mapping(
+            candidate_artifact = ArpeCandidateArtifact.from_mapping(
                 declaration,
                 project_root,
             )

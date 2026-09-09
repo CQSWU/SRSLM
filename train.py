@@ -105,7 +105,7 @@ def _patch_checkpoint_loading():
             f'Could not load checkpoint after 3 attempts: {latest_checkpoint}'
         ) from last_error
 
-    patched._caar_checkpoint_patch = True
+    patched._arpe_checkpoint_patch = True
 
     Learner.load_checkpoint = staticmethod(patched)
 
@@ -129,13 +129,13 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
     if full_env_name == 'POMAPF-ST-v0':
         raise RuntimeError(
             'POMAPF-ST-v0 is retired. NoReweight uses POMAPF-v0; '
-            'the paper CAAR uses POMAPF-EPOM-ST-v0.'
+            'the paper ARPE uses POMAPF-EPOM-ST-v0.'
         )
 
     if full_env_name in ('POMAPF-SRSLM-v0', 'POMAPF-SRSLM-NoWait-v0'):
         raise RuntimeError(
-            'Switcher training requires a hash-pinned CAAR candidate. '
-            'Use train_switcher_wait_caar.py for Full or '
+            'Switcher training requires a hash-pinned ARPE candidate. '
+            'Use train_switcher_wait_arpe.py for Full or '
             'train_switcher_nowait.py for NoWait, not generic train.py.'
         )
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the final 100M wait-aware CAAR Switcher exact960 run."""
+"""Validate the final 100M wait-aware ARPE Switcher exact960 run."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ PROJECT_IMPORT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_IMPORT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_IMPORT_ROOT))
 
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from run_experiments import validate_srslm_stats
 from scripts.switcher_artifact_contract import latest_regular_checkpoint, sha256_file
 from scripts.validate_srslm_wait_ablation_exact960 import (
@@ -47,10 +47,10 @@ EXPECTED_SWITCHER_CONFIG_SHA256 = (
 EXPECTED_TRAINING_VALIDATION_SHA256 = (
     "b326895585ba64ef7842003dde9cd2edf26824a4b578cdf451dd57e4a01f26f1"
 )
-EXPECTED_CAAR_CHECKPOINT_SHA256 = (
+EXPECTED_ARPE_CHECKPOINT_SHA256 = (
     "497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b"
 )
-EXPECTED_CAAR_CONFIG_SHA256 = (
+EXPECTED_ARPE_CONFIG_SHA256 = (
     "e76a2b238f196752ec358ce8946eb353caa3a4fe3e4df2a92cf812506d008747"
 )
 EXPECTED_BASE_CHECKPOINT_SHA256 = (
@@ -94,7 +94,7 @@ def validate_training(
     weights_dir: Path,
     training_validation_path: Path,
     candidate_manifest_path: Path,
-) -> tuple[dict, dict, CaarCandidateArtifact]:
+) -> tuple[dict, dict, ArpeCandidateArtifact]:
     require(
         sha256_file(training_validation_path) == EXPECTED_TRAINING_VALIDATION_SHA256,
         "Training certificate SHA256 differs.",
@@ -117,7 +117,7 @@ def validate_training(
         "wait_detection_enabled": True,
         "actor_training_scope": "aoreplan_nonwait_only",
         "critic_training_scope": "all_valid_states",
-        "branch_0": "CAAR",
+        "branch_0": "CAAR",  # Literal identity in this SHA-pinned historical certificate.
         "branch_1": "AORePlan",
     }
     require(contract == expected_contract, "Training routing contract differs.")
@@ -152,17 +152,17 @@ def validate_training(
     )
     config = read_json(config_path)
     declaration = (config.get("full_config") or {}).get("candidate_policy")
-    require(isinstance(declaration, dict), "Switcher has no pinned CAAR declaration.")
+    require(isinstance(declaration, dict), "Switcher has no pinned ARPE declaration.")
     require(
         sha256_file(candidate_manifest_path) == EXPECTED_CANDIDATE_MANIFEST_SHA256,
-        "CAAR candidate manifest SHA256 differs.",
+        "ARPE candidate manifest SHA256 differs.",
     )
     manifest = read_json(candidate_manifest_path)
     require(manifest == declaration, "Candidate manifest differs from the saved Switcher.")
-    artifact = CaarCandidateArtifact.from_mapping(declaration, project_root)
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, project_root)
     verified = artifact.verify_files()
-    require(artifact.checkpoint_sha256 == EXPECTED_CAAR_CHECKPOINT_SHA256, "CAAR checkpoint differs.")
-    require(artifact.config_sha256 == EXPECTED_CAAR_CONFIG_SHA256, "CAAR config differs.")
+    require(artifact.checkpoint_sha256 == EXPECTED_ARPE_CHECKPOINT_SHA256, "ARPE checkpoint differs.")
+    require(artifact.config_sha256 == EXPECTED_ARPE_CONFIG_SHA256, "ARPE config differs.")
     require(artifact.base_checkpoint_sha256 == EXPECTED_BASE_CHECKPOINT_SHA256, "EPOM-L checkpoint differs.")
     require(artifact.base_config_sha256 == EXPECTED_BASE_CONFIG_SHA256, "EPOM-L config differs.")
 
@@ -192,15 +192,15 @@ def validate_training(
     )
 
 
-def validate_runtime_candidate(row: dict, declaration: dict, artifact: CaarCandidateArtifact, label: str) -> None:
+def validate_runtime_candidate(row: dict, declaration: dict, artifact: ArpeCandidateArtifact, label: str) -> None:
     require(row.get("switcher_candidate_policy") == declaration, f"{label}: candidate declaration differs")
     runtime = row.get("switcher_candidate_artifact")
     require(isinstance(runtime, dict), f"{label}: candidate diagnostics are missing")
     expected = {
         "weights_path": artifact.weights_relative,
         "checkpoint_path": artifact.checkpoint_relative,
-        "checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
-        "config_sha256": EXPECTED_CAAR_CONFIG_SHA256,
+        "checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
+        "config_sha256": EXPECTED_ARPE_CONFIG_SHA256,
         "base_weights_path": artifact.base_weights_relative,
         "base_checkpoint_path": artifact.base_checkpoint_relative,
         "base_checkpoint_sha256": EXPECTED_BASE_CHECKPOINT_SHA256,
@@ -267,7 +267,7 @@ def main() -> int:
         "switcher_frames": EXPECTED_SWITCHER_FRAMES,
         "switcher_checkpoint_sha256": EXPECTED_SWITCHER_CHECKPOINT_SHA256,
         "switcher_policy_model_sha256": EXPECTED_SWITCHER_MODEL_SHA256,
-        "caar_checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
+        "caar_checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
         "training_validation_sha256": EXPECTED_TRAINING_VALIDATION_SHA256,
         "candidate_manifest_sha256": EXPECTED_CANDIDATE_MANIFEST_SHA256,
         "code_snapshot_sha256": args.expected_code_snapshot_sha256,
@@ -310,7 +310,7 @@ def main() -> int:
     integrity = metadata.get("integrity")
     require(isinstance(integrity, dict), "Integrity metadata is missing.")
     require(integrity.get("hybrid_mode") == "aoreplan_wait_bypass_switcher_v3", "Integrity routing mode differs.")
-    require(integrity.get("caar_checkpoint_sha256") == EXPECTED_CAAR_CHECKPOINT_SHA256, "Integrity CAAR differs.")
+    require(integrity.get("caar_checkpoint_sha256") == EXPECTED_ARPE_CHECKPOINT_SHA256, "Integrity ARPE differs.")
     require(integrity.get("switcher_checkpoint_sha256") == EXPECTED_SWITCHER_CHECKPOINT_SHA256, "Integrity Switcher differs.")
 
     require(len(rows) == EXPECTED_ROWS, f"Expected {EXPECTED_ROWS} rows, found {len(rows)}.")
@@ -393,8 +393,8 @@ def main() -> int:
         "switcher_checkpoint_sha256": EXPECTED_SWITCHER_CHECKPOINT_SHA256,
         "switcher_policy_model_sha256": EXPECTED_SWITCHER_MODEL_SHA256,
         "switcher_config_sha256": EXPECTED_SWITCHER_CONFIG_SHA256,
-        "caar_checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
-        "caar_config_sha256": EXPECTED_CAAR_CONFIG_SHA256,
+        "caar_checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
+        "caar_config_sha256": EXPECTED_ARPE_CONFIG_SHA256,
         "training_provenance": training,
         "result_journal": journal,
         "overall": summary(),

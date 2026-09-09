@@ -155,31 +155,31 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     caar_num_res_blocks: int = 3
 
-    caar_tau_num_filters: int = 8
+    arpe_tau_num_filters: int = 8
 
-    caar_tau_num_conv_layers: int = 1
+    arpe_tau_num_conv_layers: int = 1
 
-    caar_tau_num_res_blocks: int = 0
+    arpe_tau_num_res_blocks: int = 0
 
-    caar_tau_hidden_size: int = 0
+    arpe_tau_hidden_size: int = 0
 
-    caar_learn_residual: bool = True
+    arpe_learn_residual: bool = True
 
-    caar_contextual_pressure: bool = False
+    arpe_contextual_pressure: bool = False
 
-    caar_pressure_head_mode: Literal[
+    arpe_pressure_head_mode: Literal[
         'legacy_multiplier',
         'direct_pressure',
     ] = 'legacy_multiplier'
 
-    caar_pressure_output_transform: Literal[
+    arpe_pressure_output_transform: Literal[
         'clipped_relu',
         'identity',
     ] = 'clipped_relu'
 
-    caar_pressure_cap: float = Field(2.0, gt=0.0)
+    arpe_pressure_cap: float = Field(2.0, gt=0.0)
 
-    caar_pressure_init: float = Field(0.1, ge=0.0)
+    arpe_pressure_init: float = Field(0.1, ge=0.0)
 
     hidden_size: int = 512
 
@@ -267,7 +267,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
     evaluation: Evaluation = Field(default_factory=Evaluation)
 
     @root_validator
-    def validate_caar_settings(cls, values):
+    def validate_arpe_settings(cls, values):
         environment = values.get('environment')
         global_settings = values.get('global_settings')
         if (
@@ -293,10 +293,10 @@ class Experiment(BaseModel, extra=Extra.forbid):
             and 'tau' in normalized_keys
         ):
             raise ValueError(
-                'CAAR tau must not be running-normalized because its signed '
+                'ARPE tau must not be running-normalized because its signed '
                 'pressure values are applied directly to action logits.'
             )
-        if settings.caar_contextual_pressure and not settings.caar_learn_residual:
+        if settings.arpe_contextual_pressure and not settings.arpe_learn_residual:
             raise ValueError(
                 'caar_contextual_pressure requires caar_learn_residual=true.'
             )

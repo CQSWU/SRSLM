@@ -2,3 +2,7 @@
 docs/data/long_horizon_20260908/* -text
 docs/assets/B_window_throughput_both_soft.png -text
 docs/assets/B_window_throughput_both_soft.pdf -text
+docs/assets/B_window_throughput_both_soft_arpe_compact.png -text
+docs/assets/B_window_throughput_both_soft_arpe_compact.pdf -text
+configs/arpe_final_candidate.json -text
+configs/arpe_noentropy_candidate.json -text

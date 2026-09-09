@@ -24,8 +24,8 @@ from pomapf_env.wrappers import MatrixObservationWrapper
 from train import register_custom_components, validate_config
 
 
-class CAARConfig(AlgoBase, extra=Extra.forbid):
-    name: Literal["CAAR"] = "CAAR"
+class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
+    name: Literal["PolicyBackbone"] = "PolicyBackbone"
     path_to_weights: str = (
         "weights/CAAR-p-identity-r5-1b/CAAR-P-Identity-R5-1B"
     )
@@ -40,12 +40,12 @@ class NoReweightConfig(AlgoBase, extra=Extra.forbid):
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
 
 
-class CAAR:
-    """Recurrent policy with congestion-aware action reweighting."""
+class PolicyBackbone:
+    """Shared checkpoint-loading backbone for NoReweight and EPOM trace policies."""
 
     USE_PHEROMONE = True
 
-    def __init__(self, algo_cfg: CAARConfig):
+    def __init__(self, algo_cfg: PolicyBackboneConfig):
         self.algo_cfg = algo_cfg
         path = algo_cfg.path_to_weights
         device = algo_cfg.device
@@ -193,7 +193,7 @@ class CAAR:
             actor_critic.load_state_dict(checkpoint_state)
         except RuntimeError as exc:
             raise RuntimeError(
-                "Checkpoint architecture does not match this policy. CAAR and "
+                "Checkpoint architecture does not match this policy. The shared policy backbone and "
                 "NoReweight "
                 "must use checkpoints with the original three-channel policy backbone. "
                 f"Checkpoint path: {path}"
@@ -239,7 +239,7 @@ class CAAR:
         if self.uses_tau:
             if self.aco.tau is None:
                 raise RuntimeError(
-                    "CAAR trace state is not initialized. Call set_grid_config() "
+                    "ARPE trace state is not initialized. Call set_grid_config() "
                     "after env.reset() and before act()."
                 )
             self.aco.observe_for_inference(
@@ -264,7 +264,7 @@ class CAAR:
             if self.uses_tau:
                 corrections = getattr(self.ppo, "last_action_correction", None)
                 if corrections is None:
-                    raise RuntimeError("CAAR model did not produce action corrections.")
+                    raise RuntimeError("ARPE model did not produce action corrections.")
                 self._action_correction_samples.append(
                     corrections.float().cpu().numpy().reshape(-1)
                 )
@@ -285,7 +285,7 @@ class CAAR:
                     )
                 adjustments = getattr(self.ppo, "last_movement_adjustment", None)
                 if adjustments is None:
-                    raise RuntimeError("CAAR model did not expose movement adjustments.")
+                    raise RuntimeError("ARPE model did not expose movement adjustments.")
                 self._movement_adjustment_samples.append(
                     adjustments.float().cpu().numpy().reshape(-1)
                 )
@@ -311,7 +311,7 @@ class CAAR:
                 ]
                 if missing:
                     raise RuntimeError(
-                        "CAAR model did not expose switch context: "
+                        "ARPE model did not expose switch context: "
                         + ", ".join(missing)
                     )
                 self._last_switch_context = {
@@ -342,7 +342,7 @@ class CAAR:
         return self._last_augmented_observations
 
     def last_switch_context(self):
-        """Return frozen CAAR features from the most recent policy decision."""
+        """Return frozen ARPE features from the most recent policy decision."""
         return self._last_switch_context
 
     def get_action_correction_stats(self):
@@ -415,7 +415,7 @@ class CAAR:
             positions = grid.get_agents_xy()
         if positions is None:
             raise RuntimeError(
-                "CAAR tau inference requires global grid positions. Call set_env(env) "
+                "ARPE tau inference requires global grid positions. Call set_env(env) "
                 "after env.reset(); raw observation xy is egocentric and cannot be "
                 "used for the global tau map."
             )
@@ -430,7 +430,7 @@ class CAAR:
             self._last_switch_context = None
 
 
-class NoReweight(CAAR):
+class NoReweight(PolicyBackbone):
     """The same recurrent policy without traffic memory or action reweighting."""
 
     USE_PHEROMONE = False

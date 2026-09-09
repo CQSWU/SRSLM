@@ -9,9 +9,9 @@ import numpy as np
 from pydantic import Extra, Field
 
 from agents.switcher import Switcher, SwitcherConfig
-from agents.switcher_caar_candidate import (
-    CAAR_CANDIDATE_LABEL,
-    CaarSwitcherCandidate,
+from agents.arpe import (
+    ARPE_CANDIDATE_LABEL,
+    ARPE,
 )
 from agents.switcher_core import SwitcherController
 from agents.utils_agents import AlgoBase
@@ -28,14 +28,14 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
 
 
 class SRSLM:
-    """Use CAAR for AORePlan waits and Switcher for AORePlan moves."""
+    """Use ARPE for AORePlan waits and Switcher for AORePlan moves."""
 
     def __init__(
         self,
         cfg: SRSLMConfig,
         *,
         project_root: Path | None = None,
-        candidate_factory: Callable = CaarSwitcherCandidate.load,
+        candidate_factory: Callable = ARPE.load,
         planner_factory: Callable = AORePlanBranch,
         switcher_factory: Callable = Switcher,
     ):
@@ -48,7 +48,7 @@ class SRSLM:
         candidate = getattr(self.switcher, "candidate_artifact", None)
         if candidate is None:
             raise RuntimeError(
-                "Switcher checkpoint does not pin its frozen CAAR candidate."
+                "Switcher checkpoint does not pin its frozen ARPE candidate."
             )
         root = (
             Path(project_root).resolve()
@@ -66,7 +66,7 @@ class SRSLM:
         )
         verification = self.candidate.verify_frozen()
         if verification.get("verified") is not True:
-            raise RuntimeError("Frozen CAAR candidate verification failed.")
+            raise RuntimeError("Frozen ARPE candidate verification failed.")
         planner = planner_factory(
             max_steps=cfg.max_planning_steps,
             seed=cfg.seed,
@@ -114,7 +114,7 @@ class SRSLM:
     def get_switch_stats(self):
         result = {
             "hybrid_mode": SRSLM_MODE,
-            "switch_pair": [CAAR_CANDIDATE_LABEL, "AORePlan"],
+            "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
             "switcher_training": "PPO",
             "value_predictor_loaded": False,
             "candidate_provenance": self.candidate.get_model_provenance(),

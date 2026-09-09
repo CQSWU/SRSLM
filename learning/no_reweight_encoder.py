@@ -1,4 +1,4 @@
-"""Shared recurrent policy encoder for CAAR and NoReweight."""
+"""Shared recurrent policy encoder for ARPE and NoReweight."""
 
 import torch
 from sample_factory.algo.utils.torch_utils import calc_num_elements
@@ -7,7 +7,7 @@ from sample_factory.model.model_utils import create_mlp, nonlinearity
 from torch import nn as nn
 
 
-class CAAREncoder(Encoder):
+class NoReweightEncoder(Encoder):
     def __init__(self, cfg, obs_space):
         super().__init__(cfg)
         obs_shape = obs_space["obs"].shape

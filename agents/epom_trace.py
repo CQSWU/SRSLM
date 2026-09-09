@@ -10,12 +10,12 @@ from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
 
-from agents.caar import CAAR, CAARConfig
+from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
 from learning.grid_memory import MultipleGridMemory
 from pomapf_env.wrappers import MatrixObservationWrapper
 
 
-class EPOMTraceConfig(CAARConfig, extra=Extra.forbid):
+class EPOMTraceConfig(PolicyBackboneConfig, extra=Extra.forbid):
     name: Literal["EPOM-Trace"] = "EPOM-Trace"
     path_to_weights: str = (
         "weights/EPOM-Trace-gradient-long/seed0/"
@@ -24,7 +24,7 @@ class EPOMTraceConfig(CAARConfig, extra=Extra.forbid):
     checkpoint_kind: Literal["auto", "latest", "best"] = "latest"
 
 
-class EPOMTrace(CAAR):
+class EPOMTrace(PolicyBackbone):
     """Official EPOM v0 plus the trained shared-trace action correction."""
 
     def __init__(self, algo_cfg: EPOMTraceConfig):

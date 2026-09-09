@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 
 
 def _digest(payload: bytes) -> str:
@@ -42,9 +42,9 @@ def _artifact_tree(root: Path) -> dict[str, object]:
     }
 
 
-def test_dynamic_caar_artifact_is_relative_hash_pinned_and_reproducible(tmp_path):
+def test_dynamic_arpe_artifact_is_relative_hash_pinned_and_reproducible(tmp_path):
     declaration = _artifact_tree(tmp_path)
-    artifact = CaarCandidateArtifact.from_mapping(declaration, tmp_path)
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
 
     assert artifact.weights_relative == "weights/candidate"
     assert artifact.checkpoint_relative.endswith("checkpoint_1.pth")
@@ -54,28 +54,28 @@ def test_dynamic_caar_artifact_is_relative_hash_pinned_and_reproducible(tmp_path
     assert saved["checkpoint_sha256"] == declaration["checkpoint_sha256"]
 
     artifact.checkpoint_path.write_bytes(b"changed")
-    with pytest.raises(RuntimeError, match="Frozen CAAR input changed"):
+    with pytest.raises(RuntimeError, match="Frozen ARPE input changed"):
         artifact.verify_files()
 
 
-def test_caar_artifact_rejects_absolute_and_outside_weight_paths(tmp_path):
+def test_arpe_artifact_rejects_absolute_and_outside_weight_paths(tmp_path):
     declaration = _artifact_tree(tmp_path)
     declaration["checkpoint_path"] = str(
         (tmp_path / "weights" / "candidate" / "checkpoint_p0" / "checkpoint_1.pth").resolve()
     )
     with pytest.raises(ValueError, match="must be relative"):
-        CaarCandidateArtifact.from_mapping(declaration, tmp_path)
+        ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
 
     declaration = _artifact_tree(tmp_path)
     declaration["weights_path"] = "other/candidate"
     with pytest.raises(ValueError, match="below project/weights"):
-        CaarCandidateArtifact.from_mapping(declaration, tmp_path)
+        ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
 
 
-def test_caar_checkpoint_must_live_inside_declared_run(tmp_path):
+def test_arpe_checkpoint_must_live_inside_declared_run(tmp_path):
     declaration = _artifact_tree(tmp_path)
     declaration["checkpoint_path"] = (
         "weights/base/checkpoint_p0/checkpoint_2.pth"
     )
     with pytest.raises(ValueError, match="inside weights_path"):
-        CaarCandidateArtifact.from_mapping(declaration, tmp_path)
+        ArpeCandidateArtifact.from_mapping(declaration, tmp_path)

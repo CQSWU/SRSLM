@@ -1,4 +1,4 @@
-"""Train SRSLM with wait-to-CAAR routing against a hash-pinned CAAR."""
+"""Train SRSLM with wait-to-ARPE routing against a hash-pinned ARPE."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.train import run_rl
 
 import train as base_train
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from learning.config import Environment
-from pomapf_env.switcher_caar_env import CAAR_SWITCHER_ENV_SCHEMA, CaarSwitcherEnv
+from pomapf_env.switcher_arpe_env import ARPE_SWITCHER_ENV_SCHEMA, ArpeSwitcherEnv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -48,8 +48,8 @@ def create_wait_switcher_env(full_env_name, cfg=None, env_config=None, render_mo
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
         raise RuntimeError("Saved wait-aware config has no candidate_policy pin.")
-    artifact = CaarCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
-    return CaarSwitcherEnv(
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
+    return ArpeSwitcherEnv(
         grid_config=environment.grid_config,
         candidate_artifact=artifact,
         candidate_device=environment.switcher_caar_device,
@@ -69,7 +69,7 @@ def prepare_wait_config(config: dict) -> tuple[object, object]:
     declaration = payload.pop("candidate_policy", None)
     if not isinstance(declaration, dict):
         raise ValueError("Wait-aware config requires candidate_policy.")
-    artifact = CaarCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
     artifact.verify_files()
 
     experiment, flat_config = base_train.validate_config(payload)
@@ -81,14 +81,14 @@ def prepare_wait_config(config: dict) -> tuple[object, object]:
         raise ValueError("Wait-aware Switcher must remain feed-forward.")
     configured = Path(experiment.environment.switcher_caar_weights_path).as_posix()
     if configured != artifact.weights_relative:
-        raise ValueError("environment CAAR path differs from candidate_policy.")
+        raise ValueError("environment ARPE path differs from candidate_policy.")
     if experiment.environment.switcher_caar_device != "cuda":
-        raise ValueError("Frozen CAAR candidate must use the PPU device.")
+        raise ValueError("Frozen ARPE candidate must use the PPU device.")
 
     flat_config.full_config = deepcopy(flat_config.full_config)
     flat_config.full_config["candidate_policy"] = deepcopy(declaration)
     flat_config.candidate_policy = deepcopy(declaration)
-    flat_config.switcher_integration_schema = CAAR_SWITCHER_ENV_SCHEMA
+    flat_config.switcher_integration_schema = ARPE_SWITCHER_ENV_SCHEMA
     flat_config.switcher_training_entrypoint_schema = ENTRYPOINT_SCHEMA
     return experiment, flat_config
 
@@ -131,7 +131,7 @@ def main(argv=None) -> int:
                 {
                     "validated": True,
                     "schema": ENTRYPOINT_SCHEMA,
-                    "integration_schema": CAAR_SWITCHER_ENV_SCHEMA,
+                    "integration_schema": ARPE_SWITCHER_ENV_SCHEMA,
                     "experiment": flat_config.experiment,
                     "target_frames": int(flat_config.train_for_env_steps),
                     "workers": int(flat_config.num_workers),

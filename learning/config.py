@@ -26,7 +26,7 @@ OBSOLETE_SAVED_SETTINGS = frozenset({
     'trace_context_hidden_projection', 'trace_context_fusion_size',
     'trace_context_head_size', 'trace_context_residual_cap',
     # Serialized defaults from the retired caar+tau actor. They are inert in
-    # the retained NoReweight, EPOM-L, CAAR and Switcher checkpoints.
+    # the retained NoReweight, EPOM-L, ARPE and Switcher checkpoints.
     'caar_tau_num_filters', 'caar_tau_num_conv_layers',
     'caar_tau_num_res_blocks', 'caar_tau_hidden_size',
     'caar_learn_residual', 'caar_contextual_pressure',
@@ -214,7 +214,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     epom_base_weights_path: str = 'weights/EPOM/EPOM'
 
-    # Direct baseline and CAAR entropy threshold.
+    # Direct baseline and ARPE entropy threshold.
     trace_rule_scale: float = Field(1.0, ge=0.0)
     trace_gate_threshold: float = Field(0.46371241)
 
@@ -359,7 +359,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
     evaluation: Evaluation = Field(default_factory=Evaluation)
 
     @root_validator
-    def validate_caar_settings(cls, values):
+    def validate_arpe_settings(cls, values):
         environment = values.get('environment')
         global_settings = values.get('global_settings')
         if (
@@ -495,7 +495,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     '(an 11x11 trace crop).'
                 )
             if settings.trace_context_architecture != 'paper_entropy_fusion':
-                raise ValueError('Only the paper_entropy_fusion CAAR architecture is retained.')
+                raise ValueError('Only the paper_entropy_fusion ARPE architecture is retained.')
             if environment.tau_raw is not False:
                 raise ValueError(
                     'EPOM trace-context architecture '
@@ -536,9 +536,9 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     f'audited {AUDITED_COLLISION_SYSTEMS}.'
                 )
             if settings.trace_gate_threshold != 0.46371241:
-                raise ValueError('Paper CAAR fixes trace_gate_threshold=0.46371241.')
+                raise ValueError('Paper ARPE fixes trace_gate_threshold=0.46371241.')
             if settings.trace_rule_scale != 1.0:
-                raise ValueError('Paper CAAR fixes trace_rule_scale=1.0.')
+                raise ValueError('Paper ARPE fixes trace_rule_scale=1.0.')
             expected_map_name = 'maps/train_capacity_n600.yaml'
             if str(grid.map_name).replace('\\', '/') != expected_map_name:
                 raise ValueError(
@@ -665,7 +665,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
             if environment.switcher_feature_schema != 'srslm_switcher_state_v3':
                 raise ValueError('Unsupported Switcher state schema.')
             if not environment.switcher_caar_weights_path:
-                raise ValueError('Switcher training requires frozen CAAR weights.')
+                raise ValueError('Switcher training requires frozen ARPE weights.')
             if settings.normalize_input:
                 raise ValueError(
                     'Switcher requires normalize_input=false so candidate '

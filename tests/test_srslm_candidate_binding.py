@@ -59,7 +59,7 @@ def _config():
     )
 
 
-def test_srslm_accepts_the_caar_artifact_pinned_by_switcher():
+def test_srslm_accepts_the_arpe_artifact_pinned_by_switcher():
     algorithm = SRSLM(
         _config(),
         candidate_factory=_FakeCandidate,

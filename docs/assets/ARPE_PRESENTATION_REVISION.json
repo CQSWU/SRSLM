@@ -1,0 +1,24 @@
+{
+  "kind": "presentation_only_revision",
+  "date": "2026-09-09",
+  "name": "ARPE",
+  "expansion": "Action Reweight with Policy Entropy",
+  "historical_to_display": {"CAAR": "ARPE"},
+  "numeric_changes": false,
+  "plot_points": 96,
+  "layout": "single-column, two by two panels; eight actual windows per line",
+  "palette_reference": "CHS Journal of Intelligent & Robotic Systems 2025, Figure 3",
+  "colors": {"EPOM-L": "#1F77B4", "ARPE": "#9467BD", "SRSLM": "#2CA02C"},
+  "data_sha256": {
+    "docs/data/long_horizon_20260908/B_window_by_population.csv": "9ee3499e0adb9e4833ae23b6bd3c66743987393ab09a50df182ee53eb304a488"
+  },
+  "original_figure_sha256": {
+    "B_window_throughput_both_soft.pdf": "9f99337321271e586364ba42d1d314b02da4977c013a0410b2564dd6af6956e0",
+    "B_window_throughput_both_soft.png": "8f4096d84c5736fa5e7bd0f72dea14daeeeae001781f35a436ad1082911a4290"
+  },
+  "current_figure_sha256": {
+    "B_window_throughput_both_soft_arpe_compact.pdf": "462dbfe0dea18b986f03d0f77b7b35e82902ce900a701b5abd61d08b432080e1",
+    "B_window_throughput_both_soft_arpe_compact.png": "6ffb2745723c87dbf23e0151126c3eb9515c0077b05c59d9a666fa24f24e747a"
+  },
+  "note": "Original release provenance and original figure bytes are preserved. This record changes neither scientific validation nor checkpoint identity."
+}

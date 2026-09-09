@@ -1,4 +1,4 @@
-"""Switcher environments backed by one strictly pinned CAAR milestone."""
+"""Switcher environments backed by one strictly pinned ARPE milestone."""
 
 from __future__ import annotations
 
@@ -7,10 +7,10 @@ from copy import deepcopy
 import gymnasium as gym
 import numpy as np
 
-from agents.switcher_caar_candidate import (
-    CAAR_CANDIDATE_LABEL,
-    CaarCandidateArtifact,
-    CaarSwitcherCandidate,
+from agents.arpe import (
+    ARPE_CANDIDATE_LABEL,
+    ArpeCandidateArtifact,
+    ARPE,
 )
 from agents.switcher_core import (
     AllStateSwitcherController,
@@ -25,8 +25,8 @@ from pomapf_env.env import make_pomapf
 from pomapf_env.switcher_env import SwitcherEnv
 
 
-CAAR_SWITCHER_ENV_SCHEMA = "srslm_switcher_caar_candidate_env_v1"
-CAAR_NOWAIT_ENV_SCHEMA = "srslm_switcher_caar_candidate_all_states_env_v1"
+ARPE_SWITCHER_ENV_SCHEMA = "srslm_switcher_caar_candidate_env_v1"
+ARPE_NOWAIT_ENV_SCHEMA = "srslm_switcher_caar_candidate_all_states_env_v1"
 
 
 def switcher_observation_space() -> gym.spaces.Dict:
@@ -50,7 +50,7 @@ def switcher_observation_space() -> gym.spaces.Dict:
                 dtype=np.float32,
             ),
             # The public feature name remains caar_action because branch zero
-            # is CAAR and changing it would alter the trained network state.
+            # is ARPE and changing it would alter the trained network state.
             "caar_action": gym.spaces.Box(
                 0.0,
                 1.0,
@@ -70,22 +70,22 @@ def switcher_observation_space() -> gym.spaces.Dict:
 #: execution models this project has audited end to end
 AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
 
-class CaarSwitcherEnv(SwitcherEnv):
+class ArpeSwitcherEnv(SwitcherEnv):
     """Keep the established Switcher reward/state and replace branch zero."""
 
     controller_class = SwitcherController
-    integration_schema = CAAR_SWITCHER_ENV_SCHEMA
+    integration_schema = ARPE_SWITCHER_ENV_SCHEMA
 
     def __init__(
         self,
         *,
         grid_config,
-        candidate_artifact: CaarCandidateArtifact,
+        candidate_artifact: ArpeCandidateArtifact,
         candidate_device: str = "cuda",
         max_planning_steps: int = 10_000,
         team_reward_coefficient: float = 1.0,
         feature_schema: str = SWITCHER_FEATURE_SCHEMA,
-        candidate_factory=CaarSwitcherCandidate.load,
+        candidate_factory=ARPE.load,
         planner_factory=AORePlanBranch,
         base_env_factory=make_pomapf,
     ):
@@ -114,14 +114,14 @@ class CaarSwitcherEnv(SwitcherEnv):
         )
         verification = candidate.verify_frozen()
         if verification.get("verified") is not True:
-            raise RuntimeError("The frozen CAAR candidate failed verification.")
+            raise RuntimeError("The frozen ARPE candidate failed verification.")
         planner = planner_factory(
             max_steps=int(max_planning_steps), seed=int(grid_config.seed or 0)
         )
         self.controller = self.controller_class(candidate, planner)
         self.candidate = candidate
         self.candidate_artifact = candidate_artifact
-        self.candidate_label = CAAR_CANDIDATE_LABEL
+        self.candidate_label = ARPE_CANDIDATE_LABEL
         self.candidate_provenance = candidate.get_model_provenance()
         self.team_reward_coefficient = float(team_reward_coefficient)
         self.feature_schema = feature_schema
@@ -137,21 +137,21 @@ class CaarSwitcherEnv(SwitcherEnv):
     def get_candidate_provenance(self) -> dict[str, object]:
         current = self.candidate.get_model_provenance()
         if current != self.candidate_provenance:
-            raise RuntimeError("Frozen CAAR provenance changed at runtime.")
+            raise RuntimeError("Frozen ARPE provenance changed at runtime.")
         return deepcopy(current)
 
 
-class CaarNoWaitSwitcherEnv(CaarSwitcherEnv):
+class ArpeNoWaitSwitcherEnv(ArpeSwitcherEnv):
     """Train the two-action Switcher on every state, including planner waits."""
 
     controller_class = AllStateSwitcherController
-    integration_schema = CAAR_NOWAIT_ENV_SCHEMA
+    integration_schema = ARPE_NOWAIT_ENV_SCHEMA
 
 
 __all__ = [
-    "CAAR_NOWAIT_ENV_SCHEMA",
-    "CAAR_SWITCHER_ENV_SCHEMA",
-    "CaarNoWaitSwitcherEnv",
-    "CaarSwitcherEnv",
+    "ARPE_NOWAIT_ENV_SCHEMA",
+    "ARPE_SWITCHER_ENV_SCHEMA",
+    "ArpeNoWaitSwitcherEnv",
+    "ArpeSwitcherEnv",
     "switcher_observation_space",
 ]

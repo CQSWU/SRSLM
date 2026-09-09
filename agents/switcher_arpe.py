@@ -1,4 +1,4 @@
-"""Checkpoint loader for a Switcher trained with the selected CAAR branch."""
+"""Checkpoint loader for a Switcher trained with the selected ARPE branch."""
 
 from __future__ import annotations
 
@@ -16,29 +16,29 @@ from pydantic import Extra
 from sample_factory.model.actor_critic import create_actor_critic
 
 from agents.switcher import Switcher, SwitcherConfig
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from agents.switcher_core import NUM_BRANCHES
-from pomapf_env.switcher_caar_env import switcher_observation_space
+from pomapf_env.switcher_arpe_env import switcher_observation_space
 from train import register_custom_components, validate_config
 
 
-CAAR_SWITCHER_LOADER_SCHEMA = "switcher_caar_checkpoint_loader_v1"
+ARPE_SWITCHER_LOADER_SCHEMA = "switcher_caar_checkpoint_loader_v1"
 
 
-class AllStateCaarSwitcherConfig(SwitcherConfig, extra=Extra.forbid):
-    name: Literal["AllStateCaarSwitcher"] = "AllStateCaarSwitcher"
+class AllStateArpeSwitcherConfig(SwitcherConfig, extra=Extra.forbid):
+    name: Literal["AllStateArpeSwitcher"] = "AllStateArpeSwitcher"
     path_to_weights: str
     checkpoint_kind: Literal["latest"] = "latest"
 
 
-class AllStateCaarSwitcher(Switcher):
-    """Load a feed-forward all-state Switcher and reproduce its CAAR pin."""
+class AllStateArpeSwitcher(Switcher):
+    """Load a feed-forward all-state Switcher and reproduce its ARPE pin."""
 
     expected_encoder_custom = "switcher_all_state"
     allow_aoreplan_wait = True
-    policy_label = "all-state CAAR Switcher"
+    policy_label = "all-state ARPE Switcher"
 
-    def __init__(self, cfg: AllStateCaarSwitcherConfig):
+    def __init__(self, cfg: AllStateArpeSwitcherConfig):
         self.cfg = cfg
         path = Path(cfg.path_to_weights)
         self.config_path = (path / "config.json").resolve()
@@ -51,7 +51,7 @@ class AllStateCaarSwitcher(Switcher):
         if not isinstance(declaration, dict):
             raise RuntimeError("Switcher checkpoint has no frozen candidate_policy pin.")
         project_root = Path(__file__).resolve().parents[1]
-        artifact = CaarCandidateArtifact.from_mapping(declaration, project_root)
+        artifact = ArpeCandidateArtifact.from_mapping(declaration, project_root)
         artifact.verify_files()
         from learning.config import checkpoint_experiment_config
         _, flat_config = validate_config(checkpoint_experiment_config(full_config))
@@ -87,7 +87,7 @@ class AllStateCaarSwitcher(Switcher):
         self.flat_config = flat_config
         self.candidate_artifact = artifact
         self.candidate_policy = deepcopy(declaration)
-        self.loader_schema = CAAR_SWITCHER_LOADER_SCHEMA
+        self.loader_schema = ARPE_SWITCHER_LOADER_SCHEMA
         self.after_reset()
 
     def get_stats(self) -> dict:
@@ -105,7 +105,7 @@ class AllStateCaarSwitcher(Switcher):
 
 
 __all__ = [
-    "AllStateCaarSwitcher",
-    "AllStateCaarSwitcherConfig",
-    "CAAR_SWITCHER_LOADER_SCHEMA",
+    "AllStateArpeSwitcher",
+    "AllStateArpeSwitcherConfig",
+    "ARPE_SWITCHER_LOADER_SCHEMA",
 ]

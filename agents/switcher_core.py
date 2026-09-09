@@ -1,8 +1,8 @@
 """Shared state construction and action routing for the SRSLM Switcher.
 
-The switcher never predicts primitive MAPF actions.  CAAR and AORePlan first
+The switcher never predicts primitive MAPF actions.  ARPE and AORePlan first
 produce one action each.  AORePlan waits bypass the learned selector and use
-CAAR directly.  All other states are sent to the two-branch Switcher.  This
+ARPE directly.  All other states are sent to the two-branch Switcher.  This
 module is independent from Sample Factory so training and deployment share the
 same routing and planner-feedback semantics.
 """
@@ -17,7 +17,7 @@ import numpy as np
 
 #: execution models this project has audited end to end
 AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
-CAAR_BRANCH = 0
+ARPE_BRANCH = 0
 AO_BRANCH = 1
 NUM_BRANCHES = 2
 NUM_PRIMITIVE_ACTIONS = 5
@@ -52,18 +52,18 @@ def _target_layer(xy: np.ndarray, target_xy: np.ndarray) -> np.ndarray:
 
 def build_switcher_state(
     observations: Sequence[Mapping],
-    caar_actions: Sequence[int],
+    arpe_actions: Sequence[int],
     aoreplan_actions: Sequence[int],
 ) -> dict[str, np.ndarray]:
     """Build the minimal spatial state consumed by the Switcher."""
 
     count = len(observations)
-    caar = np.asarray(caar_actions, dtype=np.int64).reshape(-1)
+    arpe = np.asarray(arpe_actions, dtype=np.int64).reshape(-1)
     aoreplan = np.asarray(aoreplan_actions, dtype=np.int64).reshape(-1)
-    if caar.shape != (count,) or aoreplan.shape != (count,):
+    if arpe.shape != (count,) or aoreplan.shape != (count,):
         raise RuntimeError("Switcher action arrays have inconsistent lengths.")
-    if np.any((caar < 0) | (caar >= NUM_PRIMITIVE_ACTIONS)):
-        raise RuntimeError("CAAR produced an invalid primitive action.")
+    if np.any((arpe < 0) | (arpe >= NUM_PRIMITIVE_ACTIONS)):
+        raise RuntimeError("ARPE produced an invalid primitive action.")
     if np.any((aoreplan < 0) | (aoreplan >= NUM_PRIMITIVE_ACTIONS)):
         raise RuntimeError("AORePlan produced an invalid primitive action.")
 
@@ -97,7 +97,7 @@ def build_switcher_state(
         "obs": np.asarray(spatial_rows, dtype=np.float32),
         "xy": np.asarray(xy_rows, dtype=np.float32),
         "target_xy": np.asarray(target_rows, dtype=np.float32),
-        "caar_action": _one_hot(caar),
+        "caar_action": _one_hot(arpe),
         "aoreplan_action": _one_hot(aoreplan),
     }
     expected_shapes = {
@@ -121,7 +121,7 @@ def build_switcher_state(
 @dataclass(frozen=True)
 class PreparedSwitcherStep:
     observations: tuple
-    caar_actions: tuple[int, ...]
+    arpe_actions: tuple[int, ...]
     aoreplan_step: object
     aoreplan_actions: tuple[int, ...]
     switch_allowed_mask: tuple[bool, ...]
@@ -148,8 +148,8 @@ class SwitcherController:
         "Switcher choices must match the number of non-wait AORePlan actions."
     )
 
-    def __init__(self, caar, aoreplan):
-        self.caar = caar
+    def __init__(self, arpe, aoreplan):
+        self.arpe = arpe
         self.aoreplan = aoreplan
         self.env = None
         self._pending: PreparedSwitcherStep | None = None
@@ -163,14 +163,14 @@ class SwitcherController:
                 f"collision_system={collision_system!r}, audited "
                 f"{AUDITED_COLLISION_SYSTEMS}."
             )
-        self.caar.set_grid_config(grid_config)
+        self.arpe.set_grid_config(grid_config)
 
     def set_env(self, env) -> None:
         self.env = env
-        self.caar.set_env(env)
+        self.arpe.set_env(env)
 
     def after_reset(self) -> None:
-        self.caar.after_reset()
+        self.arpe.after_reset()
         self.aoreplan.reset()
         self._pending = None
         self.environment_step_count = 0
@@ -187,18 +187,18 @@ class SwitcherController:
         self._last_executed_ao: list[bool | None] | None = None
 
     @staticmethod
-    def _coerce_caar_actions(actions, count: int) -> tuple[int, ...]:
+    def _coerce_arpe_actions(actions, count: int) -> tuple[int, ...]:
         values = np.asarray(actions, dtype=object).reshape(-1)
         if values.shape != (count,):
-            raise RuntimeError("CAAR returned the wrong number of actions.")
+            raise RuntimeError("ARPE returned the wrong number of actions.")
         converted = []
         for action in values:
             try:
                 integer = int(action)
             except (TypeError, ValueError, OverflowError) as exc:
-                raise RuntimeError(f"CAAR returned invalid action {action!r}.") from exc
+                raise RuntimeError(f"ARPE returned invalid action {action!r}.") from exc
             if integer != action or not 0 <= integer < NUM_PRIMITIVE_ACTIONS:
-                raise RuntimeError(f"CAAR returned invalid action {action!r}.")
+                raise RuntimeError(f"ARPE returned invalid action {action!r}.")
             converted.append(integer)
         return tuple(converted)
 
@@ -225,8 +225,8 @@ class SwitcherController:
         count = len(raw_observations)
         if count < 1:
             raise RuntimeError("Switcher received an empty agent batch.")
-        caar_actions = self._coerce_caar_actions(
-            self.caar.act(raw_observations, rewards, dones, infos),
+        arpe_actions = self._coerce_arpe_actions(
+            self.arpe.act(raw_observations, rewards, dones, infos),
             count,
         )
         step = self.aoreplan.propose(raw_observations)
@@ -234,7 +234,7 @@ class SwitcherController:
             aoreplan_actions = self._validate_aoreplan_step(step, count)
             switcher_state = build_switcher_state(
                 raw_observations,
-                caar_actions,
+                arpe_actions,
                 aoreplan_actions,
             )
         except Exception:
@@ -243,7 +243,7 @@ class SwitcherController:
         switch_allowed = self._switch_allowed_mask(aoreplan_actions)
         self._pending = PreparedSwitcherStep(
             observations=raw_observations,
-            caar_actions=caar_actions,
+            arpe_actions=arpe_actions,
             aoreplan_step=step,
             aoreplan_actions=aoreplan_actions,
             switch_allowed_mask=switch_allowed,
@@ -277,7 +277,7 @@ class SwitcherController:
         pending = self._pending
         if pending is None:
             raise RuntimeError("prepare_actions() must be called before resolve_actions().")
-        count = len(pending.caar_actions)
+        count = len(pending.arpe_actions)
         selected = np.asarray(selected, dtype=np.int64).reshape(-1)
         wait_bypass = np.asarray(wait_bypass_mask, dtype=bool).reshape(-1)
         if selected.shape != (count,) or np.any(
@@ -294,7 +294,7 @@ class SwitcherController:
         final_actions = [
             pending.aoreplan_actions[index]
             if executed_ao[index]
-            else pending.caar_actions[index]
+            else pending.arpe_actions[index]
             for index in range(count)
         ]
 
@@ -329,7 +329,7 @@ class SwitcherController:
         self.branch_action_agreement_count += sum(
             left == right
             for left, right in zip(
-                pending.caar_actions,
+                pending.arpe_actions,
                 pending.aoreplan_actions,
             )
         )
@@ -357,7 +357,7 @@ class SwitcherController:
         pending = self._pending
         if pending is None:
             raise RuntimeError("prepare_actions() must be called before resolve_actions().")
-        count = len(pending.caar_actions)
+        count = len(pending.arpe_actions)
         switch_allowed = np.asarray(pending.switch_allowed_mask, dtype=bool)
         eligible_count = int(switch_allowed.sum())
         requested = np.asarray(branches, dtype=np.int64).reshape(-1)
@@ -366,7 +366,7 @@ class SwitcherController:
         ):
             raise ValueError(self.choice_error)
 
-        selected = np.full(count, CAAR_BRANCH, dtype=np.int64)
+        selected = np.full(count, ARPE_BRANCH, dtype=np.int64)
         selected[switch_allowed] = requested
         return self._apply_selected_branches(
             selected,
@@ -377,7 +377,7 @@ class SwitcherController:
 
     def after_step(self, dones: Sequence[bool]) -> None:
         flags = tuple(bool(value) for value in dones)
-        self.caar.after_step(flags)
+        self.arpe.after_step(flags)
         if self._last_executed_ao is not None:
             if len(flags) != len(self._last_executed_ao):
                 raise RuntimeError("Done mask and agent count differ.")
@@ -444,7 +444,7 @@ class AllStateSwitcherController(SwitcherController):
 
 
 class OnlyWaitController(SwitcherController):
-    """Use CAAR on AORePlan waits and AORePlan on every non-wait state."""
+    """Use ARPE on AORePlan waits and AORePlan on every non-wait state."""
 
     selector_kind = "deterministic_wait_detect_only"
     decision_scope = "none"
@@ -456,7 +456,7 @@ class OnlyWaitController(SwitcherController):
         if pending is None:
             raise RuntimeError("prepare_actions() must be called before resolve_actions().")
         switch_allowed = np.asarray(pending.switch_allowed_mask, dtype=bool)
-        selected = np.where(switch_allowed, AO_BRANCH, CAAR_BRANCH)
+        selected = np.where(switch_allowed, AO_BRANCH, ARPE_BRANCH)
         return self._apply_selected_branches(
             selected,
             switcher_choice_count=0,
@@ -469,7 +469,7 @@ __all__ = [
     "AO_BRANCH",
     "ALL_STATE_SWITCHER_DECISION_SCOPE",
     "AllStateSwitcherController",
-    "CAAR_BRANCH",
+    "ARPE_BRANCH",
     "FEATURE_DIM",
     "SWITCHER_DECISION_SCOPE",
     "NUM_BRANCHES",

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate the terminal wait-aware Switcher with one real SRSLM episode.
 
-This certificate binds the terminal Switcher checkpoint, its frozen CAAR
+This certificate binds the terminal Switcher checkpoint, its frozen ARPE
 candidate, the completed training certificate, and a real block_both rollout.
 It is intentionally a readiness gate, not a substitute for the later exact960
 paper evaluation.
@@ -21,7 +21,7 @@ PROJECT_IMPORT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_IMPORT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_IMPORT_ROOT))
 
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from run_experiments import validate_srslm_stats
 from scripts.switcher_artifact_contract import (
     atomic_json,
@@ -103,11 +103,11 @@ def validate_candidate(
     row: dict[str, Any],
     project_root: Path,
 ) -> dict[str, Any]:
-    artifact = CaarCandidateArtifact.from_mapping(declaration, project_root)
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, project_root)
     files = artifact.verify_files()
-    require(row.get("switcher_candidate_policy") == declaration, "Runtime CAAR declaration differs from the saved Switcher config.")
+    require(row.get("switcher_candidate_policy") == declaration, "Runtime ARPE declaration differs from the saved Switcher config.")
     runtime = row.get("switcher_candidate_artifact")
-    require(isinstance(runtime, dict), "Runtime CAAR artifact diagnostics are missing.")
+    require(isinstance(runtime, dict), "Runtime ARPE artifact diagnostics are missing.")
     expected = {
         "checkpoint_sha256": artifact.checkpoint_sha256,
         "config_sha256": artifact.config_sha256,
@@ -162,7 +162,7 @@ def build_validation(
     config_path = weights_dir / "config.json"
     saved_config = read_json(config_path)
     declaration = (saved_config.get("full_config") or {}).get("candidate_policy")
-    require(isinstance(declaration, dict), "Saved Switcher has no pinned CAAR declaration.")
+    require(isinstance(declaration, dict), "Saved Switcher has no pinned ARPE declaration.")
 
     result_path = result_dir / "result.json"
     result = read_json(result_path)
@@ -183,10 +183,10 @@ def build_validation(
     choices = int(row["switcher_choice_count"])
     bypasses = int(row["aoreplan_wait_bypass_count"])
     executed_ao = int(row["executed_ao_count"])
-    executed_caar = int(row["executed_caar_count"])
+    executed_arpe = int(row["executed_caar_count"])
     require(total == 200 * 512, "Smoke action count does not equal population times horizon.")
     require(choices + bypasses == total, "Wait bypass and Switcher decisions do not cover every action.")
-    require(executed_ao + executed_caar == total, "Executed branches do not cover every action.")
+    require(executed_ao + executed_arpe == total, "Executed branches do not cover every action.")
     require(row.get("wait_detection_enabled") is True, "Wait routing is disabled.")
     require(row.get("switcher_decision_scope") == "aoreplan_nonwait_only", "Switcher received wait states.")
     require(row.get("hybrid_mode") == "aoreplan_wait_bypass_switcher_v3", "Wrong runtime routing mode.")
@@ -228,7 +228,7 @@ def build_validation(
                 "switcher_choice_count": choices,
                 "aoreplan_wait_bypass_count": bypasses,
                 "executed_ao_count": executed_ao,
-                "executed_caar_count": executed_caar,
+                "executed_caar_count": executed_arpe,
             },
             "source_freeze": validate_source_freeze(result_dir),
         },

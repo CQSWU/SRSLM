@@ -29,19 +29,19 @@ if [[ ${1:-} == __run ]]; then
   cd "$project"
   export PYTHONPATH="$project" CUDA_VISIBLE_DEVICES=0
   export CPPIMPORT_RELEASE_MODE=1 RTC_CACHE_ENABLE=1
-  export RTC_CACHE_PATH="$project/tmp/rtccache_switcher_wait_caar_${mode}"
+  export RTC_CACHE_PATH="$project/tmp/rtccache_switcher_wait_arpe_${mode}"
   export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
   export NUMEXPR_NUM_THREADS=1 PYTHONUNBUFFERED=1
   mkdir -p "$RTC_CACHE_PATH"
 
   set +e
-  "$python_bin" -u train_switcher_wait_caar.py --config_path "$config_path"
+  "$python_bin" -u train_switcher_wait_arpe.py --config_path "$config_path"
   rc=$?
   set -e
   (( rc == 0 )) || fail "$status_file" "wait-aware training exited with code $rc"
 
   run_dir="$train_dir/$run_name"
-  checkpoint_json=$("$python_bin" scripts/switcher_wait_caar_artifact_contract.py \
+  checkpoint_json=$("$python_bin" scripts/switcher_wait_arpe_artifact_contract.py \
     checkpoint --weights-dir "$run_dir")
   terminal=$("$python_bin" -c 'import json,sys;print(json.load(sys.stdin)["path"])' <<<"$checkpoint_json")
   frames=$("$python_bin" -c 'import json,sys;print(json.load(sys.stdin)["env_steps"])' <<<"$checkpoint_json")
@@ -50,7 +50,7 @@ if [[ ${1:-} == __run ]]; then
   sha256sum -c "$log_dir/source_before.sha256" >/dev/null || fail "$status_file" "tracked inputs changed during training"
   cp -f -- "$log_dir/source_before.sha256" "$log_dir/source_after.sha256"
   : >"$log_dir/source_hash_diff.txt"
-  "$python_bin" scripts/switcher_wait_caar_artifact_contract.py postflight \
+  "$python_bin" scripts/switcher_wait_arpe_artifact_contract.py postflight \
     --weights-dir "$run_dir" --log-dir "$log_dir" --project-root "$project" \
     --checkpoint "$terminal" --expected-experiment "$run_name" \
     --expected-target-frames "$target_steps" --output "$log_dir/VALIDATION.json" >/dev/null
@@ -66,17 +66,17 @@ fi
 mode=$1
 case "$mode" in
   smoke)
-    config_name=train_switcher_wait_caar_smoke_1m_server2.yaml
-    run_name=SRSLM-WaitAware-CAAR-Smoke-1M
-    train_dir_name=SRSLM-switcher-wait-aware-caar-smoke
-    log_name=switcher_wait_aware_caar_smoke_1m
+    config_name=train_switcher_wait_arpe_smoke_1m_server2.yaml
+    run_name=SRSLM-WaitAware-ARPE-Smoke-1M
+    train_dir_name=SRSLM-switcher-wait-aware-arpe-smoke
+    log_name=switcher_wait_aware_arpe_smoke_1m
     target_steps=1000000
     ;;
   formal|audit)
-    config_name=train_switcher_wait_caar_100m_server2.yaml
-    run_name=SRSLM-WaitAware-CAAR-100M
-    train_dir_name=SRSLM-switcher-wait-aware-caar-100m
-    log_name=switcher_wait_aware_caar_100m
+    config_name=train_switcher_wait_arpe_100m_server2.yaml
+    run_name=SRSLM-WaitAware-ARPE-100M
+    train_dir_name=SRSLM-switcher-wait-aware-arpe-100m
+    log_name=switcher_wait_aware_arpe_100m
     target_steps=100000000
     ;;
   *) echo "Usage: $0 smoke|formal|audit" >&2; exit 2 ;;
@@ -103,12 +103,12 @@ set +u
 source /opt/PPU_SDK/envsetup.sh >/dev/null
 set -u
 
-validation=$("$python_bin" train_switcher_wait_caar.py --config_path "$config_path" --validate-only)
+validation=$("$python_bin" train_switcher_wait_arpe.py --config_path "$config_path" --validate-only)
 validated=$("$python_bin" -c 'import json,sys;print(str(json.load(sys.stdin).get("validated",False)).lower())' <<<"$validation")
 [[ "$validated" == true ]] || { echo "Wait-aware config validation failed" >&2; exit 4; }
 decision_scope=$("$python_bin" -c 'import json,sys;print(json.load(sys.stdin)["decision_scope"])' <<<"$validation")
 wait_routing=$("$python_bin" -c 'import json,sys;print(json.load(sys.stdin)["wait_routing"])' <<<"$validation")
-[[ "$decision_scope" == aoreplan_nonwait_only && "$wait_routing" == aoreplan_wait_to_caar ]] || { echo "Wait routing contract differs" >&2; exit 4; }
+[[ "$decision_scope" == aoreplan_nonwait_only && "$wait_routing" == aoreplan_wait_to_arpe ]] || { echo "Wait routing contract differs" >&2; exit 4; }
 
 candidate_checkpoint=$("$python_bin" -c 'import json,sys;print(json.load(sys.stdin)["candidate_policy"]["checkpoint_path"])' <<<"$validation")
 candidate_weights=$("$python_bin" -c 'import json,sys;print(json.load(sys.stdin)["candidate_policy"]["weights_path"])' <<<"$validation")
@@ -118,13 +118,13 @@ candidate_config="$candidate_weights/config.json"
 base_config="$base_weights/config.json"
 planner_binary=$(find planning -maxdepth 1 -type f -name 'planner*.so' -print | sort | head -n 1)
 tracked=(
-  scripts/run_train_switcher_wait_caar_server2.sh
-  scripts/switcher_wait_caar_artifact_contract.py scripts/switcher_artifact_contract.py
-  scripts/switcher_checkpoint_identity.py train_switcher_wait_caar.py train.py "$config_path"
-  pomapf_env/switcher_caar_env.py pomapf_env/switcher_env.py pomapf_env/env.py
+  scripts/run_train_switcher_wait_arpe_server2.sh
+  scripts/switcher_wait_arpe_artifact_contract.py scripts/switcher_artifact_contract.py
+  scripts/switcher_checkpoint_identity.py train_switcher_wait_arpe.py train.py "$config_path"
+  pomapf_env/switcher_arpe_env.py pomapf_env/switcher_env.py pomapf_env/env.py
   pomapf_env/pomapf_config.py pomapf_env/stigmergic.py pomapf_env/wrappers.py
-  agents/switcher_caar_candidate.py agents/switcher_core.py agents/epom_trace_context.py
-  agents/epom_trace.py agents/caar.py agents/utils_agents.py
+  agents/arpe.py agents/switcher_core.py agents/epom_trace_context.py
+  agents/epom_trace.py agents/policy_backbone.py agents/utils_agents.py
   learning/switcher_actor_critic.py learning/switcher_learner_patch.py
   learning/epom_trace_context_actor_critic.py learning/epom_trace_multiplier_actor_critic.py
   learning/config.py learning/encoder.py learning/grid_memory.py
@@ -135,14 +135,14 @@ tracked=(
 for path in "${tracked[@]}"; do [[ -s "$path" ]] || { echo "Tracked input is missing: $path" >&2; exit 2; }; done
 
 if [[ "$mode" == audit ]]; then
-  "$python_bin" scripts/switcher_wait_caar_artifact_contract.py verify \
+  "$python_bin" scripts/switcher_wait_arpe_artifact_contract.py verify \
     --weights-dir "$run_dir" --log-dir "$log_dir" --project-root "$project" \
     --validation "$log_dir/VALIDATION.json" --expected-experiment "$run_name" \
     --expected-target-frames "$target_steps" >/dev/null
   echo "AUDITED $run_name"
   exit 0
 fi
-if [[ "$mode" == formal && ! -e "$project/logs/switcher_wait_aware_caar_smoke_1m/COMPLETE" ]]; then
+if [[ "$mode" == formal && ! -e "$project/logs/switcher_wait_aware_arpe_smoke_1m/COMPLETE" ]]; then
   echo "Formal training requires the isolated 1M smoke COMPLETE marker" >&2
   exit 4
 fi
@@ -174,16 +174,16 @@ fi
 : >"$log_dir/source_hash_diff.txt"
 printf '%s\n' "$validation" >"$log_dir/PREFLIGHT.json"
 cat >"$log_dir/PROTOCOL.md" <<EOF
-# Wait-aware CAAR Switcher $mode
+# Wait-aware ARPE Switcher $mode
 - Initialization: $initialization; target $target_steps frames; seed 0.
-- Frozen branches: exact hash-pinned final CAAR and current AORePlan.
-- Routing in training and inference: AORePlan wait -> CAAR; non-wait -> stochastic two-branch Switcher.
+- Frozen branches: exact hash-pinned final ARPE and current AORePlan.
+- Routing in training and inference: AORePlan wait -> ARPE; non-wait -> stochastic two-branch Switcher.
 - Gradients: Actor/entropy/KL only on non-wait rows; Critic on all valid rows.
 - Environment: 200 agents, block_both, restart, 512 steps, radius 5.
 - Runtime: Server2 PPU0, 12 workers under the hard 12-worker cap.
 - Selection: terminal latest regular checkpoint; no best or milestone selection.
 EOF
-printf '%q ' "$python_bin" -u train_switcher_wait_caar.py --config_path "$config_path" >"$log_dir/COMMAND.txt"
+printf '%q ' "$python_bin" -u train_switcher_wait_arpe.py --config_path "$config_path" >"$log_dir/COMMAND.txt"
 printf '\n' >>"$log_dir/COMMAND.txt"
 atomic_status "$status_file" RUNNING
 

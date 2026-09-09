@@ -1,7 +1,7 @@
-name: CAAR-NoEntropy-FromScratch-R5-500M
+name: ARPE-NoEntropy-FromScratch-R5-500M
 
 global_settings:
-  train_dir: weights/CAAR-noentropy-retrain
+  train_dir: weights/ARPE-noentropy-retrain
   device: gpu
   seed: 0
 

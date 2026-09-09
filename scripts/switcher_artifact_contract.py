@@ -29,7 +29,7 @@ except ModuleNotFoundError:  # Direct ``python scripts/...py`` execution.
 
 SCHEMA = "switcher_training_artifact_v2"
 RUNTIME_SMOKE_SCHEMA = "switcher_runtime_smoke_v1"
-EXPECTED_CAAR_CHECKPOINT_SHA256 = (
+EXPECTED_ARPE_CHECKPOINT_SHA256 = (
     "fb302e14543c6138ae2375f1fa6617198dc2d0e106a1d1c0a2d5b298238b4a3f"
 )
 MIN_FORMAL_FRAMES = 500_000_000
@@ -41,6 +41,22 @@ _REGULAR_CHECKPOINT = re.compile(
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def same_training_certificate(saved: dict, rebuilt: dict) -> bool:
+    """Compare immutable evidence, allowing only the retired branch display name."""
+    if saved == rebuilt:
+        return True
+    old = saved.get("network_contract")
+    new = rebuilt.get("network_contract")
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return False
+    if old.get("branch_0") != "CAAR" or new.get("branch_0") != "ARPE":
+        return False
+    if old.get("branch_1") != "AORePlan" or new.get("branch_1") != "AORePlan":
+        return False
+    # Only this leaf changes; checkpoint/config hashes and all other data stay exact.
+    return {**saved, "network_contract": {**old, "branch_0": "ARPE"}} == rebuilt
 
 
 def sha256_file(path: Path | str) -> str:
@@ -154,19 +170,19 @@ def source_manifest_identity(log_dir: Path | str) -> dict[str, Any]:
     entries = _parse_sha256_manifest(before)
     require(
         any(
-            item["sha256"] == EXPECTED_CAAR_CHECKPOINT_SHA256
-            and "CAAR" in item["path"]
+            item["sha256"] == EXPECTED_ARPE_CHECKPOINT_SHA256
+            and "ARPE" in item["path"]
             and item["path"].endswith(".pth")
             for item in entries
         ),
-        "Training source manifest does not bind the frozen CAAR checkpoint",
+        "Training source manifest does not bind the frozen ARPE checkpoint",
     )
     return {
         "before_path": str(before),
         "after_path": str(after),
         "sha256": sha256_file(before),
         "entries": len(entries),
-        "frozen_caar_checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
+        "frozen_caar_checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
     }
 
 
@@ -314,7 +330,7 @@ def build_training_validation(
         "max_episode_steps": 512,
         "obs_radius": 5,
         "num_agents": 200,
-        "frozen_caar_checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
+        "frozen_caar_checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
         "source_manifest": source,
         "runtime_smoke": smoke,
         "distinct_from_default": (
@@ -416,8 +432,8 @@ def validate_runtime_smoke(
         "Runtime smoke integrity checkpoint differs",
     )
     require(
-        integrity.get("caar_checkpoint_sha256") == EXPECTED_CAAR_CHECKPOINT_SHA256,
-        "Runtime smoke did not use the frozen CAAR checkpoint",
+        integrity.get("caar_checkpoint_sha256") == EXPECTED_ARPE_CHECKPOINT_SHA256,
+        "Runtime smoke did not use the frozen ARPE checkpoint",
     )
     return {
         "validated": True,
@@ -426,7 +442,7 @@ def validate_runtime_smoke(
         "result_path": str(result_path),
         "result_sha256": sha256_file(result_path),
         "switcher_checkpoint_sha256": expected_switcher_checkpoint_sha256,
-        "frozen_caar_checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
+        "frozen_caar_checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
         "total_action_count": total,
         "switcher_choice_count": choices,
         "aoreplan_wait_bypass_count": row.get("aoreplan_wait_bypass_count"),

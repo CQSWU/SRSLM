@@ -1,4 +1,4 @@
-name: SRSLM-WaitAware-CAAR-Smoke-1M
+name: SRSLM-WaitAware-ARPE-100M
 candidate_policy:
   kind: epom_trace_context_caar_milestone
   schema: switcher_candidate_caar_v1
@@ -13,21 +13,24 @@ candidate_policy:
   checkpoint_selection: exact_milestone
   frozen: true
 global_settings:
-  train_dir: weights/SRSLM-switcher-wait-aware-caar-smoke
+  train_dir: weights/SRSLM-switcher-wait-aware-arpe-100m
   device: gpu
   seed: 0
 evaluation:
   env_frameskip: 1
 experiment_settings:
+  # Keep the full sequence of five-minute regular checkpoints.  At the
+  # measured throughput this retains a checkpoint close to 50M as well as the
+  # terminal 100M checkpoint, without selecting by evaluation performance.
   save_every_sec: 300
   save_best_every_sec: 86400
   save_best_after: 1000000000000
   save_best_metric: avg_throughput
   save_milestones_sec: -1
-  keep_checkpoints: 5
+  keep_checkpoints: 40
   encoder_custom: switcher
-  train_for_env_steps: 1000000
-  train_for_seconds: 3600
+  train_for_env_steps: 100000000
+  train_for_seconds: 604800
   hidden_size: 128
   learning_rate: 0.0001
   gamma: 0.99

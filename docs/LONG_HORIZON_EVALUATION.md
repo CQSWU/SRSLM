@@ -14,16 +14,22 @@ separate 512-step exact960 comparison.
 | Method | `block_both` | `soft` |
 | --- | ---: | ---: |
 | EPOM-L | 1.486099 | 2.451884 |
-| CAAR | 1.586904 | 2.467250 |
+| ARPE | 1.586904 | 2.467250 |
 | SRSLM | 1.868739 | 2.724431 |
 
-![Non-cumulative throughput in eight 512-step windows, by rule and population](assets/B_window_throughput_both_soft.png)
+![Non-cumulative throughput in eight 512-step windows, by rule and population](assets/B_window_throughput_both_soft_arpe_compact.png)
 
-[Vector PDF](assets/B_window_throughput_both_soft.pdf)
+[Vector PDF](assets/B_window_throughput_both_soft_arpe_compact.pdf)
 
-SRSLM has the highest overall mean under both rules. CAAR improves the
+The current figure uses ARPE, the new name for the same selected CAAR model,
+and a compact layout with the CHS Figure 3 color palette. All 96 plotted values
+are unchanged. The original figure files and historical CAAR labels remain
+available for the hash-bound release audit; see the
+[presentation revision](assets/ARPE_PRESENTATION_REVISION.json).
+
+SRSLM has the highest overall mean under both rules. ARPE improves the
 `block_both` mean, but its overall gain under `soft` is small. At 600 agents
-under `soft`, CAAR and EPOM-L are nearly tied: 2.626567 and 2.630280.
+under `soft`, ARPE and EPOM-L are nearly tied: 2.626567 and 2.630280.
 All six arms have a lower last-window mean than first-window mean. The
 recorded decline does not, on its own, prove that congestion caused it or
 that any method eliminates congestion.
@@ -44,8 +50,9 @@ that any method eliminates congestion.
 - [Provenance](data/long_horizon_20260908/PROVENANCE.json): selected model
   identities, original raw/journal/audit hashes, and hashes of these public files.
 
-The four aggregate CSVs and the figures are unchanged copies of the accepted
-outputs. The episode CSV is a field-limited export, with no runtime measurements
+The four aggregate CSVs and the original figure files are unchanged copies of
+the accepted outputs. The current displayed figure is the presentation-only
+revision described above. The episode CSV is a field-limited export, with no runtime measurements
 or machine details. Verify its complete tuple grid, integer counts, all four
 aggregates and file hashes with Python's standard library:
 
@@ -59,7 +66,7 @@ the provenance hashes identify that separately retained evidence.
 
 ## Protocol
 
-Use the same selected block-trained EPOM-L, gated CAAR and Full SRSLM weights
+Use the same selected block-trained EPOM-L, gated ARPE and Full SRSLM weights
 under both `block_both` and `soft`, with observation radius 5 and lifelong
 `restart`. The planner inside SRSLM retains its conservative static-step
 occupancy check under both rules.
@@ -115,8 +122,8 @@ for rule in block_both soft; do
     --output-dir "results/long_horizon/epom_l_$rule" --output results.json
 
   uv run python run_experiments.py "${common[@]}" \
-    --algorithms CAAR --collision-system "$rule" \
-    --caar-candidate-manifest configs/caar_final_candidate.json \
+    --algorithms ARPE --collision-system "$rule" \
+    --arpe-candidate-manifest configs/arpe_final_candidate.json \
     --output-dir "results/long_horizon/caar_$rule" --output results.json
 
   uv run python run_experiments.py "${common[@]}" \

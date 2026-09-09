@@ -14,6 +14,7 @@ switcher_weights=$project/weights/SRSLM-switcher-wait-aware-caar-100m/SRSLM-Wait
 training_log=$project/logs/switcher_wait_aware_caar_100m
 training_validation=$training_log/VALIDATION.json
 readiness_result=$project/results/srslm_wait_aware_caar_100m_smoke_v2_20260903
+# This historical replay pins the original manifest bytes (75df...), not a renamed copy.
 candidate_manifest=$project/artifacts/caar_final_candidate.json
 caar_weights=$project/weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902
 switcher_config=$switcher_weights/config.json
@@ -84,7 +85,7 @@ if checkpoint.get("checkpoint_sha256") != sys.argv[2]:
 if checkpoint.get("policy_model_sha256") != sys.argv[3]:
     raise SystemExit("Terminal Switcher policy-model SHA256 differs")
 PY
-"$python_bin" scripts/validate_switcher_wait_caar_readiness.py \
+"$python_bin" scripts/validate_switcher_wait_arpe_readiness.py \
   --project-root "$project" \
   --result-dir "$readiness_result" \
   --weights-dir "$switcher_weights" \
@@ -126,21 +127,21 @@ active_workers=$(ps -eo args= | awk '/multiprocessing[.]spawn.*spawn_main/ {n++}
 
 cd "$project"
 code_tracked=(
-  scripts/run_srslm_wait_aware_caar_100m_exact960_server1.sh
-  scripts/validate_srslm_wait_aware_caar_100m_exact960.py
-  scripts/validate_switcher_wait_caar_readiness.py
+  scripts/run_srslm_wait_aware_arpe_100m_exact960_server1.sh
+  scripts/validate_srslm_wait_aware_arpe_100m_exact960.py
+  scripts/validate_switcher_wait_arpe_readiness.py
   scripts/validate_srslm_wait_ablation_exact960.py
-  scripts/switcher_wait_caar_artifact_contract.py
+  scripts/switcher_wait_arpe_artifact_contract.py
   scripts/switcher_artifact_contract.py
   scripts/switcher_checkpoint_identity.py
   run_experiments.py
   train.py
   agents/srslm.py
   agents/switcher.py
-  agents/switcher_caar_candidate.py
+  agents/arpe.py
   agents/epom_trace_context.py
   agents/epom_trace.py
-  agents/caar.py
+  agents/policy_backbone.py
   agents/utils_agents.py
   agents/switcher_core.py
   agents/reverse_metrics.py
@@ -228,15 +229,15 @@ PY
 journal_contract=$(sha256sum "$output_dir/RUN_CONTRACT.json" | awk '{print $1}')
 
 cat >"$output_dir/PROTOCOL.md" <<EOF
-# SRSLM wait-aware CAAR 100M exact960
+# SRSLM wait-aware ARPE 100M exact960
 
 - 32 frozen evaluation maps; populations 100, 200, 300, 400, 500, 600.
 - Seeds 0, 42, 123, 2024, 3407; 960 unique episodes.
 - Lifelong restart, 512 steps, radius 5, block_both.
-- AORePlan wait routes directly to frozen CAAR; non-wait states use the PPO Switcher.
+- AORePlan wait routes directly to frozen ARPE; non-wait states use the PPO Switcher.
 - Switcher terminal frame count: 100,016,128.
 - Switcher checkpoint SHA256: $expected_switcher_checkpoint_sha256.
-- CAAR checkpoint SHA256: $expected_caar_checkpoint_sha256.
+- ARPE checkpoint SHA256: $expected_caar_checkpoint_sha256.
 - Physical PPU$device with $workers workers; Server1 aggregate cap $worker_cap.
 EOF
 
@@ -271,8 +272,8 @@ command=(
   "$python_bin" -u run_experiments.py
   --algorithms SRSLM
   --switcher-weights-path "$switcher_weights"
-  --caar-weights-path "$caar_weights"
-  --caar-candidate-manifest "$candidate_manifest"
+  --arpe-weights-path "$caar_weights"
+  --arpe-candidate-manifest "$candidate_manifest"
   --map-list "$map_list"
   --agents 100,200,300,400,500,600
   --seeds 0,42,123,2024,3407
@@ -300,7 +301,7 @@ cat "$output_dir/code_after.sha256" "$output_dir/artifact_after.sha256" \
 diff -u "$output_dir/source_before.sha256" "$output_dir/source_after.sha256" \
   >"$output_dir/source_hash_diff.txt" || true
 
-"$python_bin" scripts/validate_srslm_wait_aware_caar_100m_exact960.py \
+"$python_bin" scripts/validate_srslm_wait_aware_arpe_100m_exact960.py \
   --project-root "$project" \
   --input "$output_dir/srslm_wait_aware_caar_100m_exact960.json" \
   --map-list "$map_list" \

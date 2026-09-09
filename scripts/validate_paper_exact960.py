@@ -113,7 +113,8 @@ def validate_srslm_row(
     expected_switcher_sha256: str,
 ) -> None:
     require(row.get("hybrid_mode") == EXPECTED_SRSLM_MODE, f"{label}: wrong SRSLM mode")
-    require(row.get("switch_pair") == ["CAAR", "AORePlan"], f"{label}: wrong branches")
+    # Accept the exact historical label, without changing raw rows or hash checks.
+    require(row.get("switch_pair") in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]), f"{label}: wrong branches")
     require(row.get("switcher_training") == "PPO", f"{label}: Switcher is not PPO-trained")
     require(row.get("value_predictor_loaded") is False, f"{label}: retired value head loaded")
     require(

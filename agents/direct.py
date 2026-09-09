@@ -15,7 +15,7 @@ from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
 
-from agents.caar import NoReweight, NoReweightConfig
+from agents.policy_backbone import NoReweight, NoReweightConfig
 from pomapf_env.stigmergic import AcoState
 from pomapf_env.wrappers import MatrixObservationWrapper
 

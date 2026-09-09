@@ -1,4 +1,4 @@
-"""Paper CAAR: a learned logit correction on the frozen EPOM-L policy.
+"""Paper ARPE: a learned logit correction on the frozen EPOM-L policy.
 
 The actor encodes the full, free-cell-mean-centred 11x11 shared trace with
 Conv32, two residual blocks and FC32. It fuses that feature with the detached
@@ -90,7 +90,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
 
         if tau_shape != (1, 11, 11):
             raise ValueError(
-                "Paper CAAR requires the [1,11,11] trace crop, "
+                "Paper ARPE requires the [1,11,11] trace crop, "
                 f"got {tau_shape}."
             )
         if (
@@ -100,7 +100,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
             or obs_shape[-1] < 11
         ):
             raise ValueError(
-                "Paper CAAR requires an odd square EPOM observation of at "
+                "Paper ARPE requires an odd square EPOM observation of at "
                 f"least 11x11, got {obs_shape}."
             )
         obs_size = int(obs_shape[-1])
@@ -117,9 +117,9 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
 
     def __init__(self, model_factory, obs_space, action_space, cfg):
         if not cfg.actor_critic_share_weights:
-            raise ValueError("Paper CAAR requires shared base weights.")
+            raise ValueError("Paper ARPE requires shared base weights.")
         if "tau" not in obs_space.spaces:
-            raise ValueError("Paper CAAR requires a tau observation.")
+            raise ValueError("Paper ARPE requires a tau observation.")
         if getattr(action_space, "n", None) != self.NUM_ACTIONS:
             raise ValueError(f"Expected five discrete actions, got {action_space}.")
 
@@ -151,7 +151,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         self.core_out_size = int(self.core.get_out_size())
         self.trace_rho = float(environment.get("tau_rho", 0.1))
         if self.trace_rho != 0.1:
-            raise ValueError("Paper CAAR fixes tau_rho=0.1 for reproducibility.")
+            raise ValueError("Paper ARPE fixes tau_rho=0.1 for reproducibility.")
         self.rule_scale = float(settings.get("trace_rule_scale", 1.0))
         self.entropy_threshold = float(
             settings.get("trace_gate_threshold", PRIMAL3_ENTROPY_THRESHOLD)
@@ -194,7 +194,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         trainable_count = sum(p.numel() for p in self.trainable_parameters())
         if trainable_count != self.expected_trainable_parameters:
             raise RuntimeError(
-                "Unexpected paper CAAR trainable parameter count: "
+                "Unexpected paper ARPE trainable parameter count: "
                 f"{trainable_count} != {self.expected_trainable_parameters}."
             )
         self._verify_zero_actor_output()
@@ -348,7 +348,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         offset += self.critic_trace_embedding_size
         if offset != core_output.shape[-1]:
             raise RuntimeError(
-                "Unexpected paper CAAR core width: "
+                "Unexpected paper ARPE core width: "
                 f"consumed {offset}, got {core_output.shape[-1]}."
             )
         return hidden, centred_trace, legal, learned_trace, actor_trace, critic_trace

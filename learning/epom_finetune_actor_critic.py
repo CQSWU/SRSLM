@@ -33,7 +33,7 @@ class EPOMFineTuneActorCritic(ActorCriticSharedWeights):
         if not cfg.actor_critic_share_weights:
             raise ValueError("EPOM fine-tuning requires shared actor-critic weights.")
         if "tau" in obs_space.spaces:
-            raise ValueError("EPOM fine-tuning must not receive the CAAR tau input.")
+            raise ValueError("EPOM fine-tuning must not receive the ARPE tau input.")
         if getattr(action_space, "n", None) != self.NUM_ACTIONS:
             raise ValueError(
                 f"EPOM fine-tuning expects five discrete actions, got {action_space}."

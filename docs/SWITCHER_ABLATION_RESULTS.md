@@ -12,10 +12,10 @@ block-trained weights are evaluated under both rules.
 | NoWait | 1.842916 | 2.562828 |
 | Full SRSLM | 1.860878 | 2.644157 |
 
-OnlyWait uses CAAR when AORePlan returns wait and AORePlan otherwise, without
+OnlyWait uses ARPE when AORePlan returns wait and AORePlan otherwise, without
 a learned Switcher. NoWait invokes its Switcher at every timestep. Full
 SRSLM combines the wait rule with learned routing. All three share the same
-gated CAAR. The conservative static-step occupancy check is retained under
+gated ARPE. The conservative static-step occupancy check is retained under
 both execution rules.
 
 Full SRSLM improves mean throughput over OnlyWait by 17.70% under

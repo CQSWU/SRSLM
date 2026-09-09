@@ -1,4 +1,4 @@
-"""Public runner binds the paper artifacts, not the retired CAAR backbone."""
+"""Public runner binds the paper artifacts, not the retired ARPE backbone."""
 import inspect
 import json
 import sys
@@ -18,7 +18,7 @@ from planning.ao_replan_algo import AORePlanWrapper
 def test_public_names_are_explicit_and_retired_names_are_rejected():
     assert runner.SUPPORTED_ALGORITHMS == (
         'RePlan', 'AORePlan', 'AORePlan-SoftNoCheck', 'EPOM-Lifelong-FT',
-        'NoReweight', 'Direct', 'CAAR', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
+        'NoReweight', 'Direct', 'ARPE', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
     )
     assert set(runner.ALGORITHM_ALIASES.values()) == set(runner.SUPPORTED_ALGORITHMS)
     for name in ('DCC', 'DHC', 'Follower', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
@@ -34,7 +34,7 @@ def test_public_runner_has_no_unshipped_adapter_imports():
 
 
 def test_learned_policies_are_always_episode_fresh():
-    for name in ('Direct', 'CAAR', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'):
+    for name in ('Direct', 'ARPE', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'):
         assert not runner.should_cache_algorithm(name, True)
     assert runner.should_cache_algorithm('AORePlan', True)
 
@@ -89,34 +89,34 @@ def _artifact():
         base_checkpoint_sha256='c' * 64, base_config_sha256='d' * 64)
 
 
-def test_caar_loads_exact_frozen_candidate():
+def test_arpe_loads_exact_frozen_candidate():
     artifact = _artifact()
-    with patch.object(runner, '_load_caar_candidate_artifact', return_value=artifact), \
-         patch('agents.switcher_caar_candidate.CaarSwitcherCandidate.load') as load:
-        runner.build_algorithm('CAAR', '.', 42, caar_candidate_manifest='manifest.json')
+    with patch.object(runner, '_load_arpe_candidate_artifact', return_value=artifact), \
+         patch('agents.arpe.ARPE.load') as load:
+        runner.build_algorithm('ARPE', '.', 42, arpe_candidate_manifest='manifest.json')
     assert load.call_args.args[0] is artifact
     assert load.call_args.kwargs['seed'] == 42
 
 
-@pytest.mark.parametrize('algorithm', ['CAAR', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'])
+@pytest.mark.parametrize('algorithm', ['ARPE', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'])
 def test_pinned_policies_reject_split_artifact_root_before_loading(algorithm, tmp_path):
-    with patch.object(runner, '_load_caar_candidate_artifact') as load:
+    with patch.object(runner, '_load_arpe_candidate_artifact') as load:
         with pytest.raises(ValueError, match='source checkout'):
             runner.build_algorithm(algorithm, tmp_path, 0)
     load.assert_not_called()
 
 
 def test_wait_ablations_use_identical_candidate_and_distinct_switcher_contracts():
-    with patch.object(runner, '_load_caar_candidate_artifact', return_value=_artifact()), \
-         patch('agents.srslm_caar_ablation.SRSLMOnlyWait') as only, \
-         patch('agents.srslm_caar_ablation.SRSLMNoWait') as nowait:
-        runner.build_algorithm('SRSLM-OnlyWait', '.', 42, caar_candidate_manifest='manifest.json')
-        runner.build_algorithm('SRSLM-NoWait', '.', 42, caar_candidate_manifest='manifest.json',
+    with patch.object(runner, '_load_arpe_candidate_artifact', return_value=_artifact()), \
+         patch('agents.srslm_arpe_ablation.SRSLMOnlyWait') as only, \
+         patch('agents.srslm_arpe_ablation.SRSLMNoWait') as nowait:
+        runner.build_algorithm('SRSLM-OnlyWait', '.', 42, arpe_candidate_manifest='manifest.json')
+        runner.build_algorithm('SRSLM-NoWait', '.', 42, arpe_candidate_manifest='manifest.json',
                                switcher_weights_path='weights/independent-nowait')
         with pytest.raises(ValueError, match='independently trained'):
-            runner.build_algorithm('SRSLM-NoWait', '.', 42, caar_candidate_manifest='manifest.json')
+            runner.build_algorithm('SRSLM-NoWait', '.', 42, arpe_candidate_manifest='manifest.json')
         with pytest.raises(ValueError, match='must not load'):
-            runner.build_algorithm('SRSLM-OnlyWait', '.', 42, caar_candidate_manifest='manifest.json',
+            runner.build_algorithm('SRSLM-OnlyWait', '.', 42, arpe_candidate_manifest='manifest.json',
                                    switcher_weights_path='weights/full')
     only_cfg = only.call_args.args[0]
     nowait_cfg = nowait.call_args.args[0]
@@ -155,14 +155,14 @@ def test_search_soft_bypass_is_explicit_and_not_available_in_block_both():
 
 def test_public_manifest_is_path_relative_and_hash_pinned():
     root = Path(__file__).resolve().parents[1]
-    data = json.loads((root / 'configs/caar_final_candidate.json').read_text())
-    from agents.switcher_caar_candidate import CaarCandidateArtifact
-    artifact = CaarCandidateArtifact.from_mapping(data, root)
+    data = json.loads((root / 'configs/arpe_final_candidate.json').read_text())
+    from agents.arpe import ArpeCandidateArtifact
+    artifact = ArpeCandidateArtifact.from_mapping(data, root)
     assert artifact.checkpoint_sha256 == '497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b'
     assert artifact.base_checkpoint_sha256 == 'f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2'
 
 
-def test_optional_caar_path_is_an_assertion_not_an_override(tmp_path):
+def test_optional_arpe_path_is_an_assertion_not_an_override(tmp_path):
     artifact = SimpleNamespace(weights_path=(tmp_path / 'weights/pinned').resolve())
     runner._assert_candidate_weights(tmp_path, 'weights/pinned', artifact)
     with pytest.raises(ValueError, match='hash-pinned'):

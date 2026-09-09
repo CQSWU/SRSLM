@@ -10,10 +10,10 @@ import pytest
 from sample_factory.algo.utils.context import global_env_registry
 
 import train
-import train_switcher_wait_caar as wait_train
+import train_switcher_wait_arpe as wait_train
 import train_switcher_nowait as nowait_train
 from pomapf_env.switcher_env import SwitcherEnv
-from pomapf_env.switcher_caar_env import CaarSwitcherEnv, CaarNoWaitSwitcherEnv
+from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv, ArpeNoWaitSwitcherEnv
 
 
 @pytest.fixture
@@ -32,13 +32,13 @@ def isolated_registry(monkeypatch):
 def test_generic_switcher_factory_fails_before_configuration_or_loading(name, isolated_registry):
     train.register_custom_components()
     assert isolated_registry[name] is train.create_pogema_env
-    with pytest.raises(RuntimeError, match='train_switcher_wait_caar.py.*train_switcher_nowait.py'):
+    with pytest.raises(RuntimeError, match='train_switcher_wait_arpe.py.*train_switcher_nowait.py'):
         isolated_registry[name](name, cfg=None)
 
 
-def test_runtime_base_cannot_construct_legacy_caar():
+def test_runtime_base_cannot_construct_legacy_arpe():
     with pytest.raises(TypeError, match='runtime base'):
-        SwitcherEnv(caar_weights_path='unused-legacy-path')
+        SwitcherEnv(arpe_weights_path='unused-legacy-path')
 
 
 class _FrozenCandidate:
@@ -72,7 +72,7 @@ class _FrozenCandidate:
 
 def _configuration(entrypoint, collision):
     root = Path(__file__).resolve().parents[1]
-    declaration = json.loads((root / 'configs/caar_final_candidate.json').read_text())
+    declaration = json.loads((root / 'configs/arpe_final_candidate.json').read_text())
     return SimpleNamespace(full_config={
         'candidate_policy': declaration,
         'environment': {
@@ -91,8 +91,8 @@ def _configuration(entrypoint, collision):
 
 
 @pytest.mark.parametrize('entrypoint,env_type,register,factory_name', [
-    (wait_train, CaarSwitcherEnv, wait_train.register_wait_components, 'CaarSwitcherEnv'),
-    (nowait_train, CaarNoWaitSwitcherEnv, nowait_train.register_nowait_components, 'CaarNoWaitSwitcherEnv'),
+    (wait_train, ArpeSwitcherEnv, wait_train.register_wait_components, 'ArpeSwitcherEnv'),
+    (nowait_train, ArpeNoWaitSwitcherEnv, nowait_train.register_nowait_components, 'ArpeNoWaitSwitcherEnv'),
 ])
 @pytest.mark.parametrize('collision', ['block_both', 'soft'])
 def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
@@ -135,7 +135,7 @@ def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
             for observation in observations:
                 assert env.observation_space.contains(observation)
             allowed = tuple(env._prepared.switch_allowed_mask)
-            expected = ((True, True) if env_type is CaarNoWaitSwitcherEnv else
+            expected = ((True, True) if env_type is ArpeNoWaitSwitcherEnv else
                         tuple(a != 0 for a in env._prepared.aoreplan_actions))
             assert allowed == expected
             observations, rewards, terminated, truncated, infos = env.step([index % 2, (index + 1) % 2])

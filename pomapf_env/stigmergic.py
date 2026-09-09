@@ -1,4 +1,4 @@
-"""Mean-centered traffic-trace state for CAAR."""
+"""Mean-centered traffic-trace state for ARPE."""
 
 import numpy as np
 

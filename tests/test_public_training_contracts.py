@@ -111,9 +111,9 @@ def test_retired_tau_environment_fails_at_both_entrypoints():
 def test_noentropy_training_recipe_changes_only_gate_and_output_identity():
     raw = _recipe()
     root = Path(__file__).resolve().parents[1]
-    ungated = yaml.safe_load((root / 'learning/train_caar_noentropy_r5_500m.yaml').read_text())
-    assert ungated['name'] == 'CAAR-NoEntropy-FromScratch-R5-500M'
-    assert ungated['global_settings']['train_dir'] == 'weights/CAAR-noentropy-retrain'
+    ungated = yaml.safe_load((root / 'learning/train_arpe_noentropy_r5_500m.yaml').read_text())
+    assert ungated['name'] == 'ARPE-NoEntropy-FromScratch-R5-500M'
+    assert ungated['global_settings']['train_dir'] == 'weights/ARPE-noentropy-retrain'
     assert ungated['experiment_settings']['trace_context_learned_gate'] == 'all'
     Experiment(**ungated)
     ungated['name'] = raw['name']

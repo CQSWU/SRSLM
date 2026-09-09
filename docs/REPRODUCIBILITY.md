@@ -11,7 +11,7 @@ Run each method separately under `block_both` and `soft` on the same grid:
 32 held-out capacity-intersection maps, populations 100/200/300/400/500/600,
 seeds 0/42/123/2024/3407, lifelong `restart`, 512 steps and radius 5. This is
 960 unique map-population-seed episodes per method and rule. Keep the same
-selected block-trained EPOM-L, CAAR and Switcher weights in both rules.
+selected block-trained EPOM-L, ARPE and Switcher weights in both rules.
 
 AORePlan first obtains the dynamic planner's proposal, including BestMove.
 If there is no proposal, it uses RePlan's original random-or-stay fallback
@@ -33,15 +33,15 @@ it does not change the planner inside the retained SRSLM result.
 Paper Direct uses frozen EPOM-L, signed pressure and free-cell centering over
 the entire 11x11 trace crop. Entropy gating and clipped ReLU are separate,
 explicitly recorded options. Clipped ReLU applies after centering. Learned
-CAAR is not changed by these Direct options.
+ARPE is not changed by these Direct options.
 
-The gated CAAR declaration is `configs/caar_final_candidate.json`. The
-independently trained 500M-step ungated CAAR uses
-`configs/caar_noentropy_candidate.json`; it is not the gated checkpoint with
+The gated ARPE declaration is `configs/arpe_final_candidate.json`. The
+independently trained 500M-step ungated ARPE uses
+`configs/arpe_noentropy_candidate.json`; it is not the gated checkpoint with
 its gate disabled only at inference. Both use the same frozen EPOM-L base.
 The historical NoReweight backbone is a different model, not an EPOM-L alias.
 
-Full SRSLM, NoWait and OnlyWait share the same selected gated CAAR. NoWait
+Full SRSLM, NoWait and OnlyWait share the same selected gated ARPE. NoWait
 uses its independently trained all-state Switcher. OnlyWait has no Switcher
 checkpoint. Their soft runs keep Full's conservative occupancy check.
 

@@ -11,7 +11,7 @@ def _require_retained_encoder(cfg, obs_space=None):
     if kind == 'caar' and obs_space is not None and 'tau' in obs_space.spaces:
         raise ValueError(
             'The caar+tau actor is retired. The retained caar encoder is '
-            'the no-tau NoReweight backbone; use epom_trace_context for CAAR.'
+            'the no-tau NoReweight backbone; use epom_trace_context for ARPE.'
         )
 
 
@@ -39,9 +39,9 @@ def make_encoder(cfg, obs_space):
 
     if getattr(cfg, 'encoder_custom', None) == 'caar':
 
-        from learning.caar_encoder import CAAREncoder
+        from learning.no_reweight_encoder import NoReweightEncoder
 
-        return CAAREncoder(cfg, obs_space)
+        return NoReweightEncoder(cfg, obs_space)
 
     return default_make_encoder_func(cfg, obs_space)
 

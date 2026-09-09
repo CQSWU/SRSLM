@@ -1,4 +1,4 @@
-"""Inference adapter for the paper CAAR correction on frozen EPOM-L.
+"""Inference adapter for the paper ARPE correction on frozen EPOM-L.
 
 The model predicts five corrections and subtracts them from the base logits,
 with the checkpoint's entropy gate. This adapter rebuilds EPOM grid memory
@@ -143,7 +143,7 @@ class EPOMTraceContext(EPOMTrace):
             )
         self._context_diagnostic_steps: list[dict[str, float]] = []
 
-    # CAAR.__init__ dispatches to this method, so milestone selection happens
+    # ARPE.__init__ dispatches to this method, so milestone selection happens
     # before the checkpoint is deserialised and cannot be changed afterwards.
     def _load_checkpoint(self, checkpoint_dir, device, checkpoint_kind):
         if checkpoint_kind != "milestone":

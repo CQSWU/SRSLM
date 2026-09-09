@@ -1,4 +1,4 @@
-"""Frozen EPOM-L support for the retained paper CAAR model.
+"""Frozen EPOM-L support for the retained paper ARPE model.
 
 The historical class name remains the parent of EPOMTraceMultiplierActorCritic.
 It provides checkpoint validation, frozen-backbone identity, training-mode
@@ -24,7 +24,7 @@ MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 
 
 class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
-    """Shared frozen-base support; construct the concrete paper CAAR class."""
+    """Shared frozen-base support; construct the concrete paper ARPE class."""
 
     NUM_ACTIONS = 5
     BASE_ARCH_KEYS = (
@@ -35,7 +35,7 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         "normalize_input",
         "normalize_input_keys",
     )
-    # Concrete paper CAAR declares the exact permitted trainable prefixes.
+    # Concrete paper ARPE declares the exact permitted trainable prefixes.
     TRAINABLE_PREFIXES: tuple[str, ...] = ()
     ACTOR_BACKBONE_MODULE_NAMES = (
         "encoder",
@@ -47,7 +47,7 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
     def __init__(self, model_factory, obs_space, action_space, cfg):
         raise TypeError(
             "EPOMTraceContextActorCritic is frozen-base support only. "
-            "Construct EPOMTraceMultiplierActorCritic for the paper CAAR model."
+            "Construct EPOMTraceMultiplierActorCritic for the paper ARPE model."
         )
 
     # --------------------------------------------------------- frozen base

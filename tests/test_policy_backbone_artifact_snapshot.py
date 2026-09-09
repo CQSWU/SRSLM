@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 import torch
 
-from agents.caar import CAAR
+from agents.policy_backbone import PolicyBackbone
 
 
-class CAARArtifactSnapshotTests(unittest.TestCase):
+class PolicyBackboneArtifactSnapshotTests(unittest.TestCase):
     def test_checkpoint_hash_and_load_use_the_same_byte_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "checkpoint.pth"
@@ -24,10 +24,10 @@ class CAARArtifactSnapshotTests(unittest.TestCase):
                 return {"model": "loaded original"}
 
             with patch(
-                "agents.caar.torch.load",
+                "agents.policy_backbone.torch.load",
                 side_effect=replace_path_after_snapshot,
             ):
-                checkpoint, digest = CAAR._load_checkpoint_path(
+                checkpoint, digest = PolicyBackbone._load_checkpoint_path(
                     path,
                     torch.device("cpu"),
                     "latest",
@@ -42,7 +42,7 @@ class CAARArtifactSnapshotTests(unittest.TestCase):
             path = Path(directory) / "config.json"
             payload = json.dumps({"full_config": {"seed": 7}}).encode()
             path.write_bytes(payload)
-            config, digest = CAAR._load_config_snapshot(path)
+            config, digest = PolicyBackbone._load_config_snapshot(path)
             path.write_text('{"full_config": {"seed": 99}}')
 
             self.assertEqual(config["full_config"]["seed"], 7)

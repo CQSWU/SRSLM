@@ -73,7 +73,7 @@ class SwitcherEncoder(Encoder):
 
 
 class SwitcherActorCritic(ActorCriticSharedWeights):
-    """Small categorical actor with a conservative CAAR initialization."""
+    """Small categorical actor with a conservative ARPE initialization."""
 
     def __init__(self, model_factory, obs_space, action_space, cfg):
         if not cfg.actor_critic_share_weights:

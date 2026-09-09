@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and reproduce the 100M wait-aware CAAR Switcher certificate."""
+"""Create and reproduce the 100M wait-aware ARPE Switcher certificate."""
 
 from __future__ import annotations
 
@@ -13,8 +13,9 @@ PROJECT_IMPORT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_IMPORT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_IMPORT_ROOT))
 
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from scripts.switcher_artifact_contract import (
+    same_training_certificate,
     atomic_json,
     checkpoint_identity,
     latest_regular_checkpoint,
@@ -41,7 +42,7 @@ def _read_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _source_manifest(log_dir: Path, artifact: CaarCandidateArtifact) -> dict[str, Any]:
+def _source_manifest(log_dir: Path, artifact: ArpeCandidateArtifact) -> dict[str, Any]:
     before = log_dir / "source_before.sha256"
     after = log_dir / "source_after.sha256"
     require(before.is_file() and after.is_file(), "Source manifests are incomplete.")
@@ -76,7 +77,7 @@ def _validate_saved_config(
     project_root: Path,
     expected_experiment: str,
     expected_target_frames: int,
-) -> tuple[dict[str, Any], CaarCandidateArtifact]:
+) -> tuple[dict[str, Any], ArpeCandidateArtifact]:
     config = _read_json(config_path)
     full = config.get("full_config")
     require(isinstance(full, dict), "Saved config has no full_config.")
@@ -89,7 +90,7 @@ def _validate_saved_config(
         all(isinstance(v, dict) for v in (environment, settings, async_ppo, global_settings, candidate)),
         "Saved wait-aware Switcher config is incomplete.",
     )
-    artifact = CaarCandidateArtifact.from_mapping(candidate, project_root)
+    artifact = ArpeCandidateArtifact.from_mapping(candidate, project_root)
     artifact.verify_files()
     grid = environment.get("grid_config", {})
     expected = {
@@ -183,7 +184,7 @@ def build_validation(
             "wait_detection_enabled": True,
             "actor_training_scope": EXPECTED_SCOPE,
             "critic_training_scope": "all_valid_states",
-            "branch_0": "CAAR",
+            "branch_0": "ARPE",
             "branch_1": "AORePlan",
         },
         "selection": {
@@ -221,7 +222,7 @@ def verify_validation(
         expected_experiment=expected_experiment,
         expected_target_frames=expected_target_frames,
     )
-    require(saved == rebuilt, "Validation no longer reproduces.")
+    require(same_training_certificate(saved, rebuilt), "Validation no longer reproduces.")
     return rebuilt
 
 

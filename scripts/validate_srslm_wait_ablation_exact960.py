@@ -13,7 +13,7 @@ from pathlib import Path
 
 try:
     from scripts.switcher_artifact_contract import (
-        EXPECTED_CAAR_CHECKPOINT_SHA256,
+        EXPECTED_ARPE_CHECKPOINT_SHA256,
         MIN_FORMAL_FRAMES,
         SCHEMA as TRAINING_SCHEMA,
         checkpoint_identity,
@@ -21,7 +21,7 @@ try:
     )
 except ModuleNotFoundError:  # Direct ``python scripts/...py`` execution.
     from switcher_artifact_contract import (
-        EXPECTED_CAAR_CHECKPOINT_SHA256,
+        EXPECTED_ARPE_CHECKPOINT_SHA256,
         MIN_FORMAL_FRAMES,
         SCHEMA as TRAINING_SCHEMA,
         checkpoint_identity,
@@ -227,7 +227,8 @@ def validate_move_metrics(row, label):
 
 def validate_routing(row, algorithm, expected_checkpoint, label):
     require(row.get("hybrid_mode") == EXPECTED_MODES[algorithm], f"{label}: wrong mode")
-    require(row.get("switch_pair") == ["CAAR", "AORePlan"], f"{label}: wrong branches")
+    # Accept the exact historical label, without changing raw rows or hash checks.
+    require(row.get("switch_pair") in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]), f"{label}: wrong branches")
     require(row.get("value_predictor_loaded") is False, f"{label}: value predictor loaded")
     require(row.get("switcher_feature_schema") == "srslm_switcher_state_v3", f"{label}: wrong schema")
     require(row.get("joint_conflict_prediction_enabled") is False, f"{label}: joint predictor enabled")
@@ -236,9 +237,9 @@ def validate_routing(row, algorithm, expected_checkpoint, label):
     choices = counts["switcher_choice_count"]
     selected = counts["selected_ao_count"]
     executed_ao = counts["executed_ao_count"]
-    executed_caar = counts["executed_caar_count"]
+    executed_arpe = counts["executed_caar_count"]
     bypasses = counts["aoreplan_wait_bypass_count"]
-    require(executed_ao + executed_caar == total, f"{label}: branch counts do not sum")
+    require(executed_ao + executed_arpe == total, f"{label}: branch counts do not sum")
     require(counts["aoreplan_commit_count"] <= total, f"{label}: too many AO commits")
     require(counts["branch_action_agreement_count"] <= total, f"{label}: too many agreements")
 
@@ -264,7 +265,7 @@ def validate_routing(row, algorithm, expected_checkpoint, label):
         require(choices == selected == 0, f"{label}: Switcher counters are nonzero")
         require(counts["switcher_model_choice_count"] == 0, f"{label}: model choice count is nonzero")
         require(counts["switcher_model_selected_ao_count"] == 0, f"{label}: model AO count is nonzero")
-        require(executed_caar == bypasses and executed_ao + bypasses == total, f"{label}: wait routing differs")
+        require(executed_arpe == bypasses and executed_ao + bypasses == total, f"{label}: wait routing differs")
         require(row.get("switcher_stochastic") is False, f"{label}: deterministic rule marked stochastic")
     else:
         require(row.get("switcher_training") == "PPO", f"{label}: Switcher is not PPO")
@@ -339,8 +340,8 @@ def validate_training_provenance(
     require(payload.get("policy_model_sha256") == expected_model, "Training policy model differs")
     require(
         payload.get("frozen_caar_checkpoint_sha256")
-        == EXPECTED_CAAR_CHECKPOINT_SHA256,
-        "Training used a different frozen CAAR checkpoint",
+        == EXPECTED_ARPE_CHECKPOINT_SHA256,
+        "Training used a different frozen ARPE checkpoint",
     )
     recorded_source = payload.get("source_manifest")
     require(isinstance(recorded_source, dict), "Training source provenance is missing")
@@ -501,8 +502,8 @@ def main():
         "Code snapshot SHA256 differs",
     )
     require(
-        args.expected_caar_checkpoint_sha256 == EXPECTED_CAAR_CHECKPOINT_SHA256,
-        "Expected CAAR SHA256 is not the frozen paper artifact",
+        args.expected_arpe_checkpoint_sha256 == EXPECTED_ARPE_CHECKPOINT_SHA256,
+        "Expected ARPE SHA256 is not the frozen paper artifact",
     )
     run_contract = output_dir / "RUN_CONTRACT.json"
     require(run_contract.is_file(), "RUN_CONTRACT.json is missing")
@@ -625,8 +626,8 @@ def main():
     require(integrity.get("hybrid_mode") == EXPECTED_MODES[args.algorithm], "Integrity mode differs")
     require(integrity.get("map_list_sha256") == EXPECTED_MAP_SHA256, "Integrity map differs")
     require(
-        integrity.get("caar_checkpoint_sha256") == EXPECTED_CAAR_CHECKPOINT_SHA256,
-        "Integrity CAAR checkpoint differs",
+        integrity.get("caar_checkpoint_sha256") == EXPECTED_ARPE_CHECKPOINT_SHA256,
+        "Integrity ARPE checkpoint differs",
     )
     if args.algorithm == "SRSLM-WaitDetectOnly":
         require(integrity.get("switcher_checkpoint_sha256") is None, "WaitDetectOnly bound a Switcher")
@@ -719,7 +720,7 @@ def main():
         "default_reference_policy_model_sha256": (
             args.reference_switcher_model_sha256
         ),
-        "frozen_caar_checkpoint_sha256": EXPECTED_CAAR_CHECKPOINT_SHA256,
+        "frozen_caar_checkpoint_sha256": EXPECTED_ARPE_CHECKPOINT_SHA256,
         "switcher_training_provenance": training_provenance,
         "result_journal": journal,
         "overall": summary(),

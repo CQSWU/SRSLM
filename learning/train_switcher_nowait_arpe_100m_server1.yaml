@@ -1,4 +1,4 @@
-name: SRSLM-NoWait-CAAR-100M
+name: SRSLM-NoWait-ARPE-100M
 candidate_policy:
   kind: epom_trace_context_caar_milestone
   schema: switcher_candidate_caar_v1
@@ -13,7 +13,7 @@ candidate_policy:
   checkpoint_selection: exact_milestone
   frozen: true
 global_settings:
-  train_dir: weights/SRSLM-switcher-caar-nowait-100m
+  train_dir: weights/SRSLM-switcher-arpe-nowait-100m
   device: gpu
   seed: 0
 evaluation:

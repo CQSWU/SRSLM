@@ -60,7 +60,7 @@ DEFAULT_MAPS = {
 
 SUPPORTED_ALGORITHMS = (
     "RePlan", "AORePlan", "AORePlan-SoftNoCheck",
-    "EPOM-Lifelong-FT", "NoReweight", "Direct", "CAAR",
+    "EPOM-Lifelong-FT", "NoReweight", "Direct", "ARPE",
     "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
 )
 
@@ -77,7 +77,7 @@ ALGORITHM_ALIASES = {
     "noreweight": "NoReweight",
     "no-reweight": "NoReweight",
     "direct": "Direct",
-    "caar": "CAAR",
+    "arpe": "ARPE",
     "srslm-nowait": "SRSLM-NoWait",
     "srslm-onlywait": "SRSLM-OnlyWait",
     "srslm": "SRSLM",
@@ -188,13 +188,13 @@ def srslm_contract_metadata(algorithms, collision_system="block_both"):
     return {
         "strategy_kind": "hybrid_switching",
         "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
-        "branch_algorithms": ["CAAR", "AORePlan"],
+        "branch_algorithms": ["ARPE", "AORePlan"],
         "hybrid_components": {
-            "learning_branch": "CAAR",
+            "learning_branch": "ARPE",
             "planning_branch": "AORePlan",
             "selector": "Switcher",
         },
-        "action_policy": "CAAR-or-AORePlan",
+        "action_policy": "ARPE-or-AORePlan",
         "guide_algorithm": "AORePlan",
         "deployment": {
             "wait_rule": "aoreplan_wait_directly_uses_caar",
@@ -413,22 +413,22 @@ def _project_path(main_dir, value):
     return path.resolve()
 
 
-def _load_caar_candidate_artifact(main_dir, manifest_path):
-    """Load and verify the one explicit CAAR milestone used by SRSLM."""
+def _load_arpe_candidate_artifact(main_dir, manifest_path):
+    """Load and verify the one explicit ARPE milestone used by SRSLM."""
 
     if manifest_path is None:
         raise ValueError(
-            "The final SRSLM variants require --caar-candidate-manifest."
+            "The final SRSLM variants require --arpe-candidate-manifest."
         )
     path = _project_path(main_dir, manifest_path)
     if not path.is_file():
-        raise FileNotFoundError(f"CAAR candidate manifest is missing: {path}")
+        raise FileNotFoundError(f"ARPE candidate manifest is missing: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("CAAR candidate manifest must be a JSON object.")
-    from agents.switcher_caar_candidate import CaarCandidateArtifact
+        raise ValueError("ARPE candidate manifest must be a JSON object.")
+    from agents.arpe import ArpeCandidateArtifact
 
-    artifact = CaarCandidateArtifact.from_mapping(
+    artifact = ArpeCandidateArtifact.from_mapping(
         payload,
         Path(main_dir).resolve(),
     )
@@ -438,7 +438,7 @@ def _load_caar_candidate_artifact(main_dir, manifest_path):
 
 _EPISODE_FRESH_ALGORITHMS = frozenset(
     (
-        "CAAR",
+        "ARPE",
         "NoReweight",
         "Direct",
         "SRSLM",
@@ -487,32 +487,32 @@ def srslm_integrity_metadata(
         args.switcher_weights_path or _find_switcher_weights(root),
     )
     # Hash the candidate actually bound by the Switcher, not an independently
-    # discovered latest CAAR that the deployed policy never loads.
+    # discovered latest ARPE that the deployed policy never loads.
     serialized = json.loads((switcher_weights / "config.json").read_text(encoding="utf-8"))
     full_config = serialized.get("full_config", serialized)
-    from agents.switcher_caar_candidate import CaarCandidateArtifact
+    from agents.arpe import ArpeCandidateArtifact
     from agents.switcher import Switcher
-    artifact = CaarCandidateArtifact.from_mapping(full_config.get("candidate_policy", {}), root)
+    artifact = ArpeCandidateArtifact.from_mapping(full_config.get("candidate_policy", {}), root)
     artifact.verify_files()
-    _assert_candidate_weights(root, getattr(args, "caar_weights_path", None), artifact)
-    if getattr(args, "caar_candidate_manifest", None):
-        declared = _load_caar_candidate_artifact(root, args.caar_candidate_manifest)
+    _assert_candidate_weights(root, getattr(args, "arpe_weights_path", None), artifact)
+    if getattr(args, "arpe_candidate_manifest", None):
+        declared = _load_arpe_candidate_artifact(root, args.arpe_candidate_manifest)
         if declared.as_dict() != artifact.as_dict():
-            raise ValueError("CAAR manifest differs from the candidate pinned by Switcher.")
-    caar_weights = artifact.weights_path
-    caar_checkpoint = artifact.checkpoint_path
+            raise ValueError("ARPE manifest differs from the candidate pinned by Switcher.")
+    arpe_weights = artifact.weights_path
+    arpe_checkpoint = artifact.checkpoint_path
     switcher_checkpoint = Switcher._resolve_checkpoint(switcher_weights / "checkpoint_p0", "auto")
     files = {
-        "caar_config": caar_weights / "config.json",
-        "caar_checkpoint": caar_checkpoint,
+        "caar_config": arpe_weights / "config.json",
+        "caar_checkpoint": arpe_checkpoint,
         "base_config": artifact.base_config_path,
         "base_checkpoint": artifact.base_checkpoint_path,
         "switcher_config": switcher_weights / "config.json",
         "switcher_checkpoint": switcher_checkpoint,
         "run_experiments.py": code_root / "run_experiments.py",
-        "agents/caar.py": code_root / "agents/caar.py",
+        "agents/policy_backbone.py": code_root / "agents/policy_backbone.py",
         "agents/epom_trace_context.py": code_root / "agents/epom_trace_context.py",
-        "agents/switcher_caar_candidate.py": code_root / "agents/switcher_caar_candidate.py",
+        "agents/arpe.py": code_root / "agents/arpe.py",
         "learning/epom_trace_context_actor_critic.py": code_root / "learning/epom_trace_context_actor_critic.py",
         "learning/epom_trace_multiplier_actor_critic.py": code_root / "learning/epom_trace_multiplier_actor_critic.py",
         "agents/srslm.py": code_root / "agents/srslm.py",
@@ -544,7 +544,7 @@ def srslm_integrity_metadata(
     return {
         "strategy_kind": "hybrid_switching",
         "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
-        "caar_weights_path": str(caar_weights),
+        "arpe_weights_path": str(arpe_weights),
         "switcher_weights_path": str(switcher_weights),
         "caar_checkpoint_sha256": hashes["caar_checkpoint"],
         "switcher_checkpoint_sha256": hashes["switcher_checkpoint"],
@@ -629,9 +629,9 @@ def _ao_replan_cfg(
 
 
 def _assert_candidate_weights(main_dir, requested, artifact):
-    """An old CLI path may assert identity, but may not replace a pinned CAAR."""
+    """An old CLI path may assert identity, but may not replace a pinned ARPE."""
     if requested is not None and _project_path(main_dir, requested).resolve() != artifact.weights_path:
-        raise ValueError("--caar-weights-path differs from the hash-pinned CAAR candidate.")
+        raise ValueError("--arpe-weights-path differs from the hash-pinned ARPE candidate.")
 
 
 def build_algorithm(
@@ -642,9 +642,9 @@ def build_algorithm(
 
     seed,
 
-    caar_weights_path=None,
+    arpe_weights_path=None,
 
-    caar_candidate_manifest=None,
+    arpe_candidate_manifest=None,
 
     switcher_weights_path=None,
 
@@ -666,7 +666,7 @@ def build_algorithm(
     if algo_name not in SUPPORTED_ALGORITHMS:
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
 
-    if algo_name in {"CAAR", "SRSLM", "SRSLM-NoWait", "SRSLM-OnlyWait"}:
+    if algo_name in {"ARPE", "SRSLM", "SRSLM-NoWait", "SRSLM-OnlyWait"}:
         # Their saved relative paths and embedded candidate declaration share
         # this checkout as their root. Do not partly redirect those identities
         # with --main-dir while loading the frozen base from a different tree.
@@ -704,21 +704,21 @@ def build_algorithm(
         "SRSLM-NoWait",
         "SRSLM-OnlyWait",
     ):
-        from agents.srslm_caar_ablation import (
+        from agents.srslm_arpe_ablation import (
             SRSLMNoWait,
             SRSLMNoWaitConfig,
             SRSLMOnlyWait,
             SRSLMOnlyWaitConfig,
         )
-        from agents.switcher_caar import AllStateCaarSwitcherConfig
-        from agents.switcher_caar_candidate import CaarSwitcherCandidateConfig
+        from agents.switcher_arpe import AllStateArpeSwitcherConfig
+        from agents.arpe import ARPEConfig
 
-        artifact = _load_caar_candidate_artifact(
+        artifact = _load_arpe_candidate_artifact(
             main_dir,
-            caar_candidate_manifest,
+            arpe_candidate_manifest,
         )
-        _assert_candidate_weights(main_dir, caar_weights_path, artifact)
-        candidate = CaarSwitcherCandidateConfig(
+        _assert_candidate_weights(main_dir, arpe_weights_path, artifact)
+        candidate = ARPEConfig(
             path_to_weights=artifact.weights_relative,
             milestone_checkpoint=artifact.checkpoint_relative,
             checkpoint_sha256=artifact.checkpoint_sha256,
@@ -745,7 +745,7 @@ def build_algorithm(
                 f"{algo_name} requires the independently trained NoWait "
                 "--switcher-weights-path."
             )
-        switcher = AllStateCaarSwitcherConfig(
+        switcher = AllStateArpeSwitcherConfig(
             path_to_weights=str(_project_path(main_dir, switcher_weights_path)),
             checkpoint_kind="latest",
             deterministic=False,
@@ -786,7 +786,7 @@ def build_algorithm(
             ),
             project_root=Path(main_dir).resolve(),
         )
-        _assert_candidate_weights(main_dir, caar_weights_path, policy.candidate.artifact)
+        _assert_candidate_weights(main_dir, arpe_weights_path, policy.candidate.artifact)
         return policy
 
 
@@ -825,7 +825,7 @@ def build_algorithm(
 
     if algo_name == "NoReweight":
 
-        from agents.caar import NoReweight, NoReweightConfig
+        from agents.policy_backbone import NoReweight, NoReweightConfig
 
         weights_path = (
             no_reweight_weights_path or _find_no_reweight_weights(main_dir)
@@ -868,15 +868,15 @@ def build_algorithm(
         ))
 
 
-    if algo_name == "CAAR":
-        from agents.switcher_caar_candidate import CaarSwitcherCandidate
+    if algo_name == "ARPE":
+        from agents.arpe import ARPE
 
-        manifest = caar_candidate_manifest or str(
-            Path(main_dir).resolve() / "artifacts" / "caar_final_candidate.json"
+        manifest = arpe_candidate_manifest or str(
+            Path(main_dir).resolve() / "configs" / "arpe_final_candidate.json"
         )
-        artifact = _load_caar_candidate_artifact(main_dir, manifest)
-        _assert_candidate_weights(main_dir, caar_weights_path, artifact)
-        return CaarSwitcherCandidate.load(
+        artifact = _load_arpe_candidate_artifact(main_dir, manifest)
+        _assert_candidate_weights(main_dir, arpe_weights_path, artifact)
+        return ARPE.load(
             artifact,
             seed=int(seed),
             device="auto",
@@ -923,12 +923,13 @@ def validate_srslm_stats(stats):
     bypasses = int(stats["aoreplan_wait_bypass_count"])
     selected_ao = int(stats["selected_ao_count"])
     executed_ao = int(stats["executed_ao_count"])
-    executed_caar = int(stats["executed_caar_count"])
+    executed_arpe = int(stats["executed_caar_count"])
     violations = []
     if stats["hybrid_mode"] != "aoreplan_wait_bypass_switcher_v3":
         violations.append("hybrid mode differs from the fixed SRSLM policy")
-    if stats["switch_pair"] != ["CAAR", "AORePlan"]:
-        violations.append("branch names are not CAAR/AORePlan")
+    # Historical evidence retains CAAR; only its display identity changed.
+    if stats["switch_pair"] not in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]):
+        violations.append("branch names are not ARPE/AORePlan")
     if stats["switcher_training"] != "PPO":
         violations.append("Switcher training method is not PPO")
     if stats["value_predictor_loaded"] is not False:
@@ -943,7 +944,7 @@ def validate_srslm_stats(stats):
         violations.append("retired joint-conflict prediction is active")
     if choices + bypasses != total:
         violations.append("Switcher choices and AORePlan-wait bypasses do not sum")
-    if executed_ao + executed_caar != total:
+    if executed_ao + executed_arpe != total:
         violations.append("executed branch counts do not sum")
     if selected_ao != executed_ao or selected_ao > choices:
         violations.append("selected and executed AORePlan counts disagree")
@@ -987,10 +988,10 @@ def validate_srslm_stats(stats):
 
 
 def validate_final_srslm_ablation_stats(algorithm, stats):
-    """Validate the two retained ablations that share one CAAR candidate."""
+    """Validate the two retained ablations that share one ARPE candidate."""
 
-    from agents.switcher_caar import CAAR_SWITCHER_LOADER_SCHEMA
-    from agents.switcher_caar_candidate import CAAR_CANDIDATE_SCHEMA
+    from agents.switcher_arpe import ARPE_SWITCHER_LOADER_SCHEMA
+    from agents.arpe import ARPE_CANDIDATE_SCHEMA
     from agents.switcher_core import SWITCHER_FEATURE_SCHEMA
 
     expected_modes = {
@@ -1034,14 +1035,15 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
     selected_ao = int(stats["selected_ao_count"])
     model_selected_ao = int(stats["switcher_model_selected_ao_count"])
     executed_ao = int(stats["executed_ao_count"])
-    executed_caar = int(stats["executed_caar_count"])
+    executed_arpe = int(stats["executed_caar_count"])
     bypasses = int(stats["aoreplan_wait_bypass_count"])
     violations = []
     if stats["hybrid_mode"] != expected_modes[algorithm]:
         violations.append("hybrid mode differs")
     if stats["ablation_name"] != algorithm:
         violations.append("ablation name differs")
-    if stats["switch_pair"] != ["CAAR", "AORePlan"]:
+    # Historical evidence retains CAAR; only its display identity changed.
+    if stats["switch_pair"] not in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]):
         violations.append("branch names differ")
     if stats["value_predictor_loaded"] is not False:
         violations.append("retired value predictor was loaded")
@@ -1049,7 +1051,7 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
         violations.append("Switcher feature schema differs")
     if stats["joint_conflict_prediction_enabled"] is not False:
         violations.append("retired joint conflict predictor is active")
-    if total <= 0 or executed_ao + executed_caar != total:
+    if total <= 0 or executed_ao + executed_arpe != total:
         violations.append("executed branch counts do not sum")
     if int(stats["aoreplan_commit_count"]) > total:
         violations.append("AORePlan commits exceed action count")
@@ -1064,7 +1066,7 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
             violations.append("learned selector is not categorical")
         if stats["learned_switcher_called"] is not True:
             violations.append("learned Switcher was not called")
-        if stats.get("switcher_loader_schema") != CAAR_SWITCHER_LOADER_SCHEMA:
+        if stats.get("switcher_loader_schema") != ARPE_SWITCHER_LOADER_SCHEMA:
             violations.append("wrong Switcher loader schema")
         if stats.get("switcher_stochastic") is not True:
             violations.append("learned Switcher is not stochastic")
@@ -1098,14 +1100,14 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
             violations.append("OnlyWait called a learned Switcher")
         if any((choices, model_choices, selected_ao, model_selected_ao)):
             violations.append("OnlyWait recorded learned choices")
-        if executed_caar != bypasses:
-            violations.append("OnlyWait CAAR executions differ from waits")
+        if executed_arpe != bypasses:
+            violations.append("OnlyWait ARPE executions differ from waits")
         if stats.get("switcher_stochastic") is not False:
             violations.append("OnlyWait is not deterministic")
 
     candidate = stats.get("candidate_provenance") or {}
     frozen = candidate.get("frozen_verification") or {}
-    if candidate.get("schema") != CAAR_CANDIDATE_SCHEMA:
+    if candidate.get("schema") != ARPE_CANDIDATE_SCHEMA:
         violations.append("candidate provenance schema differs")
     if frozen.get("verified") is not True or frozen.get(
         "trainable_parameter_count"
@@ -1674,9 +1676,9 @@ def run_single_experiment(task):
 
         seed,
 
-        task.get("caar_weights_path"),
+        task.get("arpe_weights_path"),
 
-        task.get("caar_candidate_manifest"),
+        task.get("arpe_candidate_manifest"),
 
         task.get("switcher_weights_path"),
 
@@ -1709,10 +1711,10 @@ def run_single_experiment(task):
 
                     seed,
 
-                    caar_weights_path=task.get("caar_weights_path"),
+                    arpe_weights_path=task.get("arpe_weights_path"),
 
-                    caar_candidate_manifest=task.get(
-                        "caar_candidate_manifest"
+                    arpe_candidate_manifest=task.get(
+                        "arpe_candidate_manifest"
                     ),
 
                     switcher_weights_path=task.get("switcher_weights_path"),
@@ -1744,10 +1746,10 @@ def run_single_experiment(task):
 
                 seed,
 
-                caar_weights_path=task.get("caar_weights_path"),
+                arpe_weights_path=task.get("arpe_weights_path"),
 
-                caar_candidate_manifest=task.get(
-                    "caar_candidate_manifest"
+                arpe_candidate_manifest=task.get(
+                    "arpe_candidate_manifest"
                 ),
 
                 switcher_weights_path=task.get("switcher_weights_path"),
@@ -2774,10 +2776,10 @@ def build_tasks(
 
             "collision_system": args.collision_system,
 
-            "caar_weights_path": args.caar_weights_path,
+            "arpe_weights_path": args.arpe_weights_path,
 
-            "caar_candidate_manifest": getattr(
-                args, "caar_candidate_manifest", None
+            "arpe_candidate_manifest": getattr(
+                args, "arpe_candidate_manifest", None
             ),
 
             "switcher_weights_path": args.switcher_weights_path,
@@ -2856,10 +2858,10 @@ def build_tasks(
 
                     "collision_system": args.collision_system,
 
-                    "caar_weights_path": args.caar_weights_path,
+                    "arpe_weights_path": args.arpe_weights_path,
 
-                    "caar_candidate_manifest": getattr(
-                        args, "caar_candidate_manifest", None
+                    "arpe_candidate_manifest": getattr(
+                        args, "arpe_candidate_manifest", None
                     ),
 
                     "switcher_weights_path": args.switcher_weights_path,
@@ -3554,28 +3556,28 @@ def parse_args():
     )
     parser.add_argument(
         "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
-        help="Direct pressure transform; clipped_relu uses cap 2. Learned CAAR output is not clipped.",
+        help="Direct pressure transform; clipped_relu uses cap 2. Learned ARPE output is not clipped.",
     )
     parser.add_argument(
 
-        "--caar-weights-path",
+        "--arpe-weights-path",
 
-        dest="caar_weights_path",
+        dest="arpe_weights_path",
 
         type=str,
 
         default=None,
 
-        help="Optional identity assertion: must match the hash-pinned CAAR candidate, never overrides it.",
+        help="Optional identity assertion: must match the hash-pinned ARPE candidate, never overrides it.",
 
     )
 
     parser.add_argument(
-        "--caar-candidate-manifest",
+        "--arpe-candidate-manifest",
         type=str,
         default=None,
         help=(
-            "JSON declaration that pins the selected CAAR milestone and its "
+            "JSON declaration that pins the selected ARPE milestone and its "
             "frozen EPOM-L base for SRSLM-NoWait/OnlyWait evaluations"
         ),
     )
@@ -3934,10 +3936,10 @@ def main():
 
         "main_dir": args.main_dir,
 
-        "caar_weights_path": args.caar_weights_path,
+        "arpe_weights_path": args.arpe_weights_path,
 
-        "caar_candidate_manifest": getattr(
-            args, "caar_candidate_manifest", None
+        "arpe_candidate_manifest": getattr(
+            args, "arpe_candidate_manifest", None
         ),
 
         "switcher_weights_path": args.switcher_weights_path,

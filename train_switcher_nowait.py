@@ -1,4 +1,4 @@
-"""Train the all-state SRSLM Switcher against a hash-pinned CAAR policy."""
+"""Train the all-state SRSLM Switcher against a hash-pinned ARPE policy."""
 
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.train import run_rl
 
 import train as base_train
-from agents.switcher_caar_candidate import CaarCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from learning.config import Environment
-from pomapf_env.switcher_caar_env import (
-    CAAR_NOWAIT_ENV_SCHEMA,
-    CaarNoWaitSwitcherEnv,
+from pomapf_env.switcher_arpe_env import (
+    ARPE_NOWAIT_ENV_SCHEMA,
+    ArpeNoWaitSwitcherEnv,
 )
 
 
@@ -55,8 +55,8 @@ def create_nowait_switcher_env(
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
         raise RuntimeError("Saved NoWait config has no candidate_policy pin.")
-    artifact = CaarCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
-    return CaarNoWaitSwitcherEnv(
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
+    return ArpeNoWaitSwitcherEnv(
         grid_config=environment.grid_config,
         candidate_artifact=artifact,
         candidate_device=environment.switcher_caar_device,
@@ -76,7 +76,7 @@ def prepare_nowait_config(config: dict) -> tuple[object, object]:
     declaration = payload.pop("candidate_policy", None)
     if not isinstance(declaration, dict):
         raise ValueError("NoWait config requires candidate_policy.")
-    artifact = CaarCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
     artifact.verify_files()
 
     experiment, flat_config = base_train.validate_config(payload)
@@ -92,12 +92,12 @@ def prepare_nowait_config(config: dict) -> tuple[object, object]:
             "environment.switcher_caar_weights_path differs from candidate_policy."
         )
     if experiment.environment.switcher_caar_device != "cuda":
-        raise ValueError("NoWait CAAR candidate must use the PPU device.")
+        raise ValueError("NoWait ARPE candidate must use the PPU device.")
 
     flat_config.full_config = deepcopy(flat_config.full_config)
     flat_config.full_config["candidate_policy"] = deepcopy(declaration)
     flat_config.candidate_policy = deepcopy(declaration)
-    flat_config.switcher_integration_schema = CAAR_NOWAIT_ENV_SCHEMA
+    flat_config.switcher_integration_schema = ARPE_NOWAIT_ENV_SCHEMA
     flat_config.switcher_training_entrypoint_schema = ENTRYPOINT_SCHEMA
     return experiment, flat_config
 
@@ -142,7 +142,7 @@ def main(argv=None) -> int:
                 {
                     "validated": True,
                     "schema": ENTRYPOINT_SCHEMA,
-                    "integration_schema": CAAR_NOWAIT_ENV_SCHEMA,
+                    "integration_schema": ARPE_NOWAIT_ENV_SCHEMA,
                     "experiment": flat_config.experiment,
                     "target_frames": int(flat_config.train_for_env_steps),
                     "workers": int(flat_config.num_workers),
