@@ -228,6 +228,11 @@ the two-rule figure and downloadable counts. SRSLM's mean throughput is
 1.868739 under `block_both` and 2.724431 under `soft`; this is a separate
 4,096-step experiment, not a runtime benchmark or the exact960 comparison.
 
+The completed [quick joint-action timing comparison](docs/QUICK_TIMING.md)
+uses one map, three populations, one seed and 16 calls per episode on a single
+CPU worker. It reports act-only costs for eight methods under both rules;
+it is a short shared-host observation, not an isolated-hardware benchmark.
+
 ## Tests
 
 ```bash

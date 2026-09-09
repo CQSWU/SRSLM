@@ -50,9 +50,10 @@ otherpolicy/
 data/
 renders/
 
-# Only the reviewed, sanitized long-horizon release is public data.
+# Only the reviewed, sanitized aggregate releases below are public data.
 !/docs/data/
 /docs/data/*
+!/docs/data/quick_joint_action_timing_20260909.csv
 !/docs/data/long_horizon_20260908/
 /docs/data/long_horizon_20260908/*
 !/docs/data/long_horizon_20260908/B_episode_windows.csv

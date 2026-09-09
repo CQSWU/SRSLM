@@ -52,7 +52,13 @@ does not promise byte-identical regeneration of a historical checkpoint.
 
 ## Result evidence
 
-For each result, check the exact grid and execution rule, all 960 unique
+The separate [quick timing comparison](QUICK_TIMING.md) measures 16 joint
+action calls on one map, three populations and one seed. It is not an
+exact960 experiment and is not subject to a 960-row completeness claim.
+Its full-precision aggregate table and evidence identifiers are recorded
+with that narrower protocol.
+
+For each exact960 result, check the exact grid and execution rule, all 960 unique
 finite error-free rows, selected checkpoint/config hashes and method-specific
 episode reset behavior. Keep the original source snapshot and validation
 records bound to the raw result. Where an original journal exists, compare
