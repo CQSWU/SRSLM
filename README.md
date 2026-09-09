@@ -218,6 +218,10 @@ missing historical evidence rather than reconstructing it as if it were
 original. A completion marker or a curated source checkout alone is not a
 complete result audit. See [Reproducibility](docs/REPRODUCIBILITY.md).
 
+The completed [ARPE reweighting ablation](docs/ARPE_ABLATION_RESULTS.md)
+reports five configurations under both rules, with 60 population-level points
+and the distinct evidence limits of the historical and newly completed runs.
+
 The completed two-rule [Switcher ablation summary](docs/SWITCHER_ABLATION_RESULTS.md)
 reports OnlyWait, NoWait and Full SRSLM, including the low-population exception
 and the distinction between separately trained configurations.

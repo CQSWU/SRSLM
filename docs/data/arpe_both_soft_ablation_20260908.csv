@@ -1,0 +1,61 @@
+collision_system,method,num_agents,episodes,mean_throughput
+block_both,Base policy (EPOM-L),100,160,1.14876708984375
+block_both,Base policy (EPOM-L),200,160,1.5642578125
+block_both,Base policy (EPOM-L),300,160,1.6080078125
+block_both,Base policy (EPOM-L),400,160,1.53807373046875
+block_both,Base policy (EPOM-L),500,160,1.42191162109375
+block_both,Base policy (EPOM-L),600,160,1.30380859375
+block_both,Direct reweight,100,160,1.17960205078125
+block_both,Direct reweight,200,160,1.62528076171875
+block_both,Direct reweight,300,160,1.62744140625
+block_both,Direct reweight,400,160,1.54931640625
+block_both,Direct reweight,500,160,1.38455810546875
+block_both,Direct reweight,600,160,1.22769775390625
+block_both,CAAR without policy entropy,100,160,1.20931396484375
+block_both,CAAR without policy entropy,200,160,1.6485595703125
+block_both,CAAR without policy entropy,300,160,1.6746337890625
+block_both,CAAR without policy entropy,400,160,1.60677490234375
+block_both,CAAR without policy entropy,500,160,1.49473876953125
+block_both,CAAR without policy entropy,600,160,1.36453857421875
+block_both,CAAR + policy entropy,100,160,1.21607666015625
+block_both,CAAR + policy entropy,200,160,1.6679931640625
+block_both,CAAR + policy entropy,300,160,1.727294921875
+block_both,CAAR + policy entropy,400,160,1.65428466796875
+block_both,CAAR + policy entropy,500,160,1.56103515625
+block_both,CAAR + policy entropy,600,160,1.45350341796875
+soft,Base policy (EPOM-L),100,160,1.32877197265625
+soft,Base policy (EPOM-L),200,160,2.15902099609375
+soft,Base policy (EPOM-L),300,160,2.5392578125
+soft,Base policy (EPOM-L),400,160,2.684521484375
+soft,Base policy (EPOM-L),500,160,2.68677978515625
+soft,Base policy (EPOM-L),600,160,2.62242431640625
+soft,Direct reweight,100,160,1.38779296875
+soft,Direct reweight,200,160,2.3010986328125
+soft,Direct reweight,300,160,2.83695068359375
+soft,Direct reweight,400,160,3.13289794921875
+soft,Direct reweight,500,160,3.2669921875
+soft,Direct reweight,600,160,3.322607421875
+soft,Direct + policy entropy,100,160,1.36014404296875
+soft,Direct + policy entropy,200,160,2.24022216796875
+soft,Direct + policy entropy,300,160,2.72279052734375
+soft,Direct + policy entropy,400,160,2.9536376953125
+soft,Direct + policy entropy,500,160,3.0448486328125
+soft,Direct + policy entropy,600,160,3.06295166015625
+soft,CAAR without policy entropy,100,160,1.328759765625
+soft,CAAR without policy entropy,200,160,2.06943359375
+soft,CAAR without policy entropy,300,160,2.37164306640625
+soft,CAAR without policy entropy,400,160,2.3873291015625
+soft,CAAR without policy entropy,500,160,2.30103759765625
+soft,CAAR without policy entropy,600,160,2.1541015625
+soft,CAAR + policy entropy,100,160,1.3853271484375
+soft,CAAR + policy entropy,200,160,2.24090576171875
+soft,CAAR + policy entropy,300,160,2.66048583984375
+soft,CAAR + policy entropy,400,160,2.7890869140625
+soft,CAAR + policy entropy,500,160,2.79158935546875
+soft,CAAR + policy entropy,600,160,2.744580078125
+block_both,Direct + policy entropy,100,160,1.17509765625
+block_both,Direct + policy entropy,200,160,1.61925048828125
+block_both,Direct + policy entropy,300,160,1.68533935546875
+block_both,Direct + policy entropy,400,160,1.6052490234375
+block_both,Direct + policy entropy,500,160,1.48621826171875
+block_both,Direct + policy entropy,600,160,1.3429443359375
