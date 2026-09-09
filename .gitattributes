@@ -6,3 +6,8 @@ docs/assets/B_window_throughput_both_soft_arpe_compact.png -text
 docs/assets/B_window_throughput_both_soft_arpe_compact.pdf -text
 configs/arpe_final_candidate.json -text
 configs/arpe_noentropy_candidate.json -text
+docs/data/single_task_by_population_20260909.csv -text
+docs/data/single_task_overall_20260909.csv -text
+docs/data/single_task_episodes_20260909.csv -text
+docs/data/ppu_joint_action_timing_20260909.csv -text
+docs/data/ppu_joint_action_samples_20260909.csv -text

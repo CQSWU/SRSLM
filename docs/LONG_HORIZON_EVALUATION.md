@@ -22,7 +22,7 @@ separate 512-step exact960 comparison.
 [Vector PDF](assets/B_window_throughput_both_soft_arpe_compact.pdf)
 
 The current figure uses ARPE, the new name for the same selected CAAR model,
-and a compact layout with the CHS Figure 3 color palette. All 96 plotted values
+and a compact layout with the AORePlan Figure 7 color palette. All 96 plotted values
 are unchanged. The original figure files and historical CAAR labels remain
 available for the hash-bound release audit; see the
 [presentation revision](assets/ARPE_PRESENTATION_REVISION.json).

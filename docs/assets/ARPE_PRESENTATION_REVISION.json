@@ -7,8 +7,8 @@
   "numeric_changes": false,
   "plot_points": 96,
   "layout": "single-column, two by two panels; eight actual windows per line",
-  "palette_reference": "CHS Journal of Intelligent & Robotic Systems 2025, Figure 3",
-  "colors": {"EPOM-L": "#1F77B4", "ARPE": "#9467BD", "SRSLM": "#2CA02C"},
+  "palette_reference": "AORePlan Figure 7",
+  "colors": {"EPOM-L": "#4C78A8", "ARPE": "#D55E00", "SRSLM": "#009E73"},
   "data_sha256": {
     "docs/data/long_horizon_20260908/B_window_by_population.csv": "9ee3499e0adb9e4833ae23b6bd3c66743987393ab09a50df182ee53eb304a488"
   },
@@ -17,8 +17,8 @@
     "B_window_throughput_both_soft.png": "8f4096d84c5736fa5e7bd0f72dea14daeeeae001781f35a436ad1082911a4290"
   },
   "current_figure_sha256": {
-    "B_window_throughput_both_soft_arpe_compact.pdf": "462dbfe0dea18b986f03d0f77b7b35e82902ce900a701b5abd61d08b432080e1",
-    "B_window_throughput_both_soft_arpe_compact.png": "6ffb2745723c87dbf23e0151126c3eb9515c0077b05c59d9a666fa24f24e747a"
+    "B_window_throughput_both_soft_arpe_compact.pdf": "228d107aec6d8e12dceef984bb8270c50d70cf274bb7c0c779ac828beb66cdde",
+    "B_window_throughput_both_soft_arpe_compact.png": "ca0cc6da3351f468554f2c0a18cce0b763651c852eb962be576bdf0bcbdfc129"
   },
   "note": "Original release provenance and original figure bytes are preserved. This record changes neither scientific validation nor checkpoint identity."
 }
