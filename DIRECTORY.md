@@ -11,7 +11,6 @@ binaries, and third-party repositories stay outside Git.
 | `agents/ao_replan.py` | AORePlan adapter and diagnostics |
 | `planning/ao_replan_algo.py` | Reverse detection and static-map A* check |
 | `planning/aoreplan_branch.py` | Proposal/commit interface shared by SRSLM |
-| `agents/direct.py` | Historical independent-backbone fixed reweighting |
 | `agents/epom_direct_reweight.py` | Paper EPOM-L Direct, with explicit entropy/transform/centring options |
 | `agents/ao_replan_soft_ablation.py` | Standalone soft search exception; not used inside SRSLM |
 | `agents/epom_trace_context.py` | Current ARPE inference adapter |
