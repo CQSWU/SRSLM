@@ -18,10 +18,10 @@ from planning.ao_replan_algo import AORePlanWrapper
 def test_public_names_are_explicit_and_retired_names_are_rejected():
     assert runner.SUPPORTED_ALGORITHMS == (
         'RePlan', 'AORePlan', 'AORePlan-SoftNoCheck', 'EPOM-Lifelong-FT',
-        'NoReweight', 'Direct', 'ARPE', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
+        'Direct', 'ARPE', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
     )
     assert set(runner.ALGORITHM_ALIASES.values()) == set(runner.SUPPORTED_ALGORITHMS)
-    for name in ('DCC', 'DHC', 'Follower', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
+    for name in ('DCC', 'DHC', 'Follower', 'NoReweight', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
         with pytest.raises(Exception):
             runner.parse_algorithms(name)
 

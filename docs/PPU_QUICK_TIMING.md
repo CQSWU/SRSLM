@@ -85,8 +85,3 @@ latency, scaling complexity or lifelong throughput. This is a whole-`act()`
 measurement, not a profile separating neural inference, trace processing,
 search and transfer costs.
 
-The [earlier CPU-only quick check](QUICK_TIMING.md) is preserved separately.
-It included the first call among 16 measured steps, whereas this check uses
-16 warm-up calls and then 64 measured steps, in addition to changing neural
-inference device. The resulting ratios must not be presented as pure hardware
-acceleration factors or as a controlled CPU-versus-PPU ablation.

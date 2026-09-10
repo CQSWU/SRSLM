@@ -232,20 +232,9 @@ the two-rule figure and downloadable counts. SRSLM's mean throughput is
 1.868739 under `block_both` and 2.724431 under `soft`; this is a separate
 4,096-step experiment, not a runtime benchmark or the exact960 comparison.
 
-The completed [quick joint-action timing comparison](docs/QUICK_TIMING.md)
-uses one map, three populations, one seed and 16 calls per episode on a single
-CPU worker. It reports act-only costs for eight methods under both rules;
-it is a short shared-host observation, not an isolated-hardware benchmark.
-
 The [PPU quick timing check](docs/PPU_QUICK_TIMING.md) adds 48 episodes with
 16 warm-up and 64 measured calls each, including all 3,072 individual times.
 It uses one PPU for neural inference and one CPU thread for host work.
-Its device and warm-up protocol differ from the earlier CPU-only check.
-
-The completed [small single-task check](docs/SINGLE_TASK_CHECK.md) reports
-240 finish episodes for RePlan, AORePlan, ARPE, SRSLM and PIBT under both
-collision rules. It reports individual and team success, not lifelong
-throughput or latency; the two success metrics do not have one common winner.
 
 ## Tests
 
@@ -253,7 +242,6 @@ throughput or latency; the two success metrics do not have one common winner.
 uv run python -m pytest \
   tests/test_ao_replan.py \
   tests/test_aoreplan_branch.py \
-  tests/test_direct.py \
   tests/test_epom_direct_reweight.py \
   tests/test_epom_paper_entropy_fusion.py \
   tests/test_switcher.py \
