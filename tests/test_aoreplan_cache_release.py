@@ -127,4 +127,3 @@ def test_release_is_per_agent_not_shared_between_planners(base):
     candidates = base.act(observation() + observation())
     assert candidates[0] == 4
     assert candidates[1] is not None and candidates[1] != 4
-

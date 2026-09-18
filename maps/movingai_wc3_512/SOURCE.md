@@ -14,4 +14,3 @@ represents a 4x8 source block and is walkable when at least half of that block
 is walkable. This area-voting rule preserves the full-map layout while avoiding
 interpolated terrain symbols. `scripts/build_movingai_wc3_test3.py` verifies the
 raw hashes and state counts and performs the deterministic conversion.
-

@@ -193,7 +193,6 @@ def test_terminal_without_autoreset_preserves_final_trace(environment_factory):
     assert trace._grid() is not grid
     _assert_first_frame(trace, obs)
 
-
 def test_lifelong_target_change_keeps_trace_and_grid(environment_factory):
     env, trace = environment_factory(
         _grid(targets_xy=[[[4, 5], [10, 10]], [[3, 3], [8, 9]]], max_episode_steps=10)
@@ -237,4 +236,3 @@ def test_all_terminated_autoreset_starts_fresh(environment_factory):
     assert all(terminated) and not any(truncated)
     assert trace._grid() is not grid
     _assert_first_frame(trace, obs)
-

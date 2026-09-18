@@ -241,4 +241,3 @@ def test_static_query_leaves_no_pending_execution_feedback(backend):
     local.update_obstacles([], [], (-5, -5))
     local.plan_path(CURRENT, (0, 2))
     assert first_action(local) == 4
-

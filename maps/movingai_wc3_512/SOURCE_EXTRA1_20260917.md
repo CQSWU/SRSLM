@@ -14,4 +14,3 @@ the official WC3-512 archive, immediately after the three maps already used.
 The complete source map is reduced without cropping. Each output cell represents
 a 4×8 source block and is walkable when at least half of that block is walkable.
 The resulting free space is one four-neighbor connected component.
-

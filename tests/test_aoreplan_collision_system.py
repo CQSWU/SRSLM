@@ -240,4 +240,3 @@ def test_pogema_resolves_following_after_actions_are_submitted(collision, moved)
         assert (after - before).tolist() == [[0, int(value)] for value in moved]
     finally:
         env.close()
-
