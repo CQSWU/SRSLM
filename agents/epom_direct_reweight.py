@@ -1,34 +1,12 @@
-"""Frozen EPOM-L with a parameter-free trace reweighting rule.
+"""Frozen EPOM-L with the selected parameter-free Direct rule.
 
-The correction adds no trainable parameters to the trained EPOM-L backbone.
-Plain Direct applies signed pressure to every agent. The optional entropy gate
-limits this correction to agents whose base action distribution is uncertain:
-
-    H_i   = -sum_u p_i(u) log(p_i(u) + eps)          PRIMAL3 eq. 27
-    gate  = H_i > eta,  eta = 0.46371241             PRIMAL3 eq. 28-29
-    z'_i  = z_i - w * gate_i * f(tau~_i)
-
-``eta`` is the entropy of the reference distribution [0.9, .025, .025, .025,
-.025] under natural logarithms, exactly as in the PRIMAL3 paper and its released
-``expert_guidance.find_definitive_pc``.  The entropy is unnormalised and taken
-over the raw five-action distribution, matching that implementation.
-
-By default, ``tau~`` uses the mean over every free in-map cell in the agent's
-11x11 trace crop, then reads the five candidate cells from that centred crop.
-The explicitly selected historical ``candidate`` scope instead centres on the
-statically legal candidates' own mean. Obstacles and map padding are excluded
-from either mean and have zero correction. Their logits stay unchanged, but
-their probabilities can still change when softmax renormalises all five logits.
-
-The default ``signed`` transform uses ``f(x)=x``.  The independent
-``clipped_relu`` experiment uses ``f(x)=min(max(x, 0), 2)``: it can penalise a
-legal candidate whose pressure is above the selected reference mean, but it never
-boosts a below-mean candidate.  Both transforms use the same entropy gate,
-frozen EPOM-L backbone, trace, and static-legality definition.
-
-``w = 0`` preserves the base action distribution. Direct uses its own NumPy
-sampler, so this does not promise the same sampled trajectory as the base
-adapter's Torch sampler.
+For an agent whose five-action entropy exceeds the fixed PRIMAL3 threshold,
+Direct finds the two highest-logit statically legal movement directions.  It
+adds one to the lower-pressure direction and leaves wait and every other logit
+unchanged.  Pressure is read from the five candidate cells after centring the
+entire free-cell region of the 11x11 shared-trace crop.  This module deliberately
+contains only the final paper rule; earlier signed, clipped-ReLU and alternative
+centring variants were exploratory experiments.
 """
 
 from copy import deepcopy
@@ -55,34 +33,22 @@ MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 
 class EPOMDirectReweightConfig(EPOMConfig, extra=Extra.forbid):
     name: Literal["EPOM-DirectReweight"] = "EPOM-DirectReweight"
-    #: strength of the correction; 0.0 preserves the EPOM-L action distribution
-    reweight_scale: float = 1.0
+    #: selected logit bonus for the lower-pressure top-two direction
+    reweight_bonus: float = 1.0
     #: evaporation rate; retention is 1 - tau_rho, saturation is 1 / tau_rho
     tau_rho: float = 0.1
     entropy_threshold: float = PRIMAL3_ENTROPY_THRESHOLD
-    #: apply the correction to every agent, to separate gating from reweighting
-    gate: Literal["primal3", "always", "never"] = "always"
-    #: signed is the current rule; clipped_relu is the conservative ablation
-    pressure_transform: Literal["signed", "clipped_relu"] = "signed"
-    pressure_cap: float = 2.0
-    #: candidate preserves the historical five-cell mean; crop uses all free
-    #: cells in the radius-5 (11x11) local trace crop.
-    centering_scope: Literal["candidate", "crop"] = "crop"
 
 
 class EPOMDirectReweight(EPOM):
-    """Frozen EPOM-L plus signed trace correction, with optional entropy gating."""
+    """Frozen EPOM-L plus the final entropy-gated top-two Direct rule."""
 
     def __init__(self, cfg: EPOMDirectReweightConfig):
         super().__init__(cfg)
-        self.reweight_scale = float(cfg.reweight_scale)
+        self.reweight_bonus = float(cfg.reweight_bonus)
         self.entropy_threshold = float(cfg.entropy_threshold)
-        self.gate_mode = cfg.gate
-        self.pressure_transform = cfg.pressure_transform
-        self.pressure_cap = float(cfg.pressure_cap)
-        self.centering_scope = cfg.centering_scope
-        if self.pressure_cap <= 0.0:
-            raise ValueError("pressure_cap must be positive.")
+        if self.reweight_bonus < 0.0:
+            raise ValueError("reweight_bonus must be non-negative.")
         self.aco = AcoState(rho=float(cfg.tau_rho))
         self.env = None
         self._stats = []
@@ -105,6 +71,9 @@ class EPOMDirectReweight(EPOM):
         self.aco.clear()
         self._stats = []
         self._numpy_rng = np.random.default_rng(self.algo_cfg.seed)
+        self._bonus_rng = np.random.default_rng(
+            np.random.SeedSequence([int(self.algo_cfg.seed or 0), 130913, 1])
+        )
 
     def after_step(self, dones):
         super().after_step(dones)
@@ -126,60 +95,59 @@ class EPOMDirectReweight(EPOM):
     def _candidate_trace(self, positions):
         """Return pressures for wait/up/down/left/right.
 
-        ``candidate`` is the historical behaviour: centre the five statically
-        legal candidate values on their own mean.  ``crop`` asks ``AcoState``
-        for the free-cell-mean-centred 11x11 crop and samples its five candidate
-        cells without centring those five values a second time.
+        ``AcoState`` centres the complete free-cell region of the 11x11 crop.
+        The five candidate cells are then sampled without a second centring.
         """
-        if self.centering_scope == "crop":
-            radius = 5
-            center = radius
-            indices = (
-                (center, center),
-                (center - 1, center),
-                (center + 1, center),
-                (center, center - 1),
-                (center, center + 1),
-            )
-            result = np.empty((len(positions), len(indices)), dtype=np.float32)
-            for agent_index, (x, y) in enumerate(positions):
-                local = self.aco.extract_local_tau(int(x), int(y), radius)
-                result[agent_index] = [local[row, col] for row, col in indices]
-            return result
+        radius = 5
+        center = radius
+        indices = (
+            (center, center),
+            (center - 1, center),
+            (center + 1, center),
+            (center, center - 1),
+            (center, center + 1),
+        )
+        result = np.empty((len(positions), len(indices)), dtype=np.float32)
+        for agent_index, (x, y) in enumerate(positions):
+            local = self.aco.extract_local_tau(int(x), int(y), radius)
+            result[agent_index] = [local[row, col] for row, col in indices]
+        return result
 
-        tau = self.aco.tau
-        height, width = tau.shape
-        moves = np.asarray(MOVES, dtype=np.int64)              # [5, 2]
-        cells = positions[:, None, :] + moves[None, :, :]      # [N, 5, 2]
-
-        rows, cols = cells[..., 0], cells[..., 1]
-        inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
-        clipped_rows = np.clip(rows, 0, height - 1)
-        clipped_cols = np.clip(cols, 0, width - 1)
-
-        legal = inside.copy()
+    def _legal_movements(self, positions):
         obstacles = self.aco._obstacle_mask
-        if obstacles is not None:
-            legal &= ~obstacles[clipped_rows, clipped_cols]
+        if obstacles is None:
+            raise RuntimeError("Direct reweighting needs a static obstacle mask.")
+        cells = positions[:, None, :] + np.asarray(MOVES, dtype=np.int64)[None]
+        rows, cols = cells[..., 0], cells[..., 1]
+        inside = (
+            (rows >= 0) & (rows < obstacles.shape[0])
+            & (cols >= 0) & (cols < obstacles.shape[1])
+        )
+        legal = np.zeros_like(inside, dtype=bool)
+        legal[inside] = ~obstacles[rows[inside], cols[inside]]
+        legal[:, 0] = False
+        return legal
 
-        values = np.where(legal, tau[clipped_rows, clipped_cols], 0.0)
-        count = legal.sum(axis=1, keepdims=True)
-        mean = np.divide(
-            values.sum(axis=1, keepdims=True), count,
-            out=np.zeros_like(values[:, :1]), where=count > 0)
-        return np.where(legal, values - mean, 0.0).astype(np.float32)
-
-    @staticmethod
-    def transform_pressure(centered, transform="signed", cap=2.0):
-        """Transform centred pressure; zero obstacle corrections stay zero."""
-        centered = np.asarray(centered, dtype=np.float32)
-        if transform == "signed":
-            return centered.copy()
-        if transform == "clipped_relu":
-            return np.minimum(np.maximum(centered, 0.0), float(cap)).astype(
-                np.float32, copy=False
-            )
-        raise ValueError(f"Unknown pressure transform: {transform}")
+    def _top2_bonus(self, pressure, legal, logits, gate):
+        """Return a sparse bonus for one lower-pressure top-two direction."""
+        eligible_logits = np.where(legal, logits, -np.inf)
+        order = np.lexsort(
+            (self._bonus_rng.random(logits.shape), eligible_logits), axis=1
+        )
+        top2 = np.zeros_like(legal)
+        np.put_along_axis(top2, order[:, -2:], True, axis=1)
+        top2 &= legal
+        masked_pressure = np.where(top2, pressure, np.inf)
+        tied = top2 & (
+            masked_pressure == masked_pressure.min(axis=1, keepdims=True)
+        )
+        winners = np.where(
+            tied, self._bonus_rng.random(pressure.shape), -1.0
+        ).argmax(axis=1)
+        active = np.flatnonzero(gate & (legal.sum(axis=1) >= 2))
+        bonus = np.zeros_like(pressure, dtype=np.float32)
+        bonus[active, winners[active]] = self.reweight_bonus
+        return bonus
 
     # ----------------------------------------------------------------- act
 
@@ -223,20 +191,11 @@ class EPOMDirectReweight(EPOM):
         entropy = -(probabilities
                     * np.log(probabilities + PRIMAL3_ENTROPY_EPS)).sum(axis=1)
 
-        if self.gate_mode == "primal3":
-            gate = (entropy > self.entropy_threshold).astype(np.float32)
-        elif self.gate_mode == "always":
-            gate = np.ones_like(entropy, dtype=np.float32)
-        else:
-            gate = np.zeros_like(entropy, dtype=np.float32)
-
+        gate = entropy > self.entropy_threshold
         centred = self._candidate_trace(positions)
-        pressure = self.transform_pressure(
-            centred,
-            transform=self.pressure_transform,
-            cap=self.pressure_cap,
-        )
-        adjusted = logits - self.reweight_scale * gate[:, None] * pressure
+        legal = self._legal_movements(positions)
+        bonus = self._top2_bonus(centred, legal, logits, gate)
+        adjusted = logits + bonus
 
         shifted = np.exp(adjusted - adjusted.max(axis=1, keepdims=True))
         shifted /= shifted.sum(axis=1, keepdims=True)
@@ -251,8 +210,8 @@ class EPOMDirectReweight(EPOM):
                 (logits.max(axis=1) - logits.min(axis=1)).mean()),
             "trace_spread": float(
                 (centred.max(axis=1) - centred.min(axis=1)).mean()),
-            "applied_pressure_spread": float(
-                (pressure.max(axis=1) - pressure.min(axis=1)).mean()),
+            "corrected_agent_fraction": float(np.any(bonus > 0, axis=1).mean()),
+            "selected_bonus_mean": float(bonus.max(axis=1).mean()),
             "argmax_flip_rate": float(
                 (logits.argmax(1) != adjusted.argmax(1)).mean()),
             "wait_prob": float(shifted[:, 0].mean()),
@@ -278,32 +237,23 @@ class EPOMDirectReweight(EPOM):
 
         provenance = dict(super().get_model_provenance())
         provenance["direct_reweight"] = {
-            "reweight_scale": self.reweight_scale,
-            "gate": self.gate_mode,
+            "rule": "entropy_gated_top2_lower_pressure_bonus",
+            "reweight_bonus": self.reweight_bonus,
             "entropy_threshold": self.entropy_threshold,
             "tau_rho": float(self.algo_cfg.tau_rho),
             "trace_radius": 5,
             "trace_size": 11,
-            "pressure_transform": self.pressure_transform,
-            "pressure_cap": self.pressure_cap,
-            "centering_scope": self.centering_scope,
             "centering_definition": (
                 "free_cell_mean_over_radius5_crop_then_sample_five_candidates"
-                if self.centering_scope == "crop"
-                else "static_legal_five_candidate_mean"
             ),
-            "legal_action_definition": "inside_map_and_not_static_obstacle",
+            "eligible_actions": "two_highest_logit_static_legal_movements",
+            "wait_logit_unchanged": True,
+            "other_logits_unchanged": True,
         }
         return provenance
 
     def get_name(self):
-        name = (
-            "EPOM-DirectReweight("
-            f"w={self.reweight_scale}, transform={self.pressure_transform}"
-        )
-        if self.centering_scope != "candidate":
-            name += f", centering={self.centering_scope}"
-        return name + ")"
+        return f"EPOM-DirectReweight(top2_bonus={self.reweight_bonus})"
 
 
 __all__ = ["EPOMDirectReweight", "EPOMDirectReweightConfig",

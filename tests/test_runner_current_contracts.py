@@ -58,28 +58,23 @@ def test_main_supplies_selected_rule_to_srslm_contract():
     assert ast.unparse(calls[0].args[1]) == 'args.collision_system'
 
 
-@pytest.mark.parametrize('gate,transform', [('always', 'signed'), ('primal3', 'signed'), ('primal3', 'clipped_relu')])
-def test_direct_uses_epom_l_and_explicit_crop_not_old_noreweight(gate, transform):
+def test_direct_uses_epom_l_and_only_the_selected_top2_rule():
     with patch('agents.epom_direct_reweight.EPOMDirectReweight') as policy:
-        runner.build_algorithm('Direct', '.', 42, epom_weights_path='weights/base',
-            direct_options={'gate': gate, 'pressure_transform': transform})
+        runner.build_algorithm('Direct', '.', 42, epom_weights_path='weights/base')
     cfg = policy.call_args.args[0]
     assert cfg.artifact_profile == 'lifelong_finetuned'
     assert Path(cfg.path_to_weights).is_absolute()
-    assert cfg.centering_scope == 'crop'
-    assert cfg.gate == gate
-    assert cfg.pressure_transform == transform
-    assert cfg.pressure_cap == 2.0
+    assert cfg.reweight_bonus == 1.0
     with pytest.raises(ValueError, match='EPOM-L'):
-        runner.build_algorithm('Direct', '.', 42, no_reweight_weights_path='legacy')
+        runner.build_algorithm('Direct', '.', 42)
 
 
-def test_direct_cli_records_all_correction_options():
-    with patch.object(sys, 'argv', ['run_experiments.py', '--algorithms', 'Direct',
-            '--direct-gate', 'primal3', '--direct-transform', 'clipped_relu']):
+def test_retired_direct_cli_variants_are_rejected():
+    with patch.object(sys, 'argv', [
+        'run_experiments.py', '--algorithms', 'Direct',
+        '--direct-transform', 'clipped_relu',
+    ]), pytest.raises(SystemExit):
         args = runner.parse_args()
-    assert args.direct_options == {'gate': 'primal3', 'centering_scope': 'crop',
-                                   'pressure_transform': 'clipped_relu'}
 
 
 def _artifact():
@@ -162,7 +157,7 @@ def test_public_manifest_is_path_relative_and_hash_pinned():
     data = json.loads((root / 'configs/arpe_final_candidate.json').read_text())
     from agents.arpe import ArpeCandidateArtifact
     artifact = ArpeCandidateArtifact.from_mapping(data, root)
-    assert artifact.checkpoint_sha256 == '497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b'
+    assert artifact.checkpoint_sha256 == '1da454620520a9095a1140cccd8c1829c0fe74063b6f0e405c2c176b0890c9f6'
     assert artifact.base_checkpoint_sha256 == 'f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2'
 
 

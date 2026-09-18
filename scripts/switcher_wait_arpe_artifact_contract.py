@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and reproduce the 100M wait-aware ARPE Switcher certificate."""
+"""Create and reproduce the final 1B wait-aware ARPE Switcher certificate."""
 
 from __future__ import annotations
 

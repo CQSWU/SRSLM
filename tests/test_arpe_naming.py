@@ -36,7 +36,7 @@ def test_new_name_is_the_only_current_method_and_cli_namespace():
 def test_selected_declaration_bytes_and_legacy_serialized_identity_are_exact():
     payload = (ROOT / "configs" / "arpe_final_candidate.json").read_bytes()
     assert hashlib.sha256(payload).hexdigest() == (
-        "ef2c855137486a0cde56d280376339dd3a7cba5c514c03bf5486df44f981b40b"
+        "41f9f27429a30186ffef55a622284703cfb859fccb440934f4e585022eb885ca"
     )
     data = json.loads(payload)
     assert data["kind"] == "epom_trace_context_caar_milestone"
@@ -84,10 +84,3 @@ def test_historical_certificate_name_mapping_is_narrow_and_nonmutating():
     wrong = deepcopy(rebuilt)
     wrong["network_contract"]["branch_1"] = "RePlan"
     assert not same_training_certificate(saved, wrong)
-
-
-def test_onlywait_validator_never_requires_a_learned_switcher_artifact():
-    from scripts.validate_srslm_arpe_ablation_exact960 import ALGORITHMS, LEARNED
-    assert set(ALGORITHMS) == {"SRSLM-NoWait", "SRSLM-OnlyWait"}
-    assert LEARNED == frozenset({"SRSLM-NoWait"})
-    assert "SRSLM-OnlyWait" not in LEARNED

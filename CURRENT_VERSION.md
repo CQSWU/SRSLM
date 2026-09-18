@@ -25,8 +25,10 @@ artifacts and must be verified before inference:
 
 - EPOM-L base checkpoint:
   `f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2`
-- ARPE 500M selected checkpoint:
-  `497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b`
+- ARPE selected checkpoint at 235.52M frames:
+  `1da454620520a9095a1140cccd8c1829c0fe74063b6f0e405c2c176b0890c9f6`
+- ARPE saved configuration:
+  `c1f2a9071df428b377e2803bd78913bfa7dd30648a6e1a16f315c5cacb1c190f`
 - final 1B Switcher checkpoint:
   `65c255ad9a3ae0c5874001637f4a4ff4d8172bd5b0b2e9b5d5a8d0c156d9e547`
 - final 1B Switcher saved configuration:

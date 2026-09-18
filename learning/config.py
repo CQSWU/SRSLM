@@ -602,7 +602,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 'max_policy_lag': (async_ppo.max_policy_lag, 100),
                 'exploration_loss_coeff': (
                     async_ppo.exploration_loss_coeff,
-                    0.01,
+                    0.0,
                 ),
                 'value_loss_coeff': (async_ppo.value_loss_coeff, 0.5),
                 'ppo_clip_ratio': (async_ppo.ppo_clip_ratio, 0.1),
@@ -618,7 +618,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
             }
             if mismatched_ppo:
                 raise ValueError(
-                    'EPOM trace-context PPO settings differ from EPOM-L: '
+                    'EPOM trace-context PPO settings differ from the selected ARPE recipe: '
                     f'{mismatched_ppo}'
                 )
             if async_ppo.num_workers > 12:

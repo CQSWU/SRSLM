@@ -241,12 +241,10 @@ def _has_checkpoints(path):
 
 def _find_switcher_weights(main_dir):
     root = Path(main_dir).resolve()
-    candidate = _find_weight_run_dir(
-        root / "weights" / "SRSLM-switcher-wait-aware-caar-100m"
-    )
-    if candidate is None:
+    candidate = root / "weights" / "SRSLM-Switcher-Final-1B"
+    if not _has_config(candidate) or not _has_checkpoints(candidate):
         raise FileNotFoundError(
-            "The selected wait-aware SRSLM Switcher checkpoint is missing."
+            "The selected final 1B SRSLM Switcher checkpoint is missing."
         )
     return str(candidate)
 
@@ -631,7 +629,6 @@ def build_algorithm(
 
     switcher_weights_path=None,
 
-    no_reweight_weights_path=None,
 
 
     epom_weights_path=None,
@@ -641,7 +638,6 @@ def build_algorithm(
 
 
 
-    direct_options=None,
 
 ):
 
@@ -815,14 +811,10 @@ def build_algorithm(
                 "Paper Direct requires the frozen EPOM-L weights via "
                 "--epom-weights-path; it is not the old NoReweight backbone."
             )
-        options = dict(direct_options or {})
         return EPOMDirectReweight(EPOMDirectReweightConfig(
             path_to_weights=str(_project_path(main_dir, epom_weights_path)),
             artifact_profile="lifelong_finetuned", seed=seed, device="auto",
-            gate=options.get("gate", "always"),
-            centering_scope=options.get("centering_scope", "crop"),
-            pressure_transform=options.get("pressure_transform", "signed"),
-            pressure_cap=2.0, reweight_scale=1.0,
+            reweight_bonus=1.0,
         ))
 
 
@@ -1640,7 +1632,6 @@ def run_single_experiment(task):
 
         task.get("switcher_weights_path"),
 
-        task.get("no_reweight_weights_path"),
 
 
         task.get("epom_weights_path"),
@@ -1650,7 +1641,6 @@ def run_single_experiment(task):
 
 
 
-        json.dumps(task.get("direct_options") or {}, sort_keys=True),
 
     )
 
@@ -1677,9 +1667,6 @@ def run_single_experiment(task):
 
                     switcher_weights_path=task.get("switcher_weights_path"),
 
-                    no_reweight_weights_path=task.get(
-                        "no_reweight_weights_path"
-                    ),
 
 
                     epom_weights_path=task.get("epom_weights_path"),
@@ -1688,7 +1675,6 @@ def run_single_experiment(task):
 
 
 
-                    direct_options=task.get("direct_options"),
 
                 )
 
@@ -1712,9 +1698,6 @@ def run_single_experiment(task):
 
                 switcher_weights_path=task.get("switcher_weights_path"),
 
-                no_reweight_weights_path=task.get(
-                    "no_reweight_weights_path"
-                ),
 
 
                 epom_weights_path=task.get("epom_weights_path"),
@@ -1723,7 +1706,6 @@ def run_single_experiment(task):
 
 
 
-                direct_options=task.get("direct_options"),
 
             )
 
@@ -2346,7 +2328,6 @@ def build_tasks(
 
             "switcher_weights_path": args.switcher_weights_path,
 
-            "no_reweight_weights_path": args.no_reweight_weights_path,
 
 
             "epom_weights_path": args.epom_weights_path,
@@ -2355,7 +2336,6 @@ def build_tasks(
 
 
 
-            "direct_options": getattr(args, "direct_options", None),
 
             "cache_algorithms": should_cache_algorithm(
                 algorithm,
@@ -2991,18 +2971,6 @@ def parse_args():
 
 
     parser.add_argument(
-        "--direct-gate", choices=("always", "primal3", "never"), default="always",
-        help="EPOM-L Direct gate: always (plain Direct), primal3 (policy entropy), or never (control).",
-    )
-    parser.add_argument(
-        "--direct-centering", choices=("crop", "candidate"), default="crop",
-        help="Direct mean: all free cells of the 11x11 crop, or explicit historical five-candidate ablation.",
-    )
-    parser.add_argument(
-        "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
-        help="Direct pressure transform; clipped_relu uses cap 2. Learned ARPE output is not clipped.",
-    )
-    parser.add_argument(
 
         "--arpe-weights-path",
 
@@ -3033,13 +3001,6 @@ def parse_args():
         help="Override the Switcher weights directory",
     )
 
-    parser.add_argument(
-        "--no-reweight-weights-path",
-        dest="no_reweight_weights_path",
-        type=str,
-        default=None,
-        help="Override the NoReweight weights directory",
-    )
     parser.add_argument("--output-dir", type=str, default="exp_result", help="Directory for JSON results")
 
     parser.add_argument("--output", type=str, default=None, help="Output filename (default: experiments_TIMESTAMP.json)")
@@ -3088,13 +3049,7 @@ def parse_args():
 
     parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
 
-    args = parser.parse_args()
-    args.direct_options = {
-        "gate": args.direct_gate,
-        "centering_scope": args.direct_centering,
-        "pressure_transform": args.direct_transform,
-    }
-    return args
+    return parser.parse_args()
 
 
 
@@ -3337,7 +3292,6 @@ def main():
 
         "switcher_weights_path": args.switcher_weights_path,
 
-        "no_reweight_weights_path": args.no_reweight_weights_path,
 
 
         "epom_weights_path": args.epom_weights_path,
@@ -3346,7 +3300,6 @@ def main():
 
 
 
-        "direct_options": args.direct_options,
 
         "hybrid_mode": (
             hybrid_contract["hybrid_mode"]

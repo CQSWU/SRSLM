@@ -34,10 +34,7 @@ from train import register_custom_components, validate_config
 
 class SwitcherConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["Switcher"] = "Switcher"
-    path_to_weights: str = (
-        "weights/SRSLM-switcher-new-branches-500m/"
-        "SRSLM-Switcher-NewBranches-500M"
-    )
+    path_to_weights: str = "weights/SRSLM-Switcher-Final-1B"
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
     deterministic: bool = False
 

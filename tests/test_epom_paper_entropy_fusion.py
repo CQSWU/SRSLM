@@ -23,7 +23,7 @@ from train import register_custom_components, validate_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FORMAL = ROOT / "learning" / "train_epom_trace_paper_conv_fusion_r5_500m.yaml"
+FORMAL = ROOT / "learning" / "train_arpe_selected_r5_500m.yaml"
 
 
 def _load(path: Path) -> dict:
@@ -67,7 +67,7 @@ def test_config_locks_the_paper_arpe_contract():
     assert settings.hidden_size == 512
     assert settings.trace_context_learned_gate == "entropy"
     assert settings.trace_gate_threshold == pytest.approx(0.46371241)
-    assert experiment.async_ppo.num_workers == 12
+    assert experiment.async_ppo.num_workers == 8
     assert environment.tau_radius == 5
     assert environment.tau_raw is False
     assert environment.grid_memory_obs_radius == 7

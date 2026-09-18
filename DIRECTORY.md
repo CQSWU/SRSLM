@@ -32,6 +32,8 @@ third-party repositories stay outside Git.
 | `train.py` | EPOM-L and ARPE training entry point |
 | `train_switcher_wait_arpe.py` | Wait-aware Switcher training entry point |
 | `train_switcher_nowait.py` | NoWait Switcher training entry point |
+| `learning/train_arpe_selected_r5_500m.yaml` | Selected ARPE training recipe |
+| `learning/train_switcher_final_1b.yaml` | Final 1B Switcher training recipe |
 | `tests/` | Regression and artifact-contract tests |
 
 Historical model branches and private external comparison adapters are not

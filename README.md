@@ -69,9 +69,8 @@ The retained training recipes are:
 
 ```text
 learning/train_epom_lifelong_finetune_r5_100m.yaml
-learning/train_epom_trace_paper_conv_fusion_r5_500m.yaml
-learning/train_switcher_wait_arpe_100m_server2.yaml
-learning/train_switcher_nowait_arpe_100m_server1.yaml
+learning/train_arpe_selected_r5_500m.yaml
+learning/train_switcher_final_1b.yaml
 ```
 
 These files are reproducible recipes, not claims that a fresh run will recreate

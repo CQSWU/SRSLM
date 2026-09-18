@@ -73,7 +73,7 @@ class TrainingRegressionTests(unittest.TestCase):
         config_path = (
             PROJECT_ROOT
             / "learning"
-            / "train_epom_trace_paper_conv_fusion_r5_500m.yaml"
+            / "train_arpe_selected_r5_500m.yaml"
         )
         modern = yaml.safe_load(config_path.read_text(encoding="utf-8"))
 

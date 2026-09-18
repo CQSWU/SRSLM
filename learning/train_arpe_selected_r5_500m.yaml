@@ -1,0 +1,57 @@
+name: TraceBonusSync200Entropy-20M-S0
+global_settings:
+  train_dir: weights/trace_residual_shaped200
+  device: gpu
+  seed: 0
+experiment_settings:
+  save_every_sec: 120
+  save_best_every_sec: 120
+  save_best_after: 1000000
+  save_best_metric: avg_throughput
+  keep_checkpoints: 8
+  save_milestones_sec: 300
+  encoder_custom: epom_trace_context
+  train_for_env_steps: 500000000
+  train_for_seconds: 86400
+  learning_rate: 0.0001
+  gamma: 0.99
+  lr_schedule: constant
+  reward_clip: 10.0
+  normalize_input: false
+  hidden_size: 512
+  actor_critic_share_weights: true
+  epom_base_weights_path: weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5
+  trace_rule_scale: 1.0
+  trace_gate_threshold: 0.46371241
+  trace_context_architecture: paper_entropy_fusion
+  trace_context_learned_gate: entropy
+async_ppo:
+  async_rl: false
+  num_workers: 8
+  num_envs_per_worker: 2
+  worker_num_splits: 2
+  rollout: 32
+  recurrence: 32
+  use_rnn: true
+  batch_size: 4096
+  num_batches_per_iteration: 25
+  num_epochs: 1
+  max_policy_lag: 100
+  ppo_clip_ratio: 0.1
+  max_grad_norm: 5.0
+  exploration_loss_coeff: 0.0
+  value_loss_coeff: 0.5
+  with_vtrace: false
+  with_pbt: false
+environment:
+  name: POMAPF-EPOM-ST-v0
+  tau_rho: 0.1
+  tau_radius: 5
+  trace_context_team_reward_coefficient: 0.0
+  grid_config:
+    on_target: restart
+    collision_system: block_both
+    map_name: maps/train_capacity_n600.yaml
+    max_episode_steps: 512
+    obs_radius: 5
+    num_agents: 200
