@@ -29,11 +29,9 @@ Switcher. Training and inference call the same routing implementation.
 
 ## Evaluation grid
 
-The current paper evaluation contains 36 maps:
-
-- `maps/eval_capacity_intersection_n600.yaml` (32 maps);
-- `maps/eval_wc3_extra3.yaml` (three resized MovingAI WC3 maps);
-- `maps/eval_wc3_extra1_timbermawhold.yaml` (one resized MovingAI WC3 map).
+The current paper evaluation uses `maps/test.yaml`. It contains all 36 maps:
+the fixed 32-map capacity-intersection set and four resized MovingAI WC3 maps.
+The grids are stored directly in this file, so no secondary registry is needed.
 
 For each method and execution rule, run populations
 100/200/300/400/500/600 and seeds 0/42/123/2024/3407 with lifelong `restart`,

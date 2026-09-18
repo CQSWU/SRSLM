@@ -24,16 +24,18 @@ third-party repositories stay outside Git.
 | `agents/srslm.py` | Full SRSLM composition |
 | `agents/srslm_arpe_ablation.py` | NoWait and OnlyWait ablations |
 | `configs/arpe_final_candidate.json` | Selected ARPE/base artifact identities |
-| `maps/eval_capacity_intersection_n600.yaml` | Original 32-map evaluation registry |
-| `maps/eval_wc3_extra3.yaml` | Three added resized WC3 maps |
-| `maps/eval_wc3_extra1_timbermawhold.yaml` | Fourth added resized WC3 map |
-| `maps/movingai_wc3_512/` | Added map files and source records |
+| `maps/train.yaml` | Complete training map registry |
+| `maps/test.yaml` | Complete 36-map test registry, including four resized WC3 maps |
+| `docs/MAPS.md` | Split definition and MovingAI WC3 provenance |
 | `run_experiments.py` | Evaluator with a restricted public method registry |
 | `train.py` | EPOM-L and ARPE training entry point |
-| `train_switcher_wait_arpe.py` | Wait-aware Switcher training entry point |
-| `train_switcher_nowait.py` | NoWait Switcher training entry point |
-| `learning/train_arpe_selected_r5_500m.yaml` | Selected ARPE training recipe |
-| `learning/train_switcher_final_1b.yaml` | Final 1B Switcher training recipe |
+| `train_switcher.py` | Unified final/NoWait Switcher training entry point |
+| `learning/train_epom.yaml` | EPOM-L training recipe |
+| `learning/train_arpe.yaml` | Selected ARPE training recipe |
+| `learning/train_switcher.yaml` | Final Switcher training recipe |
+| `scripts/train_epom.sh` | EPOM-L launcher |
+| `scripts/train_arpe.sh` | ARPE launcher |
+| `scripts/train_switcher.sh` | Final Switcher launcher |
 | `tests/` | Regression and artifact-contract tests |
 
 Historical model branches and private external comparison adapters are not

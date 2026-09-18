@@ -51,7 +51,7 @@ AORePlan has no learned parameters:
 ```bash
 uv run python run_experiments.py \
   --algorithms AORePlan \
-  --map-file maps/srlsm_smoke.map \
+  --map-types wc3 --map wc3=wc3-128x64-TimbermawHold \
   --agents 16 --seeds 0 --workers 1 \
   --obs-radius 5 --max-steps 128 \
   --on-target restart --collision-system block_both \
@@ -68,16 +68,16 @@ before evaluation.
 The retained training recipes are:
 
 ```text
-learning/train_epom_lifelong_finetune_r5_100m.yaml
-learning/train_arpe_selected_r5_500m.yaml
-learning/train_switcher_final_1b.yaml
+learning/train_epom.yaml
+learning/train_arpe.yaml
+learning/train_switcher.yaml
 ```
 
 These files are reproducible recipes, not claims that a fresh run will recreate
 historical checkpoint bytes. Use a new output directory and a new artifact
-declaration for every retraining run. Train EPOM-L and ARPE with `train.py`, and
-use the dedicated Switcher entry points so candidate-policy hashes and routing
-contracts are checked.
+declaration for every retraining run. Train EPOM-L and ARPE with `train.py`.
+Train the final Switcher with `train_switcher.py`, which verifies the pinned
+candidate-policy hashes and routing contract before starting Sample Factory.
 
 ## Evaluation protocol
 
@@ -87,13 +87,15 @@ populations 100/200/300/400/500/600, seeds 0/42/123/2024/3407, lifelong
 `restart`, 512 steps, and observation radius 5. This gives 1,080 unique
 map-population-seed episodes per method and execution rule.
 
-The base and added map registries are:
+The repository has one training registry and one test registry:
 
 ```text
-maps/eval_capacity_intersection_n600.yaml
-maps/eval_wc3_extra3.yaml
-maps/eval_wc3_extra1_timbermawhold.yaml
+maps/train.yaml
+maps/test.yaml
 ```
+
+`test.yaml` already contains the original 32 held-out maps and the four
+resized MovingAI WC3 maps; no secondary list or registry is required.
 
 Run `block_both` and `soft` separately with the same selected block-trained
 weights. Keep each output directory immutable and require unique, finite,

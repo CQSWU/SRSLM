@@ -8,7 +8,7 @@ _root = Path(__file__).parent.parent / "maps"
 
 maps = {}
 
-for _fname in ("train.yaml", "eval.yaml"):
+for _fname in ("train.yaml", "test.yaml"):
 
     _path = _root / _fname
 

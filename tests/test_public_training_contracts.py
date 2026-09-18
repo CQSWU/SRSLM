@@ -21,7 +21,7 @@ UNUSED_CONTEXT_FIELDS = {
 
 
 def _recipe():
-    path = Path(__file__).resolve().parents[1] / 'learning/train_arpe_selected_r5_500m.yaml'
+    path = Path(__file__).resolve().parents[1] / 'learning/train_arpe.yaml'
     return yaml.safe_load(path.read_text())
 
 

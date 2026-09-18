@@ -10,8 +10,7 @@ import pytest
 from sample_factory.algo.utils.context import global_env_registry
 
 import train
-import train_switcher_wait_arpe as wait_train
-import train_switcher_nowait as nowait_train
+import train_switcher
 from pomapf_env.switcher_env import SwitcherEnv
 from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv, ArpeNoWaitSwitcherEnv
 
@@ -28,11 +27,14 @@ def isolated_registry(monkeypatch):
         registry.update(original)
 
 
-@pytest.mark.parametrize('name', [wait_train.ENVIRONMENT_NAME, nowait_train.ENVIRONMENT_NAME])
+@pytest.mark.parametrize(
+    'name',
+    [spec['environment'] for spec in train_switcher.MODES.values()],
+)
 def test_generic_switcher_factory_fails_before_configuration_or_loading(name, isolated_registry):
     train.register_custom_components()
     assert isolated_registry[name] is train.create_pogema_env
-    with pytest.raises(RuntimeError, match='train_switcher_wait_arpe.py.*train_switcher_nowait.py'):
+    with pytest.raises(RuntimeError, match='train_switcher.py'):
         isolated_registry[name](name, cfg=None)
 
 
@@ -70,13 +72,13 @@ class _FrozenCandidate:
         return [4] * len(observations)
 
 
-def _configuration(entrypoint, collision):
+def _configuration(environment_name, collision):
     root = Path(__file__).resolve().parents[1]
     declaration = json.loads((root / 'configs/arpe_final_candidate.json').read_text())
     return SimpleNamespace(full_config={
         'candidate_policy': declaration,
         'environment': {
-            'name': entrypoint.ENVIRONMENT_NAME,
+            'name': environment_name,
             'switcher_caar_weights_path': declaration['weights_path'],
             'switcher_caar_device': 'cpu',
             'switcher_team_reward_coefficient': 1.0,
@@ -90,31 +92,36 @@ def _configuration(entrypoint, collision):
     })
 
 
-@pytest.mark.parametrize('entrypoint,env_type,register,factory_name', [
-    (wait_train, ArpeSwitcherEnv, wait_train.register_wait_components, 'ArpeSwitcherEnv'),
-    (nowait_train, ArpeNoWaitSwitcherEnv, nowait_train.register_nowait_components, 'ArpeNoWaitSwitcherEnv'),
+@pytest.mark.parametrize('mode,env_type', [
+    ('final', ArpeSwitcherEnv),
+    ('nowait', ArpeNoWaitSwitcherEnv),
 ])
 @pytest.mark.parametrize('collision', ['block_both', 'soft'])
 def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
-    entrypoint, env_type, register, factory_name, collision, isolated_registry, monkeypatch,
+    mode, env_type, collision, isolated_registry, monkeypatch,
 ):
     # The imported entrypoint constructor still builds its real subclass;
     # only the frozen network is replaced, so this test needs no private weights.
-    monkeypatch.setattr(entrypoint, factory_name, partial(env_type, candidate_factory=_FrozenCandidate))
+    spec = train_switcher.MODES[mode]
+    monkeypatch.setitem(
+        spec,
+        'environment_class',
+        partial(env_type, candidate_factory=_FrozenCandidate),
+    )
     train.register_custom_components()
-    assert isolated_registry[entrypoint.ENVIRONMENT_NAME] is train.create_pogema_env
-    register()
-    factory = isolated_registry[entrypoint.ENVIRONMENT_NAME]
+    assert isolated_registry[spec['environment']] is train.create_pogema_env
+    train_switcher.register_switcher_components(mode)
+    factory = isolated_registry[spec['environment']]
     assert factory is not train.create_pogema_env
-    cfg = _configuration(entrypoint, collision)
+    cfg = _configuration(spec['environment'], collision)
     with pytest.raises(ValueError, match='cannot construct'):
         factory('POMAPF-v0', cfg=cfg)
     missing = SimpleNamespace(full_config=deepcopy(cfg.full_config))
     missing.full_config.pop('candidate_policy')
     with pytest.raises(RuntimeError, match='no candidate_policy pin'):
-        factory(entrypoint.ENVIRONMENT_NAME, cfg=missing)
+        factory(spec['environment'], cfg=missing)
 
-    env = factory(entrypoint.ENVIRONMENT_NAME, cfg=cfg, env_config={'worker_index': 0})
+    env = factory(spec['environment'], cfg=cfg, env_config={'worker_index': 0})
     assert type(env) is env_type
     assert env.candidate_artifact.as_dict() == env.candidate.artifact.as_dict()
     rewards_seen = []

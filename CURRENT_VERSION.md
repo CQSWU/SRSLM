@@ -1,10 +1,10 @@
 # Current public implementation
 
-Updated 2026-09-18 from the active Server 1 source tree, followed by the final
-public-source cleanup. This repository intentionally contains only self-owned
-method code, focused tests, and portable evaluation utilities. Weights, raw
-results, server environments, private adapters, and third-party repositories
-are outside the Git release.
+Updated 2026-09-19 from the active Server 1 source tree, followed by the final
+public-source cleanup and layout consolidation. This repository intentionally
+contains only self-owned method code, focused tests, and portable evaluation
+utilities. Weights, raw results, server environments, private adapters, and
+third-party repositories are outside the Git release.
 
 ## Retained method path
 
@@ -42,8 +42,8 @@ declaration records an identity; it does not supply or download the files.
 The current comparison uses 36 maps, six populations, and five seeds, for 1,080
 episodes per method and execution rule:
 
-- maps: the 32-map capacity-intersection registry plus four resized MovingAI
-  WC3 maps;
+- maps: `maps/test.yaml`, containing the 32-map capacity-intersection set plus
+  four resized MovingAI WC3 maps;
 - populations: 100, 200, 300, 400, 500, and 600;
 - seeds: 0, 42, 123, 2024, and 3407;
 - lifelong target replacement, 512 steps, observation radius 5;

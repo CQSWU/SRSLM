@@ -45,8 +45,7 @@ packages = [
 py-modules = [
     "run_experiments",
     "train",
-    "train_switcher_wait_arpe",
-    "train_switcher_nowait",
+    "train_switcher",
 ]
 
 [tool.setuptools.package-data]

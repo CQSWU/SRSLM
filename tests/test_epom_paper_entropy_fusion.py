@@ -23,7 +23,7 @@ from train import register_custom_components, validate_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FORMAL = ROOT / "learning" / "train_arpe_selected_r5_500m.yaml"
+FORMAL = ROOT / "learning" / "train_arpe.yaml"
 
 
 def _load(path: Path) -> dict:
@@ -71,7 +71,7 @@ def test_config_locks_the_paper_arpe_contract():
     assert environment.tau_radius == 5
     assert environment.tau_raw is False
     assert environment.grid_memory_obs_radius == 7
-    assert environment.grid_config.map_name == "maps/train_capacity_n600.yaml"
+    assert environment.grid_config.map_name == "maps/train.yaml"
 
 
 def test_network_matches_trace_fusion_figure_and_parameter_budget(full_model):

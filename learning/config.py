@@ -49,6 +49,14 @@ def checkpoint_experiment_config(config):
         # An unused Switcher default leaked into early base-policy configs.
         # Do not migrate actual Switcher configs: there it can change routing.
         normalized.get('environment', {}).pop('switcher_rule_guard_enabled', None)
+    grid = normalized.get('environment', {}).get('grid_config', {})
+    if str(grid.get('map_name', '')).replace('\\', '/') == (
+        'maps/train_capacity_n600.yaml'
+    ):
+        # The selected ARPE checkpoint predates the consolidated map layout.
+        # Its immutable config keeps the former filename, while current runs
+        # use the single public training registry.
+        grid['map_name'] = 'maps/train.yaml'
     return normalized
 
 class AsyncPPO(BaseModel, extra=Extra.forbid):
@@ -535,7 +543,7 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError('Paper ARPE fixes trace_gate_threshold=0.46371241.')
             if settings.trace_rule_scale != 1.0:
                 raise ValueError('Paper ARPE fixes trace_rule_scale=1.0.')
-            expected_map_name = 'maps/train_capacity_n600.yaml'
+            expected_map_name = 'maps/train.yaml'
             if str(grid.map_name).replace('\\', '/') != expected_map_name:
                 raise ValueError(
                     'EPOM trace-context architecture '

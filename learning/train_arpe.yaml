@@ -51,7 +51,7 @@ environment:
   grid_config:
     on_target: restart
     collision_system: block_both
-    map_name: maps/train_capacity_n600.yaml
+    map_name: maps/train.yaml
     max_episode_steps: 512
     obs_radius: 5
     num_agents: 200

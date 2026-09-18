@@ -31,7 +31,7 @@ class EPOMLifelongFineTuneConfigTests(unittest.TestCase):
     def test_formal_config_keeps_the_audited_contract(self):
         from train import validate_config
 
-        filename = "train_epom_lifelong_finetune_r5_100m.yaml"
+        filename = "train_epom.yaml"
         config = yaml.safe_load(
             (self.root / "learning" / filename).read_text(encoding="utf-8")
         )
@@ -58,7 +58,7 @@ class EPOMLifelongFineTuneConfigTests(unittest.TestCase):
         path = (
             self.root
             / "learning"
-            / "train_epom_lifelong_finetune_r5_100m.yaml"
+            / "train_epom.yaml"
         )
         config = yaml.safe_load(path.read_text(encoding="utf-8"))
         config["experiment_settings"]["normalize_input"] = True
@@ -71,7 +71,7 @@ class EPOMLifelongFineTuneConfigTests(unittest.TestCase):
         path = (
             self.root
             / "learning"
-            / "train_epom_lifelong_finetune_r5_100m.yaml"
+            / "train_epom.yaml"
         )
         config = yaml.safe_load(path.read_text(encoding="utf-8"))
         config["experiment_settings"]["train_for_env_steps"] = 250_000_000
@@ -100,7 +100,7 @@ class EPOMLifelongFineTuneIntegrationTests(unittest.TestCase):
         config_path = (
             root
             / "learning"
-            / "train_epom_lifelong_finetune_r5_100m.yaml"
+            / "train_epom.yaml"
         )
         config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         register_custom_components()

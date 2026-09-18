@@ -512,7 +512,7 @@ def srslm_integrity_metadata(
     }
     if getattr(args, "map_list", None):
         files["map_list"] = _project_path(root, args.map_list)
-        files["map_registry"] = _project_path(root, "maps/eval.yaml")
+        files["map_registry"] = _project_path(root, "maps/test.yaml")
     missing = [f"{label}={path}" for label, path in files.items() if not path.is_file()]
     if missing:
         raise FileNotFoundError(
@@ -2923,7 +2923,7 @@ def parse_args():
 
     parser.add_argument("--map-file", type=str, default=None, help="Custom local map file path.")
 
-    parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/eval.yaml)")
+    parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/test.yaml)")
 
     parser.add_argument("--trim-border", dest="trim_border", action="store_true", help="Trim one-cell border from custom map")
 
@@ -3147,7 +3147,7 @@ def main():
 
                 args.main_dir,
 
-                "maps/eval.yaml",
+                "maps/test.yaml",
 
             ),
 

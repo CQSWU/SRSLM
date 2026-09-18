@@ -134,8 +134,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
     if full_env_name in ('POMAPF-SRSLM-v0', 'POMAPF-SRSLM-NoWait-v0'):
         raise RuntimeError(
             'Switcher training requires a hash-pinned ARPE candidate. '
-            'Use train_switcher_wait_arpe.py for Full or '
-            'train_switcher_nowait.py for NoWait, not generic train.py.'
+            'Use train_switcher.py for Switcher training, not generic train.py.'
         )
 
     _ensure_patched()
