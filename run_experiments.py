@@ -1,10 +1,4 @@
-"""Unified internal lifelong MAPF benchmark runner.
-
-The public self-owned policy fixes are merged here without removing the
-separately maintained official/reconstructed external adapters. Their sources
-and weights remain subject to their original licenses and provenance; this
-internal full runner is not a request to vendor third-party code into GitHub.
-"""
+"""Unified lifelong MAPF benchmark runner."""
 
 import argparse
 
@@ -64,79 +58,26 @@ DEFAULT_MAPS = {
 
 
 SUPPORTED_ALGORITHMS = (
-    "RePlan",
-    "AORePlan",
-    "AORePlan-SoftNoCheck",
-    "PRIMAL2",
-    "ARPE",
-    "Direct",
-    "SRSLM",
-    "SRSLM-NoWait",
-    "SRSLM-OnlyWait",
-    "EPOM",
-    "EPOM-Lifelong-FT",
-    "Follower",
-    "CHS-Reconstructed",
-    "CHS-Reconstructed-EPOM-Lifelong",
-    "DCC",
+    "RePlan", "AORePlan", "AORePlan-SoftNoCheck",
+    "EPOM-Lifelong-FT", "Direct", "ARPE",
+    "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
 )
 
-
-# Methods that require explicit artifacts or distinct evaluation protocols
-# remain opt-in so the default/"all" batch stays unambiguous.
-DEFAULT_ALGORITHMS = tuple(
-    algorithm
-    for algorithm in SUPPORTED_ALGORITHMS
-    if algorithm not in (
-        "AORePlan-SoftNoCheck",
-        "SRSLM",
-
-        "SRSLM-NoWait",
-        "SRSLM-OnlyWait",
-        "Direct",
-        "EPOM-Lifelong-FT",
-        "Follower",
-        "CHS-Reconstructed",
-        "CHS-Reconstructed-EPOM-Lifelong",
-        "PRIMAL2",
-        "DCC",
-    )
-)
+# Learned methods always require their explicit, hash-pinned artifacts.
+DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
 ALGORITHM_ALIASES = {
-    "epom-l": "EPOM-Lifelong-FT",
-    "aoreplan-soft-no-check": "AORePlan-SoftNoCheck",
-
     "replan": "RePlan",
-
     "aoreplan": "AORePlan",
     "aoreplan-softnocheck": "AORePlan-SoftNoCheck",
-    "aoreplan_softnocheck": "AORePlan-SoftNoCheck",
-
-
-
-    "primal2": "PRIMAL2",
-    "primal-2": "PRIMAL2",
-    "arpe": "ARPE",
-    "direct": "Direct",
-    "srslm": "SRSLM",
-    "srslm-nowait": "SRSLM-NoWait",
-    "srslm_nowait": "SRSLM-NoWait",
-    "srslm-onlywait": "SRSLM-OnlyWait",
-    "srslm_onlywait": "SRSLM-OnlyWait",
-    "epom": "EPOM",
+    "aoreplan-soft-no-check": "AORePlan-SoftNoCheck",
+    "epom-l": "EPOM-Lifelong-FT",
     "epom-lifelong-ft": "EPOM-Lifelong-FT",
     "epom_lifelong_ft": "EPOM-Lifelong-FT",
-    "follower": "Follower",
-    "follow": "Follower",
-    "learn-to-follow": "Follower",
-    "dcc": "DCC",
-    "chs": "CHS-Reconstructed",
-    "chs-reconstructed": "CHS-Reconstructed",
-    "chs_reconstructed": "CHS-Reconstructed",
-    "chsreconstructed": "CHS-Reconstructed",
-    "chs-epom-lifelong": "CHS-Reconstructed-EPOM-Lifelong",
-    "chs-reconstructed-epom-lifelong": "CHS-Reconstructed-EPOM-Lifelong",
-    "chs_reconstructed_epom_lifelong": "CHS-Reconstructed-EPOM-Lifelong",
+    "direct": "Direct",
+    "arpe": "ARPE",
+    "srslm-nowait": "SRSLM-NoWait",
+    "srslm-onlywait": "SRSLM-OnlyWait",
+    "srslm": "SRSLM",
 }
 
 
@@ -152,96 +93,8 @@ def canonical_algorithm_name(value):
     return ALGORITHM_ALIASES.get(value.strip().lower())
 
 
-def chs_reconstruction_metadata(algorithms, *, on_target="restart", collision_system="block_both", obs_radius=5):
-    """Describe the auditable CHS reconstruction used by this runner."""
-    selected = [
-        algorithm
-        for algorithm in (
-            "CHS-Reconstructed",
-            "CHS-Reconstructed-EPOM-Lifelong",
-        )
-        if algorithm in algorithms
-    ]
-    if not selected:
-        return None
-    if len(selected) != 1:
-        raise ValueError(
-            "Evaluate the two CHS reconstruction artifact profiles in "
-            "separate runs so their provenance remains unambiguous."
-        )
 
-    from agents.chs import (
-        CHS_LIFELONG_RECONSTRUCTION_ID,
-        CHS_OFFICIAL_COMMIT,
-        CHS_OFFICIAL_DSTAR_SHA256,
-        CHS_OFFICIAL_MIX_SHA256,
-        CHS_RECONSTRUCTION_ID,
-    )
-    from agents.epom import (
-        OFFICIAL_EPOM_CHECKPOINT,
-        OFFICIAL_EPOM_CHECKPOINT_SHA256,
-        OFFICIAL_EPOM_CONFIG_SHA256,
-        OFFICIAL_EPOM_RELEASE,
-    )
 
-    lifelong = selected[0] == "CHS-Reconstructed-EPOM-Lifelong"
-    if lifelong and on_target != "restart":
-        raise ValueError(
-            "CHS-Reconstructed-EPOM-Lifelong is restricted to the lifelong "
-            "restart protocol."
-        )
-    action_policy = (
-        {
-            "method": "EPOM-Lifelong fine-tuned",
-            "artifact_profile": "lifelong_finetuned",
-            "release": None,
-            "checkpoint": "selected dynamically from --epom-weights-path",
-            "checkpoint_sha256": "recorded per result row",
-            "config_sha256": "recorded per result row",
-            "weights_cli_option": "--epom-weights-path",
-        }
-        if lifelong
-        else {
-            "method": "official EPOM v0",
-            "artifact_profile": "official_v0",
-            "release": OFFICIAL_EPOM_RELEASE,
-            "checkpoint": OFFICIAL_EPOM_CHECKPOINT,
-            "checkpoint_sha256": OFFICIAL_EPOM_CHECKPOINT_SHA256,
-            "config_sha256": OFFICIAL_EPOM_CONFIG_SHA256,
-            "weights_cli_option": "--epom-weights-path",
-        }
-    )
-
-    return {
-        "implementation_status": "reconstructed",
-        "label": (
-            "CHS* (EPOM-L)" if lifelong else "CHS (reconstructed)"
-        ),
-        "runner_algorithm": selected[0],
-        "reconstruction_id": (
-            CHS_LIFELONG_RECONSTRUCTION_ID
-            if lifelong
-            else CHS_RECONSTRUCTION_ID
-        ),
-        "official_chs_commit": CHS_OFFICIAL_COMMIT,
-        "official_chs_mix_sha256": CHS_OFFICIAL_MIX_SHA256,
-        "official_chs_dstar_sha256": CHS_OFFICIAL_DSTAR_SHA256,
-        "official_action_checkpoint_available": False,
-        "substituted_action_policy": action_policy,
-        "switch_contract": {
-            "dense_branch": "EPOM when visible other-agent count is >4",
-            "sparse_branch": "persistent D* Lite on shared observed obstacles",
-            "fallbacks": "EPOM on no D* path or x_t == x_t-2 loop",
-            "epom_shadow_inference": "once for every agent on every step",
-            "unknown_static_cells": "treated as free",
-            "dynamic_agents_in_shared_static_map": False,
-        },
-        "evaluation_protocol_adaptation": {
-            "on_target": on_target,
-            "collision_system": collision_system,
-            "obs_radius": obs_radius,
-        },
-    }
 
 
 def epom_lifelong_result_manifest(results, algorithms):
@@ -250,7 +103,6 @@ def epom_lifelong_result_manifest(results, algorithms):
         set(algorithms)
         & {
             "EPOM-Lifelong-FT",
-            "CHS-Reconstructed-EPOM-Lifelong",
         }
     )
     if not selected:
@@ -387,8 +239,6 @@ def _has_checkpoints(path):
 
 
 
-
-
 def _find_switcher_weights(main_dir):
     root = Path(main_dir).resolve()
     candidate = _find_weight_run_dir(
@@ -401,21 +251,6 @@ def _find_switcher_weights(main_dir):
     return str(candidate)
 
 
-def _find_epom_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = root / "weights" / "EPOM" / "EPOM"
-    return str(candidate)
-
-
-def _find_follower_weights(main_dir):
-    root = Path(main_dir).resolve()
-    return str(
-        root
-        / "third_party"
-        / "learn-to-follow-official"
-        / "model"
-        / "follower"
-    )
 
 
 
@@ -621,8 +456,6 @@ def cache_algorithm_metadata(algorithms, requested):
     }
 
 
-
-
 def srslm_integrity_metadata(
     args,
     map_list_sha256=None,
@@ -798,19 +631,15 @@ def build_algorithm(
 
     switcher_weights_path=None,
 
-    primal2_weights_path=None,
+    no_reweight_weights_path=None,
+
 
     epom_weights_path=None,
 
-    follower_weights_path=None,
 
-    follower_device="auto",
 
-    dcc_weights_path=None,
 
-    dcc_device="auto",
 
-    dcc_keep_memory_on_target_change=False,
 
     direct_options=None,
 
@@ -819,6 +648,7 @@ def build_algorithm(
     algo_name = canonical_algorithm_name(algo_name) or algo_name
     if algo_name not in SUPPORTED_ALGORITHMS:
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
+
     if algo_name in {"ARPE", "SRSLM", "SRSLM-NoWait", "SRSLM-OnlyWait"}:
         # Their saved relative paths and embedded candidate declaration share
         # this checkout as their root. Do not partly redirect those identities
@@ -850,52 +680,7 @@ def build_algorithm(
         from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck
         return AORePlanSoftNoCheck(_ao_replan_cfg(seed))
 
-    if algo_name == "DCC":
-        from agents.dcc import DCC, DCCConfig
 
-        # Keep the released checkpoint as the default. Lifelong fine-tuning
-        # supplies an explicitly pinned file without replacing that artifact.
-        weights = _project_path(
-            main_dir, dcc_weights_path or "otherpolicy/DCC/saved_models/128000.pth"
-        ).resolve()
-        if not weights.is_file():
-            raise ValueError(f"DCC checkpoint is missing: {weights}")
-        checkpoint_sha256 = _sha256_file(weights)
-        policy = DCC(DCCConfig(
-            path_to_weights=str(weights), seed=seed, device=dcc_device,
-            reset_on_target_change=not dcc_keep_memory_on_target_change,
-        ))
-        if _sha256_file(weights) != checkpoint_sha256:
-            raise RuntimeError("DCC checkpoint changed while loading")
-        policy._evaluation_checkpoint_provenance = {
-            "method": "DCC",
-            "checkpoint_path": str(weights),
-            "checkpoint_sha256": checkpoint_sha256,
-            "device": str(policy.device),
-            "requested_device": dcc_device,
-            "reset_on_target_change": not dcc_keep_memory_on_target_change,
-            "reset_contract": "after_reset_then_set_grid_config_then_set_env_each_episode",
-        }
-        return policy
-
-    if algo_name == "PRIMAL2":
-
-        from agents.primal2 import PRIMAL2, PRIMAL2Config
-
-        if not primal2_weights_path:
-            raise ValueError(
-                "PRIMAL2 requires the audited converted official checkpoint "
-                "via --primal2-weights-path."
-            )
-        return PRIMAL2(
-            PRIMAL2Config(
-                path_to_weights=str(
-                    _project_path(main_dir, primal2_weights_path)
-                ),
-                seed=seed,
-                device="auto",
-            )
-        )
 
 
     if algo_name in (
@@ -989,12 +774,11 @@ def build_algorithm(
 
 
 
-    if algo_name in ("EPOM", "EPOM-Lifelong-FT"):
+    if algo_name == "EPOM-Lifelong-FT":
 
         from agents.epom import EPOM, EPOMConfig
 
-        lifelong = algo_name == "EPOM-Lifelong-FT"
-        if lifelong and not epom_weights_path:
+        if not epom_weights_path:
             raise ValueError(
                 "EPOM-Lifelong-FT requires an explicit --epom-weights-path."
             )
@@ -1003,108 +787,23 @@ def build_algorithm(
 
             EPOMConfig(
 
-                path_to_weights=(
-                    str(_project_path(main_dir, epom_weights_path))
-                    if lifelong else epom_weights_path or _find_epom_weights(main_dir)
-                ),
+                path_to_weights=str(_project_path(main_dir, epom_weights_path)),
 
                 seed=seed,
 
                 device="auto",
 
-                artifact_profile=(
-                    "lifelong_finetuned" if lifelong else "official_v0"
-                ),
+                artifact_profile="lifelong_finetuned",
 
             )
 
         )
 
 
-    if algo_name == "Follower":
-
-        from agents.follower import Follower, FollowerConfig
-
-        return Follower(
-
-            FollowerConfig(
-
-                path_to_weights=(
-                    follower_weights_path or _find_follower_weights(main_dir)
-                ),
-
-                seed=seed,
-
-                device=follower_device,
-
-                artifact_profile="official_v0",
-
-            )
-
-        )
 
 
-    if algo_name in (
-        "CHS-Reconstructed",
-        "CHS-Reconstructed-EPOM-Lifelong",
-    ):
 
-        from agents.chs import (
-            CHS_LIFELONG_RECONSTRUCTION_ID,
-            CHS_RECONSTRUCTION_ID,
-            CHSReconstructed,
-            CHSReconstructedConfig,
-        )
-        from agents.epom import EPOMConfig
 
-        lifelong = algo_name == "CHS-Reconstructed-EPOM-Lifelong"
-        if lifelong and not epom_weights_path:
-            raise ValueError(
-                "CHS-Reconstructed-EPOM-Lifelong requires an explicit "
-                "--epom-weights-path."
-            )
-
-        return CHSReconstructed(
-
-            CHSReconstructedConfig(
-
-                learning=EPOMConfig(
-
-                    path_to_weights=(
-                        epom_weights_path or _find_epom_weights(main_dir)
-                    ),
-
-                    seed=seed,
-
-                    device="auto",
-
-                    artifact_profile=(
-                        "lifelong_finetuned" if lifelong else "official_v0"
-                    ),
-
-                ),
-
-                seed=seed,
-
-                method_label=(
-                    "CHS* (EPOM-L)" if lifelong else "CHS (reconstructed)"
-                ),
-
-                reconstruction_id=(
-                    CHS_LIFELONG_RECONSTRUCTION_ID
-                    if lifelong
-                    else CHS_RECONSTRUCTION_ID
-                ),
-
-                action_policy_label=(
-                    "EPOM-Lifelong fine-tuned"
-                    if lifelong
-                    else "official EPOM v0"
-                ),
-
-            )
-
-        )
 
 
     if algo_name == "Direct":
@@ -1114,7 +813,7 @@ def build_algorithm(
         if not epom_weights_path:
             raise ValueError(
                 "Paper Direct requires the frozen EPOM-L weights via "
-                "--epom-weights-path."
+                "--epom-weights-path; it is not the old NoReweight backbone."
             )
         options = dict(direct_options or {})
         return EPOMDirectReweight(EPOMDirectReweightConfig(
@@ -1403,59 +1102,8 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
         raise RuntimeError(f"{algorithm} contract failed: " + "; ".join(violations))
 
 
-def validate_chs_stats(stats):
-    """Validate CHS branch accounting before writing a paper result row."""
-    required = (
-        "chs_decisions",
-        "chs_rl_decisions",
-        "chs_dstar_decisions",
-        "chs_density_triggers",
-        "chs_no_path_triggers",
-        "chs_loop_triggers",
-        "chs_loops_detected",
-        "chs_target_changes",
-        "chs_shared_known_cells",
-        "chs_shared_blocked_cells",
-        "chs_rl_action_rate",
-        "chs_dstar_action_rate",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError(
-            "CHS reconstructed diagnostics are incomplete: "
-            + ", ".join(missing)
-        )
 
-    decisions = stats["chs_decisions"]
-    rl_decisions = stats["chs_rl_decisions"]
-    dstar_decisions = stats["chs_dstar_decisions"]
-    violations = []
-    if decisions != rl_decisions + dstar_decisions:
-        violations.append("RL and D* decisions do not sum to all decisions")
-    if rl_decisions != (
-        stats["chs_density_triggers"]
-        + stats["chs_no_path_triggers"]
-        + stats["chs_loop_triggers"]
-    ):
-        violations.append("EPOM fallback triggers do not sum to RL decisions")
-    if not 0 <= stats["chs_loop_triggers"] <= stats["chs_loops_detected"]:
-        violations.append("loop trigger count exceeds detected loops")
-    if not (
-        0
-        <= stats["chs_shared_blocked_cells"]
-        <= stats["chs_shared_known_cells"]
-    ):
-        violations.append("shared-map blocked/known counts are inconsistent")
-    expected_rl_rate = rl_decisions / decisions if decisions else 0.0
-    expected_dstar_rate = dstar_decisions / decisions if decisions else 0.0
-    if not np.isclose(stats["chs_rl_action_rate"], expected_rl_rate):
-        violations.append("reported RL action rate is inconsistent")
-    if not np.isclose(stats["chs_dstar_action_rate"], expected_dstar_rate):
-        violations.append("reported D* action rate is inconsistent")
-    if violations:
-        raise RuntimeError(
-            "CHS reconstructed accounting failed: " + "; ".join(violations)
-        )
+
 
 
 class _MoveFailureTracker:
@@ -1992,19 +1640,15 @@ def run_single_experiment(task):
 
         task.get("switcher_weights_path"),
 
-        task.get("primal2_weights_path"),
+        task.get("no_reweight_weights_path"),
+
 
         task.get("epom_weights_path"),
 
-        task.get("follower_weights_path"),
 
-        task.get("follower_device", "auto"),
 
-        task.get("dcc_weights_path"),
 
-        task.get("dcc_device", "auto"),
 
-        task.get("dcc_keep_memory_on_target_change", False),
 
         json.dumps(task.get("direct_options") or {}, sort_keys=True),
 
@@ -2033,19 +1677,16 @@ def run_single_experiment(task):
 
                     switcher_weights_path=task.get("switcher_weights_path"),
 
-                    primal2_weights_path=task.get("primal2_weights_path"),
+                    no_reweight_weights_path=task.get(
+                        "no_reweight_weights_path"
+                    ),
+
 
                     epom_weights_path=task.get("epom_weights_path"),
 
-                    follower_weights_path=task.get("follower_weights_path"),
 
-                    follower_device=task.get("follower_device", "auto"),
 
-                    dcc_weights_path=task.get("dcc_weights_path"),
 
-                    dcc_device=task.get("dcc_device", "auto"),
-
-                    dcc_keep_memory_on_target_change=task.get("dcc_keep_memory_on_target_change", False),
 
                     direct_options=task.get("direct_options"),
 
@@ -2071,19 +1712,16 @@ def run_single_experiment(task):
 
                 switcher_weights_path=task.get("switcher_weights_path"),
 
-                primal2_weights_path=task.get("primal2_weights_path"),
+                no_reweight_weights_path=task.get(
+                    "no_reweight_weights_path"
+                ),
+
 
                 epom_weights_path=task.get("epom_weights_path"),
 
-                follower_weights_path=task.get("follower_weights_path"),
 
-                follower_device=task.get("follower_device", "auto"),
 
-                dcc_weights_path=task.get("dcc_weights_path"),
 
-                dcc_device=task.get("dcc_device", "auto"),
-
-                dcc_keep_memory_on_target_change=task.get("dcc_keep_memory_on_target_change", False),
 
                 direct_options=task.get("direct_options"),
 
@@ -2141,11 +1779,6 @@ def run_single_experiment(task):
             "SRSLM-OnlyWait",
         ):
             validate_final_srslm_ablation_stats(algo_name, hybrid_stats)
-        elif algo_name in (
-            "CHS-Reconstructed",
-            "CHS-Reconstructed-EPOM-Lifelong",
-        ):
-            validate_chs_stats(hybrid_stats)
         correction_stats = (
             algo.get_action_correction_stats()
             if hasattr(algo, "get_action_correction_stats")
@@ -2156,8 +1789,6 @@ def run_single_experiment(task):
             if hasattr(algo, "get_model_provenance")
             else None
         )
-        if algo_name == "DCC":
-            model_provenance = dict(algo._evaluation_checkpoint_provenance)
         result_record = {
             "algorithm": algo_name,
             "map_name": task["map_name"],
@@ -2632,6 +2263,23 @@ def load_map_list_snapshot(path, registry_path=None):
     )
 
 
+def _canonical_json_sha256(value):
+
+    return hashlib.sha256(
+
+        json.dumps(
+
+            value,
+
+            sort_keys=True,
+
+            separators=(",", ":"),
+
+        ).encode("utf-8")
+
+    ).hexdigest()
+
+
 def build_tasks(
     algorithms,
     maps,
@@ -2698,19 +2346,14 @@ def build_tasks(
 
             "switcher_weights_path": args.switcher_weights_path,
 
-            "primal2_weights_path": args.primal2_weights_path,
+            "no_reweight_weights_path": args.no_reweight_weights_path,
+
 
             "epom_weights_path": args.epom_weights_path,
 
-            "follower_weights_path": args.follower_weights_path,
 
-            "follower_device": args.follower_device,
 
-            "dcc_weights_path": getattr(args, "dcc_weights_path", None),
 
-            "dcc_device": getattr(args, "dcc_device", "auto"),
-
-            "dcc_keep_memory_on_target_change": getattr(args, "dcc_keep_memory_on_target_change", False),
 
             "direct_options": getattr(args, "direct_options", None),
 
@@ -3332,20 +2975,6 @@ def parse_args():
 
     )
 
-    parser.add_argument(
-
-        "--primal2-weights-path",
-
-        type=str,
-
-        default=None,
-
-        help=(
-            "Audited PyTorch conversion of the authors-released PRIMAL2 "
-            "continuous TensorFlow checkpoint"
-        ),
-
-    )
 
     parser.add_argument(
 
@@ -3359,46 +2988,19 @@ def parse_args():
 
     )
 
-    parser.add_argument(
 
-        "--follower-weights-path",
-
-        type=str,
-
-        default=None,
-
-        help="Override official Learn-to-Follow v0 weights directory",
-
-    )
 
     parser.add_argument(
-
-        "--follower-device",
-
-        default="auto",
-
-        help=(
-            "Inference device for official Learn-to-Follow, for example "
-            "auto, cpu, or cuda:0"
-        ),
-
-    )
-
-    parser.add_argument(
-
-        "--dcc-weights-path",
-        default=None,
-        help="DCC checkpoint file; default is the preserved official 128000.pth",
+        "--direct-gate", choices=("always", "primal3", "never"), default="always",
+        help="EPOM-L Direct gate: always (plain Direct), primal3 (policy entropy), or never (control).",
     )
     parser.add_argument(
-        "--dcc-device",
-        default="auto",
-        help="DCC inference device: auto, cpu, or cuda:0 (after CUDA_VISIBLE_DEVICES)",
+        "--direct-centering", choices=("crop", "candidate"), default="crop",
+        help="Direct mean: all free cells of the 11x11 crop, or explicit historical five-candidate ablation.",
     )
     parser.add_argument(
-        "--dcc-keep-memory-on-target-change",
-        action="store_true",
-        help="DCC-L continuing-task memory; official DCC keeps its default target reset",
+        "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
+        help="Direct pressure transform; clipped_relu uses cap 2. Learned ARPE output is not clipped.",
     )
     parser.add_argument(
 
@@ -3431,6 +3033,13 @@ def parse_args():
         help="Override the Switcher weights directory",
     )
 
+    parser.add_argument(
+        "--no-reweight-weights-path",
+        dest="no_reweight_weights_path",
+        type=str,
+        default=None,
+        help="Override the NoReweight weights directory",
+    )
     parser.add_argument("--output-dir", type=str, default="exp_result", help="Directory for JSON results")
 
     parser.add_argument("--output", type=str, default=None, help="Output filename (default: experiments_TIMESTAMP.json)")
@@ -3478,19 +3087,6 @@ def parse_args():
     parser.add_argument("--save", dest="save", action="store_true", default=True, help="Save JSON results")
 
     parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
-
-    parser.add_argument(
-        "--direct-gate", choices=("always", "primal3", "never"), default="always",
-        help="EPOM-L Direct gate: always (plain Direct), primal3 (policy entropy), or never (control).",
-    )
-    parser.add_argument(
-        "--direct-centering", choices=("crop", "candidate"), default="crop",
-        help="Direct mean: all free cells of the 11x11 crop, or explicit historical five-candidate ablation.",
-    )
-    parser.add_argument(
-        "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
-        help="Direct pressure transform; clipped_relu uses cap 2. Learned ARPE output is not clipped.",
-    )
 
     args = parser.parse_args()
     args.direct_options = {
@@ -3550,14 +3146,6 @@ def main():
 
 
     algorithms = args.algorithms
-    effective_obs_radius = (POMAPFConfig().obs_radius
-                            if args.obs_radius is None else args.obs_radius)
-    chs_reconstruction = chs_reconstruction_metadata(
-        algorithms,
-        on_target=args.on_target,
-        collision_system=args.collision_system,
-        obs_radius=effective_obs_radius,
-    )
     srslm_contract = srslm_contract_metadata(algorithms, args.collision_system)
     hybrid_contract = srslm_contract
 
@@ -3655,7 +3243,7 @@ def main():
 
         "runtime_provenance": runtime_provenance(),
 
-        "chs_reconstruction": chs_reconstruction,
+
 
         "congestion_metric": {
 
@@ -3749,19 +3337,14 @@ def main():
 
         "switcher_weights_path": args.switcher_weights_path,
 
-        "primal2_weights_path": args.primal2_weights_path,
+        "no_reweight_weights_path": args.no_reweight_weights_path,
+
 
         "epom_weights_path": args.epom_weights_path,
 
-        "follower_weights_path": args.follower_weights_path,
 
-        "follower_device": args.follower_device,
 
-        "dcc_weights_path": args.dcc_weights_path,
 
-        "dcc_device": args.dcc_device,
-
-        "dcc_keep_memory_on_target_change": args.dcc_keep_memory_on_target_change,
 
         "direct_options": args.direct_options,
 
