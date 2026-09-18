@@ -131,7 +131,9 @@ def test_default_aoreplan_keeps_static_occupancy_check(collision):
     agent.set_grid_config(SimpleNamespace(collision_system=collision))
     assert agent.WRAPPER_CLASS is AORePlanWrapper
     wrapper = object.__new__(agent.WRAPPER_CLASS)
-    wrapper.static_astar = SimpleNamespace(get_action=lambda obs: 4)
+    wrapper.static_astar = SimpleNamespace(
+        get_action=lambda _index, _observation: 4
+    )
     wrapper.last_static_astar_invoked_mask = [False]
     wrapper.moves = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
     agents = np.zeros((11, 11), dtype=int)
@@ -147,7 +149,9 @@ def test_search_soft_bypass_is_explicit_and_not_available_in_block_both():
     with pytest.raises(ValueError, match='standalone soft'):
         policy.set_grid_config(SimpleNamespace(collision_system='block_both'))
     wrapper = object.__new__(_SoftNoCheckWrapper)
-    wrapper.static_astar = SimpleNamespace(get_action=lambda obs: 4)
+    wrapper.static_astar = SimpleNamespace(
+        get_action=lambda _index, _observation: 4
+    )
     wrapper.last_static_astar_invoked_mask = [False]
     assert wrapper._static_astar_action(0, {}) == 4
     assert wrapper.last_static_astar_invoked_mask == [True]

@@ -34,6 +34,9 @@ def _load(path: Path) -> dict:
 def full_model():
     register_custom_components()
     raw = _load(FORMAL)
+    base = ROOT / raw["experiment_settings"]["epom_base_weights_path"]
+    if not ((base / "config.json").is_file() or (base / "cfg.json").is_file()):
+        pytest.skip("EPOM-L weights are distributed separately from Git")
     raw["global_settings"]["device"] = "cpu"
     _, cfg = validate_config(raw)
     env = create_env(cfg.env, cfg=cfg, env_config={})
