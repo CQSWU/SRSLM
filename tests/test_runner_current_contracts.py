@@ -1,4 +1,4 @@
-"""Public runner binds the paper artifacts, not the retired ARPE backbone."""
+"""Internal runner binds the paper artifacts, not the historical tau backbone."""
 import inspect
 import json
 import sys
@@ -15,22 +15,8 @@ from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck, _SoftNoCheckWrap
 from planning.ao_replan_algo import AORePlanWrapper
 
 
-def test_public_names_are_explicit_and_retired_names_are_rejected():
-    assert runner.SUPPORTED_ALGORITHMS == (
-        'RePlan', 'AORePlan', 'AORePlan-SoftNoCheck', 'EPOM-Lifelong-FT',
-        'NoReweight', 'Direct', 'ARPE', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
-    )
-    assert set(runner.ALGORITHM_ALIASES.values()) == set(runner.SUPPORTED_ALGORITHMS)
-    for name in ('DCC', 'DHC', 'Follower', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
-        with pytest.raises(Exception):
-            runner.parse_algorithms(name)
 
 
-def test_public_runner_has_no_unshipped_adapter_imports():
-    source = inspect.getsource(runner)
-    for module in ('agents.dcc', 'agents.primal2', 'agents.follower',
-                   'agents.chs', 'agents.assistant_switcher', 'agents.srslm_ablation'):
-        assert module not in source
 
 
 def test_learned_policies_are_always_episode_fresh():
@@ -70,8 +56,9 @@ def test_direct_uses_epom_l_and_explicit_crop_not_old_noreweight(gate, transform
     assert cfg.gate == gate
     assert cfg.pressure_transform == transform
     assert cfg.pressure_cap == 2.0
-    with pytest.raises(ValueError, match='EPOM-L'):
-        runner.build_algorithm('Direct', '.', 42, no_reweight_weights_path='legacy')
+    assert "no_reweight_weights_path" not in inspect.signature(
+        runner.build_algorithm
+    ).parameters
 
 
 def test_direct_cli_records_all_correction_options():
@@ -131,7 +118,7 @@ def test_default_aoreplan_keeps_static_occupancy_check(collision):
     agent.set_grid_config(SimpleNamespace(collision_system=collision))
     assert agent.WRAPPER_CLASS is AORePlanWrapper
     wrapper = object.__new__(agent.WRAPPER_CLASS)
-    wrapper.static_astar = SimpleNamespace(get_action=lambda obs: 4)
+    wrapper.static_astar = SimpleNamespace(get_action=lambda index, obs: 4)
     wrapper.last_static_astar_invoked_mask = [False]
     wrapper.moves = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
     agents = np.zeros((11, 11), dtype=int)
@@ -147,7 +134,7 @@ def test_search_soft_bypass_is_explicit_and_not_available_in_block_both():
     with pytest.raises(ValueError, match='standalone soft'):
         policy.set_grid_config(SimpleNamespace(collision_system='block_both'))
     wrapper = object.__new__(_SoftNoCheckWrapper)
-    wrapper.static_astar = SimpleNamespace(get_action=lambda obs: 4)
+    wrapper.static_astar = SimpleNamespace(get_action=lambda index, obs: 4)
     wrapper.last_static_astar_invoked_mask = [False]
     assert wrapper._static_astar_action(0, {}) == 4
     assert wrapper.last_static_astar_invoked_mask == [True]
@@ -167,3 +154,15 @@ def test_optional_arpe_path_is_an_assertion_not_an_override(tmp_path):
     runner._assert_candidate_weights(tmp_path, 'weights/pinned', artifact)
     with pytest.raises(ValueError, match='hash-pinned'):
         runner._assert_candidate_weights(tmp_path, 'weights/other', artifact)
+
+def test_internal_names_retain_external_choices_and_public_aliases():
+    expected = {'DCC', 'PRIMAL2', 'EPOM', 'EPOM-Lifelong-FT', 'Follower',
+                'CHS-Reconstructed', 'CHS-Reconstructed-EPOM-Lifelong',
+                'AORePlan-SoftNoCheck'}
+    assert expected <= set(runner.SUPPORTED_ALGORITHMS)
+    for alias, name in [('aoreplan-soft-no-check', 'AORePlan-SoftNoCheck'),
+                        ('epom-l', 'EPOM-Lifelong-FT')]:
+        assert runner.canonical_algorithm_name(alias) == name
+    for retired in ('DHC', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
+        with pytest.raises(Exception):
+            runner.parse_algorithms(retired)

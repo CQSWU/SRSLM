@@ -1,4 +1,10 @@
-"""Unified lifelong MAPF benchmark runner."""
+"""Unified internal lifelong MAPF benchmark runner.
+
+The public self-owned policy fixes are merged here without removing the
+separately maintained official/reconstructed external adapters. Their sources
+and weights remain subject to their original licenses and provenance; this
+internal full runner is not a request to vendor third-party code into GitHub.
+"""
 
 import argparse
 
@@ -18,7 +24,6 @@ import random
 
 import time
 
-import urllib.request
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -59,28 +64,79 @@ DEFAULT_MAPS = {
 
 
 SUPPORTED_ALGORITHMS = (
-    "RePlan", "AORePlan", "AORePlan-SoftNoCheck",
-    "EPOM-Lifelong-FT", "NoReweight", "Direct", "ARPE",
-    "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
+    "RePlan",
+    "AORePlan",
+    "AORePlan-SoftNoCheck",
+    "PRIMAL2",
+    "ARPE",
+    "Direct",
+    "SRSLM",
+    "SRSLM-NoWait",
+    "SRSLM-OnlyWait",
+    "EPOM",
+    "EPOM-Lifelong-FT",
+    "Follower",
+    "CHS-Reconstructed",
+    "CHS-Reconstructed-EPOM-Lifelong",
+    "DCC",
 )
 
-# Learned methods always require their explicit, hash-pinned artifacts.
-DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
+
+# Methods that require explicit artifacts or distinct evaluation protocols
+# remain opt-in so the default/"all" batch stays unambiguous.
+DEFAULT_ALGORITHMS = tuple(
+    algorithm
+    for algorithm in SUPPORTED_ALGORITHMS
+    if algorithm not in (
+        "AORePlan-SoftNoCheck",
+        "SRSLM",
+
+        "SRSLM-NoWait",
+        "SRSLM-OnlyWait",
+        "Direct",
+        "EPOM-Lifelong-FT",
+        "Follower",
+        "CHS-Reconstructed",
+        "CHS-Reconstructed-EPOM-Lifelong",
+        "PRIMAL2",
+        "DCC",
+    )
+)
 ALGORITHM_ALIASES = {
+    "epom-l": "EPOM-Lifelong-FT",
+    "aoreplan-soft-no-check": "AORePlan-SoftNoCheck",
+
     "replan": "RePlan",
+
     "aoreplan": "AORePlan",
     "aoreplan-softnocheck": "AORePlan-SoftNoCheck",
-    "aoreplan-soft-no-check": "AORePlan-SoftNoCheck",
-    "epom-l": "EPOM-Lifelong-FT",
+    "aoreplan_softnocheck": "AORePlan-SoftNoCheck",
+
+
+
+    "primal2": "PRIMAL2",
+    "primal-2": "PRIMAL2",
+    "arpe": "ARPE",
+    "direct": "Direct",
+    "srslm": "SRSLM",
+    "srslm-nowait": "SRSLM-NoWait",
+    "srslm_nowait": "SRSLM-NoWait",
+    "srslm-onlywait": "SRSLM-OnlyWait",
+    "srslm_onlywait": "SRSLM-OnlyWait",
+    "epom": "EPOM",
     "epom-lifelong-ft": "EPOM-Lifelong-FT",
     "epom_lifelong_ft": "EPOM-Lifelong-FT",
-    "noreweight": "NoReweight",
-    "no-reweight": "NoReweight",
-    "direct": "Direct",
-    "arpe": "ARPE",
-    "srslm-nowait": "SRSLM-NoWait",
-    "srslm-onlywait": "SRSLM-OnlyWait",
-    "srslm": "SRSLM",
+    "follower": "Follower",
+    "follow": "Follower",
+    "learn-to-follow": "Follower",
+    "dcc": "DCC",
+    "chs": "CHS-Reconstructed",
+    "chs-reconstructed": "CHS-Reconstructed",
+    "chs_reconstructed": "CHS-Reconstructed",
+    "chsreconstructed": "CHS-Reconstructed",
+    "chs-epom-lifelong": "CHS-Reconstructed-EPOM-Lifelong",
+    "chs-reconstructed-epom-lifelong": "CHS-Reconstructed-EPOM-Lifelong",
+    "chs_reconstructed_epom_lifelong": "CHS-Reconstructed-EPOM-Lifelong",
 }
 
 
@@ -96,8 +152,96 @@ def canonical_algorithm_name(value):
     return ALGORITHM_ALIASES.get(value.strip().lower())
 
 
+def chs_reconstruction_metadata(algorithms, *, on_target="restart", collision_system="block_both", obs_radius=5):
+    """Describe the auditable CHS reconstruction used by this runner."""
+    selected = [
+        algorithm
+        for algorithm in (
+            "CHS-Reconstructed",
+            "CHS-Reconstructed-EPOM-Lifelong",
+        )
+        if algorithm in algorithms
+    ]
+    if not selected:
+        return None
+    if len(selected) != 1:
+        raise ValueError(
+            "Evaluate the two CHS reconstruction artifact profiles in "
+            "separate runs so their provenance remains unambiguous."
+        )
 
+    from agents.chs import (
+        CHS_LIFELONG_RECONSTRUCTION_ID,
+        CHS_OFFICIAL_COMMIT,
+        CHS_OFFICIAL_DSTAR_SHA256,
+        CHS_OFFICIAL_MIX_SHA256,
+        CHS_RECONSTRUCTION_ID,
+    )
+    from agents.epom import (
+        OFFICIAL_EPOM_CHECKPOINT,
+        OFFICIAL_EPOM_CHECKPOINT_SHA256,
+        OFFICIAL_EPOM_CONFIG_SHA256,
+        OFFICIAL_EPOM_RELEASE,
+    )
 
+    lifelong = selected[0] == "CHS-Reconstructed-EPOM-Lifelong"
+    if lifelong and on_target != "restart":
+        raise ValueError(
+            "CHS-Reconstructed-EPOM-Lifelong is restricted to the lifelong "
+            "restart protocol."
+        )
+    action_policy = (
+        {
+            "method": "EPOM-Lifelong fine-tuned",
+            "artifact_profile": "lifelong_finetuned",
+            "release": None,
+            "checkpoint": "selected dynamically from --epom-weights-path",
+            "checkpoint_sha256": "recorded per result row",
+            "config_sha256": "recorded per result row",
+            "weights_cli_option": "--epom-weights-path",
+        }
+        if lifelong
+        else {
+            "method": "official EPOM v0",
+            "artifact_profile": "official_v0",
+            "release": OFFICIAL_EPOM_RELEASE,
+            "checkpoint": OFFICIAL_EPOM_CHECKPOINT,
+            "checkpoint_sha256": OFFICIAL_EPOM_CHECKPOINT_SHA256,
+            "config_sha256": OFFICIAL_EPOM_CONFIG_SHA256,
+            "weights_cli_option": "--epom-weights-path",
+        }
+    )
+
+    return {
+        "implementation_status": "reconstructed",
+        "label": (
+            "CHS* (EPOM-L)" if lifelong else "CHS (reconstructed)"
+        ),
+        "runner_algorithm": selected[0],
+        "reconstruction_id": (
+            CHS_LIFELONG_RECONSTRUCTION_ID
+            if lifelong
+            else CHS_RECONSTRUCTION_ID
+        ),
+        "official_chs_commit": CHS_OFFICIAL_COMMIT,
+        "official_chs_mix_sha256": CHS_OFFICIAL_MIX_SHA256,
+        "official_chs_dstar_sha256": CHS_OFFICIAL_DSTAR_SHA256,
+        "official_action_checkpoint_available": False,
+        "substituted_action_policy": action_policy,
+        "switch_contract": {
+            "dense_branch": "EPOM when visible other-agent count is >4",
+            "sparse_branch": "persistent D* Lite on shared observed obstacles",
+            "fallbacks": "EPOM on no D* path or x_t == x_t-2 loop",
+            "epom_shadow_inference": "once for every agent on every step",
+            "unknown_static_cells": "treated as free",
+            "dynamic_agents_in_shared_static_map": False,
+        },
+        "evaluation_protocol_adaptation": {
+            "on_target": on_target,
+            "collision_system": collision_system,
+            "obs_radius": obs_radius,
+        },
+    }
 
 
 def epom_lifelong_result_manifest(results, algorithms):
@@ -106,6 +250,7 @@ def epom_lifelong_result_manifest(results, algorithms):
         set(algorithms)
         & {
             "EPOM-Lifelong-FT",
+            "CHS-Reconstructed-EPOM-Lifelong",
         }
     )
     if not selected:
@@ -242,17 +387,6 @@ def _has_checkpoints(path):
 
 
 
-def _find_no_reweight_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = _find_weight_run_dir(root / "weights" / "NoReweight-block-1b")
-    if candidate is not None:
-        return str(candidate)
-    return str(
-        root
-        / "weights"
-        / "NoReweight-block-1b"
-        / "NoReweight-Block-R5-1B"
-    )
 
 
 def _find_switcher_weights(main_dir):
@@ -267,6 +401,21 @@ def _find_switcher_weights(main_dir):
     return str(candidate)
 
 
+def _find_epom_weights(main_dir):
+    root = Path(main_dir).resolve()
+    candidate = root / "weights" / "EPOM" / "EPOM"
+    return str(candidate)
+
+
+def _find_follower_weights(main_dir):
+    root = Path(main_dir).resolve()
+    return str(
+        root
+        / "third_party"
+        / "learn-to-follow-official"
+        / "model"
+        / "follower"
+    )
 
 
 
@@ -439,7 +588,6 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
 _EPISODE_FRESH_ALGORITHMS = frozenset(
     (
         "ARPE",
-        "NoReweight",
         "Direct",
         "SRSLM",
         "SRSLM-NoWait",
@@ -471,6 +619,8 @@ def cache_algorithm_metadata(algorithms, requested):
         "effective_by_algorithm": effective_by_algorithm,
         "exceptions": exceptions,
     }
+
+
 
 
 def srslm_integrity_metadata(
@@ -648,15 +798,19 @@ def build_algorithm(
 
     switcher_weights_path=None,
 
-    no_reweight_weights_path=None,
-
+    primal2_weights_path=None,
 
     epom_weights_path=None,
 
+    follower_weights_path=None,
 
+    follower_device="auto",
 
+    dcc_weights_path=None,
 
+    dcc_device="auto",
 
+    dcc_keep_memory_on_target_change=False,
 
     direct_options=None,
 
@@ -665,7 +819,6 @@ def build_algorithm(
     algo_name = canonical_algorithm_name(algo_name) or algo_name
     if algo_name not in SUPPORTED_ALGORITHMS:
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
-
     if algo_name in {"ARPE", "SRSLM", "SRSLM-NoWait", "SRSLM-OnlyWait"}:
         # Their saved relative paths and embedded candidate declaration share
         # this checkout as their root. Do not partly redirect those identities
@@ -697,7 +850,52 @@ def build_algorithm(
         from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck
         return AORePlanSoftNoCheck(_ao_replan_cfg(seed))
 
+    if algo_name == "DCC":
+        from agents.dcc import DCC, DCCConfig
 
+        # Keep the released checkpoint as the default. Lifelong fine-tuning
+        # supplies an explicitly pinned file without replacing that artifact.
+        weights = _project_path(
+            main_dir, dcc_weights_path or "otherpolicy/DCC/saved_models/128000.pth"
+        ).resolve()
+        if not weights.is_file():
+            raise ValueError(f"DCC checkpoint is missing: {weights}")
+        checkpoint_sha256 = _sha256_file(weights)
+        policy = DCC(DCCConfig(
+            path_to_weights=str(weights), seed=seed, device=dcc_device,
+            reset_on_target_change=not dcc_keep_memory_on_target_change,
+        ))
+        if _sha256_file(weights) != checkpoint_sha256:
+            raise RuntimeError("DCC checkpoint changed while loading")
+        policy._evaluation_checkpoint_provenance = {
+            "method": "DCC",
+            "checkpoint_path": str(weights),
+            "checkpoint_sha256": checkpoint_sha256,
+            "device": str(policy.device),
+            "requested_device": dcc_device,
+            "reset_on_target_change": not dcc_keep_memory_on_target_change,
+            "reset_contract": "after_reset_then_set_grid_config_then_set_env_each_episode",
+        }
+        return policy
+
+    if algo_name == "PRIMAL2":
+
+        from agents.primal2 import PRIMAL2, PRIMAL2Config
+
+        if not primal2_weights_path:
+            raise ValueError(
+                "PRIMAL2 requires the audited converted official checkpoint "
+                "via --primal2-weights-path."
+            )
+        return PRIMAL2(
+            PRIMAL2Config(
+                path_to_weights=str(
+                    _project_path(main_dir, primal2_weights_path)
+                ),
+                seed=seed,
+                device="auto",
+            )
+        )
 
 
     if algo_name in (
@@ -791,11 +989,12 @@ def build_algorithm(
 
 
 
-    if algo_name == "EPOM-Lifelong-FT":
+    if algo_name in ("EPOM", "EPOM-Lifelong-FT"):
 
         from agents.epom import EPOM, EPOMConfig
 
-        if not epom_weights_path:
+        lifelong = algo_name == "EPOM-Lifelong-FT"
+        if lifelong and not epom_weights_path:
             raise ValueError(
                 "EPOM-Lifelong-FT requires an explicit --epom-weights-path."
             )
@@ -804,44 +1003,104 @@ def build_algorithm(
 
             EPOMConfig(
 
-                path_to_weights=str(_project_path(main_dir, epom_weights_path)),
+                path_to_weights=(
+                    str(_project_path(main_dir, epom_weights_path))
+                    if lifelong else epom_weights_path or _find_epom_weights(main_dir)
+                ),
 
                 seed=seed,
 
                 device="auto",
 
-                artifact_profile="lifelong_finetuned",
+                artifact_profile=(
+                    "lifelong_finetuned" if lifelong else "official_v0"
+                ),
 
             )
 
         )
 
 
+    if algo_name == "Follower":
 
+        from agents.follower import Follower, FollowerConfig
 
+        return Follower(
 
+            FollowerConfig(
 
-
-
-    if algo_name == "NoReweight":
-
-        from agents.policy_backbone import NoReweight, NoReweightConfig
-
-        weights_path = (
-            no_reweight_weights_path or _find_no_reweight_weights(main_dir)
-        )
-
-        return NoReweight(
-
-            NoReweightConfig(
-
-                path_to_weights=weights_path,
+                path_to_weights=(
+                    follower_weights_path or _find_follower_weights(main_dir)
+                ),
 
                 seed=seed,
 
-                checkpoint_kind="latest",
+                device=follower_device,
 
-                device="auto",
+                artifact_profile="official_v0",
+
+            )
+
+        )
+
+
+    if algo_name in (
+        "CHS-Reconstructed",
+        "CHS-Reconstructed-EPOM-Lifelong",
+    ):
+
+        from agents.chs import (
+            CHS_LIFELONG_RECONSTRUCTION_ID,
+            CHS_RECONSTRUCTION_ID,
+            CHSReconstructed,
+            CHSReconstructedConfig,
+        )
+        from agents.epom import EPOMConfig
+
+        lifelong = algo_name == "CHS-Reconstructed-EPOM-Lifelong"
+        if lifelong and not epom_weights_path:
+            raise ValueError(
+                "CHS-Reconstructed-EPOM-Lifelong requires an explicit "
+                "--epom-weights-path."
+            )
+
+        return CHSReconstructed(
+
+            CHSReconstructedConfig(
+
+                learning=EPOMConfig(
+
+                    path_to_weights=(
+                        epom_weights_path or _find_epom_weights(main_dir)
+                    ),
+
+                    seed=seed,
+
+                    device="auto",
+
+                    artifact_profile=(
+                        "lifelong_finetuned" if lifelong else "official_v0"
+                    ),
+
+                ),
+
+                seed=seed,
+
+                method_label=(
+                    "CHS* (EPOM-L)" if lifelong else "CHS (reconstructed)"
+                ),
+
+                reconstruction_id=(
+                    CHS_LIFELONG_RECONSTRUCTION_ID
+                    if lifelong
+                    else CHS_RECONSTRUCTION_ID
+                ),
+
+                action_policy_label=(
+                    "EPOM-Lifelong fine-tuned"
+                    if lifelong
+                    else "official EPOM v0"
+                ),
 
             )
 
@@ -855,7 +1114,7 @@ def build_algorithm(
         if not epom_weights_path:
             raise ValueError(
                 "Paper Direct requires the frozen EPOM-L weights via "
-                "--epom-weights-path; it is not the old NoReweight backbone."
+                "--epom-weights-path."
             )
         options = dict(direct_options or {})
         return EPOMDirectReweight(EPOMDirectReweightConfig(
@@ -1144,8 +1403,59 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
         raise RuntimeError(f"{algorithm} contract failed: " + "; ".join(violations))
 
 
+def validate_chs_stats(stats):
+    """Validate CHS branch accounting before writing a paper result row."""
+    required = (
+        "chs_decisions",
+        "chs_rl_decisions",
+        "chs_dstar_decisions",
+        "chs_density_triggers",
+        "chs_no_path_triggers",
+        "chs_loop_triggers",
+        "chs_loops_detected",
+        "chs_target_changes",
+        "chs_shared_known_cells",
+        "chs_shared_blocked_cells",
+        "chs_rl_action_rate",
+        "chs_dstar_action_rate",
+    )
+    missing = [key for key in required if key not in stats]
+    if missing:
+        raise RuntimeError(
+            "CHS reconstructed diagnostics are incomplete: "
+            + ", ".join(missing)
+        )
 
-
+    decisions = stats["chs_decisions"]
+    rl_decisions = stats["chs_rl_decisions"]
+    dstar_decisions = stats["chs_dstar_decisions"]
+    violations = []
+    if decisions != rl_decisions + dstar_decisions:
+        violations.append("RL and D* decisions do not sum to all decisions")
+    if rl_decisions != (
+        stats["chs_density_triggers"]
+        + stats["chs_no_path_triggers"]
+        + stats["chs_loop_triggers"]
+    ):
+        violations.append("EPOM fallback triggers do not sum to RL decisions")
+    if not 0 <= stats["chs_loop_triggers"] <= stats["chs_loops_detected"]:
+        violations.append("loop trigger count exceeds detected loops")
+    if not (
+        0
+        <= stats["chs_shared_blocked_cells"]
+        <= stats["chs_shared_known_cells"]
+    ):
+        violations.append("shared-map blocked/known counts are inconsistent")
+    expected_rl_rate = rl_decisions / decisions if decisions else 0.0
+    expected_dstar_rate = dstar_decisions / decisions if decisions else 0.0
+    if not np.isclose(stats["chs_rl_action_rate"], expected_rl_rate):
+        violations.append("reported RL action rate is inconsistent")
+    if not np.isclose(stats["chs_dstar_action_rate"], expected_dstar_rate):
+        violations.append("reported D* action rate is inconsistent")
+    if violations:
+        raise RuntimeError(
+            "CHS reconstructed accounting failed: " + "; ".join(violations)
+        )
 
 
 class _MoveFailureTracker:
@@ -1682,15 +1992,19 @@ def run_single_experiment(task):
 
         task.get("switcher_weights_path"),
 
-        task.get("no_reweight_weights_path"),
-
+        task.get("primal2_weights_path"),
 
         task.get("epom_weights_path"),
 
+        task.get("follower_weights_path"),
 
+        task.get("follower_device", "auto"),
 
+        task.get("dcc_weights_path"),
 
+        task.get("dcc_device", "auto"),
 
+        task.get("dcc_keep_memory_on_target_change", False),
 
         json.dumps(task.get("direct_options") or {}, sort_keys=True),
 
@@ -1719,16 +2033,19 @@ def run_single_experiment(task):
 
                     switcher_weights_path=task.get("switcher_weights_path"),
 
-                    no_reweight_weights_path=task.get(
-                        "no_reweight_weights_path"
-                    ),
-
+                    primal2_weights_path=task.get("primal2_weights_path"),
 
                     epom_weights_path=task.get("epom_weights_path"),
 
+                    follower_weights_path=task.get("follower_weights_path"),
 
+                    follower_device=task.get("follower_device", "auto"),
 
+                    dcc_weights_path=task.get("dcc_weights_path"),
 
+                    dcc_device=task.get("dcc_device", "auto"),
+
+                    dcc_keep_memory_on_target_change=task.get("dcc_keep_memory_on_target_change", False),
 
                     direct_options=task.get("direct_options"),
 
@@ -1754,16 +2071,19 @@ def run_single_experiment(task):
 
                 switcher_weights_path=task.get("switcher_weights_path"),
 
-                no_reweight_weights_path=task.get(
-                    "no_reweight_weights_path"
-                ),
-
+                primal2_weights_path=task.get("primal2_weights_path"),
 
                 epom_weights_path=task.get("epom_weights_path"),
 
+                follower_weights_path=task.get("follower_weights_path"),
 
+                follower_device=task.get("follower_device", "auto"),
 
+                dcc_weights_path=task.get("dcc_weights_path"),
 
+                dcc_device=task.get("dcc_device", "auto"),
+
+                dcc_keep_memory_on_target_change=task.get("dcc_keep_memory_on_target_change", False),
 
                 direct_options=task.get("direct_options"),
 
@@ -1821,6 +2141,11 @@ def run_single_experiment(task):
             "SRSLM-OnlyWait",
         ):
             validate_final_srslm_ablation_stats(algo_name, hybrid_stats)
+        elif algo_name in (
+            "CHS-Reconstructed",
+            "CHS-Reconstructed-EPOM-Lifelong",
+        ):
+            validate_chs_stats(hybrid_stats)
         correction_stats = (
             algo.get_action_correction_stats()
             if hasattr(algo, "get_action_correction_stats")
@@ -1831,6 +2156,8 @@ def run_single_experiment(task):
             if hasattr(algo, "get_model_provenance")
             else None
         )
+        if algo_name == "DCC":
+            model_provenance = dict(algo._evaluation_checkpoint_provenance)
         result_record = {
             "algorithm": algo_name,
             "map_name": task["map_name"],
@@ -2143,17 +2470,9 @@ def load_map_text(path_or_url, trim_border=False):
 
     path_or_url = str(path_or_url)
 
-    if path_or_url.startswith(("http://", "https://")):
+    raw_text = Path(path_or_url).read_text()
 
-        raw_text = urllib.request.urlopen(path_or_url, timeout=30).read().decode("utf-8")
-
-        source = path_or_url
-
-    else:
-
-        raw_text = Path(path_or_url).read_text()
-
-        source = str(Path(path_or_url).resolve())
+    source = str(Path(path_or_url).resolve())
 
 
     lines = raw_text.splitlines()
@@ -2185,7 +2504,7 @@ def load_map_text(path_or_url, trim_border=False):
         raise ValueError(f"Map source must contain a non-empty rectangular grid: {path_or_url}")
 
 
-    label = Path(path_or_url).name if not path_or_url.startswith(("http://", "https://")) else Path(path_or_url.split("?")[0]).name
+    label = Path(path_or_url).name
 
     return {
 
@@ -2313,408 +2632,6 @@ def load_map_list_snapshot(path, registry_path=None):
     )
 
 
-def _canonical_json_sha256(value):
-
-    return hashlib.sha256(
-
-        json.dumps(
-
-            value,
-
-            sort_keys=True,
-
-            separators=(",", ":"),
-
-        ).encode("utf-8")
-
-    ).hexdigest()
-
-
-def load_explicit_task_manifest_snapshot(
-    path,
-    maps,
-    map_texts,
-    expected_map_list_sha256=None,
-):
-
-    """Load exact per-map starts/goals without changing legacy task grids."""
-
-    path = Path(path).resolve()
-
-    payload_bytes = path.read_bytes()
-
-    try:
-
-        payload = json.loads(payload_bytes.decode("utf-8"))
-
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-
-        raise ValueError(f"Could not parse task manifest {path}: {error}") from error
-
-    if payload.get("artifact_kind") != "paired_density_task_manifest":
-
-        raise ValueError(
-
-            "--task-manifest must be a paired_density_task_manifest"
-
-        )
-
-    protocol_id = payload.get("protocol_id")
-
-    if not isinstance(protocol_id, str) or not protocol_id:
-
-        raise ValueError("--task-manifest is missing protocol_id")
-
-    if (
-
-        expected_map_list_sha256 is not None
-
-        and payload.get("map_list_sha256") != expected_map_list_sha256
-
-    ):
-
-        raise ValueError(
-
-            "--task-manifest map_list_sha256 does not match --map-list"
-
-        )
-
-    family_rows = payload.get("families")
-
-    task_rows = payload.get("tasks")
-
-    if not isinstance(family_rows, list) or not family_rows:
-
-        raise ValueError("--task-manifest families must be a non-empty list")
-
-    if not isinstance(task_rows, list) or not task_rows:
-
-        raise ValueError("--task-manifest tasks must be a non-empty list")
-
-
-    def normalize_positions(value, label):
-
-        if not isinstance(value, list) or not value:
-
-            raise ValueError(f"{label} must be a non-empty list")
-
-        normalized = []
-
-        for position in value:
-
-            if (
-
-                not isinstance(position, list)
-
-                or len(position) != 2
-
-                or any(
-
-                    not isinstance(coordinate, int)
-
-                    or isinstance(coordinate, bool)
-
-                    for coordinate in position
-
-                )
-
-            ):
-
-                raise ValueError(f"{label} contains an invalid coordinate")
-
-            normalized.append([int(position[0]), int(position[1])])
-
-        return normalized
-
-    def normalize_target_sequences(value, label, initial_targets):
-        if value is None:
-            return None, None
-        if not isinstance(value, list) or len(value) != len(initial_targets):
-            raise ValueError(
-                f"{label} must contain one sequence per initial target"
-            )
-        sequences = []
-        for agent_index, sequence in enumerate(value):
-            if not isinstance(sequence, list) or len(sequence) < 2:
-                raise ValueError(
-                    f"{label}[{agent_index}] must contain at least two goals"
-                )
-            normalized = normalize_positions(
-                sequence,
-                f"{label}[{agent_index}]",
-            )
-            if normalized[0] != initial_targets[agent_index]:
-                raise ValueError(
-                    f"{label}[{agent_index}] does not start at the initial goal"
-                )
-            sequences.append(normalized)
-        return sequences, _canonical_json_sha256(sequences)
-
-
-    families = {}
-
-    for family in family_rows:
-
-        if not isinstance(family, dict):
-
-            raise ValueError("Every task-manifest family must be a mapping")
-
-        family_id = family.get("family_id")
-
-        if not isinstance(family_id, str) or not family_id:
-
-            raise ValueError("Every family must have a non-empty family_id")
-
-        if family_id in families:
-
-            raise ValueError(f"Duplicate family_id in task manifest: {family_id}")
-
-        agents_xy = normalize_positions(
-
-            family.get("agents_xy"),
-
-            f"{family_id}.agents_xy",
-
-        )
-
-        targets_xy = normalize_positions(
-
-            family.get("targets_xy"),
-
-            f"{family_id}.targets_xy",
-
-        )
-
-        target_sequences_xy, target_sequences_sha256 = (
-            normalize_target_sequences(
-                family.get("target_sequences_xy"),
-                f"{family_id}.target_sequences_xy",
-                targets_xy,
-            )
-        )
-        if target_sequences_xy is not None and family.get(
-            "target_sequences_sha256"
-        ) != target_sequences_sha256:
-            raise ValueError(f"{family_id}: target-sequence hash mismatch")
-
-        if len(agents_xy) != len(targets_xy):
-
-            raise ValueError(f"{family_id}: start/goal counts differ")
-
-        starts = {tuple(position) for position in agents_xy}
-
-        targets = {tuple(position) for position in targets_xy}
-
-        if len(starts) != len(agents_xy) or len(targets) != len(targets_xy):
-
-            raise ValueError(f"{family_id}: starts and goals must each be unique")
-
-        if starts & targets:
-
-            raise ValueError(f"{family_id}: starts and goals must be disjoint")
-
-        placement_sha256 = _canonical_json_sha256(
-
-            {"agents_xy": agents_xy, "targets_xy": targets_xy}
-
-        )
-
-        if family.get("placement_sha256") != placement_sha256:
-
-            raise ValueError(f"{family_id}: placement hash mismatch")
-
-        families[family_id] = {
-
-            "agents_xy": agents_xy,
-
-            "targets_xy": targets_xy,
-
-            "target_sequences_xy": target_sequences_xy,
-
-            "target_sequences_sha256": target_sequences_sha256,
-
-            "placement_sha256": placement_sha256,
-
-            "episode_seed": int(family["episode_seed"]),
-
-        }
-
-
-    task_specs = []
-
-    seen_task_ids = set()
-
-    seen_maps = set()
-
-    for row in task_rows:
-
-        if not isinstance(row, dict):
-
-            raise ValueError("Every task-manifest task must be a mapping")
-
-        task_id = row.get("task_id")
-
-        family_id = row.get("family_id")
-
-        map_name = row.get("map_name")
-
-        if not isinstance(task_id, str) or not task_id:
-
-            raise ValueError("Every explicit task must have a task_id")
-
-        if task_id in seen_task_ids:
-
-            raise ValueError(f"Duplicate task_id: {task_id}")
-
-        if family_id not in families:
-
-            raise ValueError(f"{task_id}: unknown family {family_id!r}")
-
-        if map_name not in maps or map_name not in map_texts:
-
-            raise ValueError(f"{task_id}: unknown map {map_name!r}")
-
-        if map_name in seen_maps:
-
-            raise ValueError(f"Explicit map appears in multiple tasks: {map_name}")
-
-        family = families[family_id]
-
-        num_agents = int(row["num_agents"])
-
-        episode_seed = int(row["episode_seed"])
-
-        density_percent = int(row["density_percent"])
-
-        if num_agents != len(family["agents_xy"]):
-
-            raise ValueError(f"{task_id}: num_agents does not match placements")
-
-        if episode_seed != family["episode_seed"]:
-
-            raise ValueError(f"{task_id}: episode seed differs from its family")
-
-        if row.get("placement_sha256") != family["placement_sha256"]:
-
-            raise ValueError(f"{task_id}: placement hash differs from its family")
-
-        if family["target_sequences_xy"] is not None and row.get(
-            "target_sequences_sha256"
-        ) != family["target_sequences_sha256"]:
-
-            raise ValueError(
-                f"{task_id}: target-sequence hash differs from its family"
-            )
-
-        grid_rows = map_texts[map_name].splitlines()
-
-        height = len(grid_rows)
-
-        width = len(grid_rows[0])
-
-        checked_positions = family["agents_xy"] + family["targets_xy"]
-        if family["target_sequences_xy"] is not None:
-            checked_positions += [
-                coordinate
-                for sequence in family["target_sequences_xy"]
-                for coordinate in sequence
-            ]
-        for coordinate in checked_positions:
-
-            first, second = coordinate
-
-            if (
-
-                first < 0
-
-                or first >= height
-
-                or second < 0
-
-                or second >= width
-
-                or grid_rows[first][second] != "."
-
-            ):
-
-                raise ValueError(
-
-                    f"{task_id}: placement {coordinate} is not a free map cell"
-
-                )
-
-        task_specs.append(
-
-            {
-
-                "task_id": task_id,
-
-                "family_id": family_id,
-
-                "density_percent": density_percent,
-
-                "map_name": map_name,
-
-                "num_agents": num_agents,
-
-                "seed": episode_seed,
-
-                "agents_xy": family["agents_xy"],
-
-                "targets_xy": (
-                    family["target_sequences_xy"]
-                    if family["target_sequences_xy"] is not None
-                    else family["targets_xy"]
-                ),
-
-                "initial_targets_xy": family["targets_xy"],
-
-                "target_sequences_sha256": family[
-                    "target_sequences_sha256"
-                ],
-
-                "placement_sha256": family["placement_sha256"],
-
-            }
-
-        )
-
-        seen_task_ids.add(task_id)
-
-        seen_maps.add(map_name)
-
-    if seen_maps != set(maps):
-
-        missing = sorted(set(maps) - seen_maps)
-
-        extra = sorted(seen_maps - set(maps))
-
-        raise ValueError(
-
-            "Task manifest and map list differ: "
-
-            f"missing={missing[:3]}, extra={extra[:3]}"
-
-        )
-
-    if payload.get("task_count") != len(task_specs):
-
-        raise ValueError("task_count does not match the explicit task list")
-
-    return (
-
-        task_specs,
-
-        hashlib.sha256(payload_bytes).hexdigest(),
-
-        protocol_id,
-
-        path,
-
-    )
-
-
-
 def build_tasks(
     algorithms,
     maps,
@@ -2723,7 +2640,6 @@ def build_tasks(
     args,
     custom_map=None,
     map_texts=None,
-    explicit_task_specs=None,
 ):
 
     map_items = (
@@ -2744,9 +2660,7 @@ def build_tasks(
 
     )
 
-    if explicit_task_specs is None:
-
-        return [
+    return [
 
         {
 
@@ -2784,14 +2698,19 @@ def build_tasks(
 
             "switcher_weights_path": args.switcher_weights_path,
 
-            "no_reweight_weights_path": args.no_reweight_weights_path,
-
+            "primal2_weights_path": args.primal2_weights_path,
 
             "epom_weights_path": args.epom_weights_path,
 
+            "follower_weights_path": args.follower_weights_path,
 
+            "follower_device": args.follower_device,
 
+            "dcc_weights_path": getattr(args, "dcc_weights_path", None),
 
+            "dcc_device": getattr(args, "dcc_device", "auto"),
+
+            "dcc_keep_memory_on_target_change": getattr(args, "dcc_keep_memory_on_target_change", False),
 
             "direct_options": getattr(args, "direct_options", None),
 
@@ -2811,102 +2730,6 @@ def build_tasks(
         for seed in seeds
 
     ]
-
-    if custom_map is not None or map_texts is None:
-
-        raise ValueError(
-
-            "Explicit task manifests require a YAML --map-list snapshot"
-
-        )
-
-    tasks = []
-
-    for algorithm in algorithms:
-
-        for spec in explicit_task_specs:
-
-            map_name = spec["map_name"]
-
-            tasks.append(
-
-                {
-
-                    "algorithm": algorithm,
-
-                    "map_type": "paired_density",
-
-                    "map_name": map_name,
-
-                    "map_text": map_texts[map_name],
-
-                    "map_source": None,
-
-                    "num_agents": spec["num_agents"],
-
-                    "obs_radius": args.obs_radius,
-
-                    "max_steps": args.max_steps,
-
-                    "seed": spec["seed"],
-
-                    "animate": args.animate,
-
-                    "main_dir": args.main_dir,
-
-                    "on_target": args.on_target,
-
-                    "collision_system": args.collision_system,
-
-                    "arpe_weights_path": args.arpe_weights_path,
-
-                    "arpe_candidate_manifest": getattr(
-                        args, "arpe_candidate_manifest", None
-                    ),
-
-                    "switcher_weights_path": args.switcher_weights_path,
-
-                    "no_reweight_weights_path": (
-                        args.no_reweight_weights_path
-                    ),
-
-
-                    "epom_weights_path": args.epom_weights_path,
-
-
-
-
-
-                    "direct_options": getattr(args, "direct_options", None),
-
-                    "cache_algorithms": should_cache_algorithm(
-                        algorithm,
-                        args.cache_algorithms,
-                    ),
-
-                    "task_id": spec["task_id"],
-
-                    "family_id": spec["family_id"],
-
-                    "density_percent": spec["density_percent"],
-
-                    "agents_xy": spec["agents_xy"],
-
-                    "targets_xy": spec["targets_xy"],
-
-                    "initial_targets_xy": spec.get("initial_targets_xy"),
-
-                    "target_sequences_sha256": spec.get(
-                        "target_sequences_sha256"
-                    ),
-
-                    "placement_sha256": spec["placement_sha256"],
-
-                }
-
-            )
-
-    return tasks
 
 
 
@@ -3475,31 +3298,9 @@ def parse_args():
 
     )
 
-    parser.add_argument("--map-url", type=str, default=None, help="Custom map URL. Supports MovingAI .map files.")
-
     parser.add_argument("--map-file", type=str, default=None, help="Custom local map file path.")
 
     parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/eval.yaml)")
-
-    parser.add_argument(
-
-        "--task-manifest",
-
-        type=str,
-
-        default=None,
-
-        help=(
-
-            "JSON manifest defining one explicit seed/start/goal assignment "
-
-            "per selected map; requires --map-list and bypasses the legacy "
-
-            "map/agent/seed Cartesian product"
-
-        ),
-
-    )
 
     parser.add_argument("--trim-border", dest="trim_border", action="store_true", help="Trim one-cell border from custom map")
 
@@ -3531,6 +3332,20 @@ def parse_args():
 
     )
 
+    parser.add_argument(
+
+        "--primal2-weights-path",
+
+        type=str,
+
+        default=None,
+
+        help=(
+            "Audited PyTorch conversion of the authors-released PRIMAL2 "
+            "continuous TensorFlow checkpoint"
+        ),
+
+    )
 
     parser.add_argument(
 
@@ -3544,19 +3359,46 @@ def parse_args():
 
     )
 
+    parser.add_argument(
 
+        "--follower-weights-path",
+
+        type=str,
+
+        default=None,
+
+        help="Override official Learn-to-Follow v0 weights directory",
+
+    )
 
     parser.add_argument(
-        "--direct-gate", choices=("always", "primal3", "never"), default="always",
-        help="EPOM-L Direct gate: always (plain Direct), primal3 (policy entropy), or never (control).",
+
+        "--follower-device",
+
+        default="auto",
+
+        help=(
+            "Inference device for official Learn-to-Follow, for example "
+            "auto, cpu, or cuda:0"
+        ),
+
+    )
+
+    parser.add_argument(
+
+        "--dcc-weights-path",
+        default=None,
+        help="DCC checkpoint file; default is the preserved official 128000.pth",
     )
     parser.add_argument(
-        "--direct-centering", choices=("crop", "candidate"), default="crop",
-        help="Direct mean: all free cells of the 11x11 crop, or explicit historical five-candidate ablation.",
+        "--dcc-device",
+        default="auto",
+        help="DCC inference device: auto, cpu, or cuda:0 (after CUDA_VISIBLE_DEVICES)",
     )
     parser.add_argument(
-        "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
-        help="Direct pressure transform; clipped_relu uses cap 2. Learned ARPE output is not clipped.",
+        "--dcc-keep-memory-on-target-change",
+        action="store_true",
+        help="DCC-L continuing-task memory; official DCC keeps its default target reset",
     )
     parser.add_argument(
 
@@ -3589,13 +3431,6 @@ def parse_args():
         help="Override the Switcher weights directory",
     )
 
-    parser.add_argument(
-        "--no-reweight-weights-path",
-        dest="no_reweight_weights_path",
-        type=str,
-        default=None,
-        help="Override the NoReweight weights directory",
-    )
     parser.add_argument("--output-dir", type=str, default="exp_result", help="Directory for JSON results")
 
     parser.add_argument("--output", type=str, default=None, help="Output filename (default: experiments_TIMESTAMP.json)")
@@ -3644,6 +3479,19 @@ def parse_args():
 
     parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
 
+    parser.add_argument(
+        "--direct-gate", choices=("always", "primal3", "never"), default="always",
+        help="EPOM-L Direct gate: always (plain Direct), primal3 (policy entropy), or never (control).",
+    )
+    parser.add_argument(
+        "--direct-centering", choices=("crop", "candidate"), default="crop",
+        help="Direct mean: all free cells of the 11x11 crop, or explicit historical five-candidate ablation.",
+    )
+    parser.add_argument(
+        "--direct-transform", choices=("signed", "clipped_relu"), default="signed",
+        help="Direct pressure transform; clipped_relu uses cap 2. Learned ARPE output is not clipped.",
+    )
+
     args = parser.parse_args()
     args.direct_options = {
         "gate": args.direct_gate,
@@ -3678,25 +3526,14 @@ def main():
 
         bool(value)
 
-        for value in (args.map_url, args.map_file, args.map_list)
+        for value in (args.map_file, args.map_list)
 
     )
 
     if map_sources > 1:
 
-        raise ValueError("--map-url, --map-file, and --map-list are mutually exclusive")
+        raise ValueError("--map-file and --map-list are mutually exclusive")
 
-    if args.task_manifest and not args.map_list:
-
-        raise ValueError("--task-manifest requires --map-list")
-
-    if args.task_manifest and (args.agents is not None or args.seeds is not None):
-
-        raise ValueError(
-
-            "--task-manifest cannot be combined with --agents or --seeds"
-
-        )
 
 
     if args.on_target is None:
@@ -3713,6 +3550,14 @@ def main():
 
 
     algorithms = args.algorithms
+    effective_obs_radius = (POMAPFConfig().obs_radius
+                            if args.obs_radius is None else args.obs_radius)
+    chs_reconstruction = chs_reconstruction_metadata(
+        algorithms,
+        on_target=args.on_target,
+        collision_system=args.collision_system,
+        obs_radius=effective_obs_radius,
+    )
     srslm_contract = srslm_contract_metadata(algorithms, args.collision_system)
     hybrid_contract = srslm_contract
 
@@ -3731,17 +3576,9 @@ def main():
 
     map_texts = None
 
-    explicit_task_specs = None
+    if args.map_file:
 
-    task_manifest_sha256 = None
-
-    task_manifest_protocol_id = None
-
-    task_manifest_path = None
-
-    if args.map_url or args.map_file:
-
-        custom_map = load_map_text(args.map_url or args.map_file, trim_border=args.trim_border)
+        custom_map = load_map_text(args.map_file, trim_border=args.trim_border)
 
         maps = {"custom": custom_map["map_name"]}
 
@@ -3773,37 +3610,6 @@ def main():
 
         )
 
-        if args.task_manifest:
-
-            (
-
-                explicit_task_specs,
-
-                task_manifest_sha256,
-
-                task_manifest_protocol_id,
-
-                task_manifest_path,
-
-            ) = load_explicit_task_manifest_snapshot(
-
-                _project_path(args.main_dir, args.task_manifest),
-
-                maps,
-
-                map_texts,
-
-                expected_map_list_sha256=map_list_sha256,
-
-            )
-
-            agent_counts = sorted(
-
-                {spec["num_agents"] for spec in explicit_task_specs}
-
-            )
-
-            seeds = sorted({spec["seed"] for spec in explicit_task_specs})
 
     else:
 
@@ -3826,7 +3632,6 @@ def main():
 
         map_texts=map_texts,
 
-        explicit_task_specs=explicit_task_specs,
 
     )
 
@@ -3850,7 +3655,7 @@ def main():
 
         "runtime_provenance": runtime_provenance(),
 
-
+        "chs_reconstruction": chs_reconstruction,
 
         "congestion_metric": {
 
@@ -3944,14 +3749,19 @@ def main():
 
         "switcher_weights_path": args.switcher_weights_path,
 
-        "no_reweight_weights_path": args.no_reweight_weights_path,
-
+        "primal2_weights_path": args.primal2_weights_path,
 
         "epom_weights_path": args.epom_weights_path,
 
+        "follower_weights_path": args.follower_weights_path,
 
+        "follower_device": args.follower_device,
 
+        "dcc_weights_path": args.dcc_weights_path,
 
+        "dcc_device": args.dcc_device,
+
+        "dcc_keep_memory_on_target_change": args.dcc_keep_memory_on_target_change,
 
         "direct_options": args.direct_options,
 
@@ -3996,30 +3806,6 @@ def main():
         "map_list_sha256": map_list_sha256,
 
         "map_registry_sha256": map_registry_sha256,
-
-        "task_manifest": (
-
-            str(task_manifest_path)
-
-            if task_manifest_path is not None
-
-            else None
-
-        ),
-
-        "task_manifest_sha256": task_manifest_sha256,
-
-        "task_manifest_protocol_id": task_manifest_protocol_id,
-
-        "explicit_task_count": (
-
-            len(explicit_task_specs)
-
-            if explicit_task_specs is not None
-
-            else None
-
-        ),
 
         "trim_border": args.trim_border,
 

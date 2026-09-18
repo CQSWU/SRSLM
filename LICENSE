@@ -25,8 +25,9 @@ Scope
 -----
 
 The MIT License above applies to the source code in this repository, including
-AO-RePlan, CAAR, SRSLM, environment adapters, training and evaluation tools,
-and the project-trained model checkpoints in the reproducibility release.
+RePlan, AORePlan, Direct, ARPE, Switcher, SRSLM, environment
+adapters, training and evaluation tools, and the project-trained model
+checkpoints in the reproducibility release.
 
 Project-generated benchmark result files, manuscript figures, and documentation
 are licensed under the Creative Commons Attribution 4.0 International License

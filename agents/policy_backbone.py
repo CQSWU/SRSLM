@@ -26,22 +26,12 @@ from train import register_custom_components, validate_config
 
 class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["PolicyBackbone"] = "PolicyBackbone"
-    path_to_weights: str = (
-        "weights/CAAR-p-identity-r5-1b/CAAR-P-Identity-R5-1B"
-    )
-    checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
-
-
-class NoReweightConfig(AlgoBase, extra=Extra.forbid):
-    name: Literal["NoReweight"] = "NoReweight"
-    path_to_weights: str = (
-        "weights/NoReweight-block-1b/NoReweight-Block-R5-1B"
-    )
+    path_to_weights: str
     checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
 
 
 class PolicyBackbone:
-    """Shared checkpoint-loading backbone for NoReweight and EPOM trace policies."""
+    """Shared checkpoint-loading backbone for trace-aware EPOM policies."""
 
     USE_PHEROMONE = True
 
@@ -193,9 +183,8 @@ class PolicyBackbone:
             actor_critic.load_state_dict(checkpoint_state)
         except RuntimeError as exc:
             raise RuntimeError(
-                "Checkpoint architecture does not match this policy. The shared policy backbone and "
-                "NoReweight "
-                "must use checkpoints with the original three-channel policy backbone. "
+                "Checkpoint architecture does not match this policy. The shared policy "
+                "backbone requires the original three-channel observation encoder. "
                 f"Checkpoint path: {path}"
             ) from exc
 
@@ -338,9 +327,6 @@ class PolicyBackbone:
 
         return action_array
 
-    def last_augmented_observations(self):
-        return self._last_augmented_observations
-
     def last_switch_context(self):
         """Return frozen ARPE features from the most recent policy decision."""
         return self._last_switch_context
@@ -428,9 +414,3 @@ class PolicyBackbone:
                 self.aco.clear()
             self._last_augmented_observations = None
             self._last_switch_context = None
-
-
-class NoReweight(PolicyBackbone):
-    """The same recurrent policy without traffic memory or action reweighting."""
-
-    USE_PHEROMONE = False

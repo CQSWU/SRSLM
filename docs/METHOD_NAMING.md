@@ -8,13 +8,8 @@ Use `--algorithms ARPE`, `--arpe-candidate-manifest`, and
 `--arpe-weights-path` with the current evaluator. The implementation is
 `agents/arpe.py`, exposing `ARPE`, `ARPEConfig`, and
 `ArpeCandidateArtifact`. The selected declarations are
-`configs/arpe_final_candidate.json` and
-`configs/arpe_noentropy_candidate.json`. Their contents, checkpoint paths,
-and four artifact SHA256 digests are unchanged.
-
-The separate no-entropy ablation is a separately trained model. Renaming the
-gated method does not make inference-time gate removal an equivalent training
-ablation.
+`configs/arpe_final_candidate.json`. Its checkpoint paths and four artifact
+SHA256 digests are unchanged.
 
 ## Names that deliberately remain in saved formats
 
@@ -31,12 +26,10 @@ the current method name. Changing them would break checkpoint or historical
 audit compatibility. They do not change branch order, logits, action sampling,
 rewards, or the wait rule.
 
-The old NoReweight backbone is not ARPE. Its common loading code is now
-`agents/policy_backbone.py`; its encoder is
-`learning/no_reweight_encoder.py`. The saved NoReweight registration
-`encoder_custom: caar` and the `caar_num_filters` /
-`caar_num_res_blocks` config fields remain readable for the original weights.
-The retired tau actor is still rejected.
+The old NoReweight method and its encoder are no longer executable. A narrow
+checkpoint-config sanitizer still drops inert historical fields while loading
+the selected frozen artifacts; it cannot register or construct the retired
+model. The retired tau actor is also rejected.
 
 There is no old CAAR runtime/CLI alias in the current source. Use a frozen
 archive to rerun an old source version, or the current ARPE entrypoints with

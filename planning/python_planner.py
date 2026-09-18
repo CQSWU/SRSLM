@@ -154,6 +154,10 @@ class planner:
     def cancel_desired(self) -> None:
         self.desired_position = (INF, INF)
 
+    def release_failed_actions(self) -> None:
+        """Expire exhausted failure memory, not current observed occupancy."""
+        self.bad_actions.clear()
+
     def update_path(
         self,
         start: Sequence[int],
@@ -212,4 +216,3 @@ class planner:
             next_node = (INF, INF)
         self.desired_position = next_node
         return self.start, next_node
-

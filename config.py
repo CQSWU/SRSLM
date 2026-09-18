@@ -151,10 +151,6 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     encoder_extra_fc_layers: int = 1
 
-    caar_num_filters: int = 64
-
-    caar_num_res_blocks: int = 3
-
     arpe_tau_num_filters: int = 8
 
     arpe_tau_num_conv_layers: int = 1
@@ -282,24 +278,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
         if global_settings is not None and not global_settings.experiment:
             raise ValueError('An experiment name is required.')
 
-        settings = values.get('experiment_settings')
-        if settings is None or settings.encoder_custom != 'caar':
-            return values
-
-        normalized_keys = settings.normalize_input_keys
-        if (
-            settings.normalize_input
-            and normalized_keys
-            and 'tau' in normalized_keys
-        ):
-            raise ValueError(
-                'ARPE tau must not be running-normalized because its signed '
-                'pressure values are applied directly to action logits.'
-            )
-        if settings.arpe_contextual_pressure and not settings.arpe_learn_residual:
-            raise ValueError(
-                'caar_contextual_pressure requires caar_learn_residual=true.'
-            )
         return values
 
 

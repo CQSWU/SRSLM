@@ -1,128 +1,200 @@
-# Current verified version
+# SRSLM current version
 
-This file identifies the implementation and artifacts behind the retained
-wait-aware SRSLM result completed on 2026-09-03. Checkpoints and result JSON
-files are intentionally not committed to Git.
+This repository contains one retained paper implementation, documented on 2026-09-08.
+Exploratory variants from earlier iterations are not part of this snapshot.
+For the verified September 10 cleanup closeout and remaining limitations, see
+`docs/CLEANUP_CLOSEOUT_20260910.md`.
 
-## Method identities
+## AORePlan accumulated observed static map (2026-09-12)
 
-| Name | Role |
-| --- | --- |
-| `RePlan` | Original dynamic replanning baseline |
-| `AORePlan` | RePlan plus a static-map A* check for reverse proposals |
-| `EPOM-Lifelong-FT` | Lifelong fine-tuned recurrent base policy, abbreviated EPOM-L |
-| `NoReweight` | Historical independently trained backbone, not paper EPOM-L |
-| `Direct` | Explicit EPOM-L signed trace correction; entropy and clipped ReLU are separate options |
-| `ARPE` | Learned entropy-gated five-logit trace correction |
-| `Switcher` | Learned categorical selector between ARPE and AORePlan |
-| `SRSLM` | Wait-aware composition of ARPE, AORePlan, and Switcher |
-| `SRSLM-NoWait` | Independently trained all-state Switcher using the same ARPE |
-| `SRSLM-OnlyWait` | Deterministic wait-only ablation using the same ARPE |
-| `AORePlan-SoftNoCheck` | Standalone soft search ablation only; does not change SRSLM |
+Static A* now retains each agent's own observed static obstacles across all
+steps of an episode, including steps without a probe, skipped planning and
+at-goal steps. Target changes do not erase this map. Episode reset creates new
+private static planners. No full environment map or other agents' map memory
+is accessed; never-observed cells keep the original free-cell assumption.
+The static query ignores agents and failed-action memory, while its first
+step still receives the existing current-observation occupancy check. The
+explicit standalone `AORePlan-SoftNoCheck` ablation still omits that check.
 
-## ARPE architecture
+The shared implementation also changes future SRSLM planner queries. Dynamic
+planning, reverse detection, cache release and no-path fallback are unchanged.
+The paper's failed-proposal rule is now part of the production planner: a newly
+failed dynamic proposal enters the temporary failure cache with probability
+0.5. Dropping a new failure does not erase older cached failures, and successful
+movement keeps the native cache-clearing behavior. Completed result directories
+remain immutable evidence and must retain their recorded source hashes.
 
-The EPOM-L backbone is frozen. The actor-side trace branch receives the whole
-aligned 11x11 shared-trace crop after centring over its free cells. Obstacles
-and padding remain zero; no action or free-cell mask is given to the learned
-branch.
+## ARPE training trace auto-reset fix (2026-09-12)
 
-The trace encoder is Conv32 (3x3), two 32-channel residual blocks, and an FC32
-projection. Its 32 outputs are concatenated with the frozen 512-dimensional
-EPOM-L recurrent state and five base logits. An FC256 layer and a five-output
-head produce the learned correction. The correction is applied only when the
-base-policy entropy exceeds the configured reference threshold. The separate
-critic is a linear value head over the frozen 512-dimensional recurrent state;
-its value is not added to the frozen EPOM value. The complete learned branch
-has 303,846 trainable parameters.
+`TauObservationWrapper` now detects when the inner POGEMA environment has
+created a new grid. It clears the previous episode's trace, binds the new
+obstacle map, and deposits the new initial occupancy exactly once. This also
+handles automatic resets that do not call the outer wrapper's `reset()`.
+A terminal frame without auto-reset and a lifelong target reassignment do
+not clear the trace. This detection relies on the pinned POGEMA reset contract
+that each episode creates a new `Grid` or `GridLifeLong` object.
 
-## Switcher routing
+Only training observation lifecycle handling changed. Network structure,
+selected weights, Switcher routing and historical evaluation data are
+unchanged. Existing weights are not retroactively repaired by this source
+fix; any training comparison must have its own provenance. Regression and
+deployment evidence is in `results/trace_autoreset_fix_20260912/`.
 
-AORePlan and ARPE first produce complete primitive-action candidates. An
-AORePlan wait selects ARPE immediately without a Switcher forward pass. A
-non-wait AORePlan candidate enters the feed-forward two-branch Switcher, which
-samples either ARPE or AORePlan. The controller used for PPO data collection is
-the same controller used during evaluation.
+## AORePlan cache release fix (2026-09-12)
 
-## Frozen artifact identities
+The active source now releases temporary failed destinations when an actual
+dynamic planning query, including BestMove, returns no action. That step keeps
+the original random-or-stay fallback. The next observed planning step can retry
+without stale failure constraints; real obstacles and observed agents remain
+blocked. Skipped queries and cancelled valid proposals do not release this
+cache. RePlan, reverse detection, static-step checking and fallback sampling
+are otherwise unchanged.
 
-| Artifact | Frames | SHA-256 |
-| --- | ---: | --- |
-| EPOM-L checkpoint | 100,016,128 | `f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2` |
-| EPOM-L config | - | `74c5cc0f1c5fdc0043bfcaa2e48e3be9c46c2c652f489a2b83379788e5da69b9` |
-| ARPE checkpoint | 500,015,104 | `497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b` |
-| ARPE config | - | `e76a2b238f196752ec358ce8946eb353caa3a4fe3e4df2a92cf812506d008747` |
-| Switcher checkpoint | 100,016,128 | `4973fa420a093e043d2aafb2340863a2be3ad7dda3362ef278a98ef8c1a75185` |
-| Switcher policy tensors | - | `c2bd85a0cbcffe49dec8a393e84f022efe9bc8ce916190b497d0571acbb75aa9` |
-| Switcher config | - | `de387d7b00f7cb0d56b11d78389d702d301a39fb33a7f3f666189c685e7c0bc6` |
-| ARPE candidate manifest | - | `75df038934fd10a71ce5b7e97aca7456546a18940553aa49eb454c89510e654f` |
+The matched 18-episode trajectory check is documented in
+`results/aoreplan_cache_release_fix_20260912/cache_fix_comparison.md`.
+This is not a new full-paper evaluation. The shared AORePlan implementation
+also affects future SRSLM executions; historical AORePlan and SRSLM results
+retain their original source hashes and must not be relabelled as fixed runs.
+On Linux, deploy the matching native planner binary or rebuild `planner.cpp`
+before using the new Python caller. Windows uses the updated Python fallback.
 
-Expected local paths are:
+## Retired branches (2026-09-10)
 
-```text
-weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5
-weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902
-weights/SRSLM-switcher-wait-aware-caar-100m/SRSLM-WaitAware-CAAR-100M
-artifacts/arpe_final_candidate.json
-```
+PIBT, the learned Follower Trace branch, and SRSLMF are retired from the
+active source tree. Retention of historical artifacts is selective; consult the
+cleanup records rather than assuming all retired results and weights remain.
+The official Follower and its parameter-free
+Direct variants, with and without entropy gating, remain supported by the
+retained isolated Direct entry point. The paper SRSLM and ARPE implementations
+are unchanged. Historical launch notes are under `docs/archive/` and are not
+instructions to restart retired experiments.
 
-The same safe declaration is included at `configs/arpe_final_candidate.json`.
-Pass it explicitly for ARPE/NoWait/OnlyWait evaluation. The archived server
-launcher uses the `artifacts/` location, so copy that one JSON there when
-using the launcher; do not copy a private artifacts directory into Git.
+## Current soft execution contract
 
-### Independently trained ablations
+The retained paper implementation uses conservative static-step occupancy
+checking in both `block_both` and `soft`, including inside SRSLM and its
+switching ablations. An occupied static-A* destination becomes wait before
+submission. The same block-trained selected weights are used under soft.
 
-The no-entropy ARPE is a separate 500M training run, not the gated ARPE with
-its gate disabled during inference. Its declaration is
-`configs/arpe_noentropy_candidate.json`; it uses the same EPOM-L base above.
+The standalone soft search ablation is the explicit
+`AORePlan-SoftNoCheck` method. It submits that static action without the
+extra occupancy check. This exception does not change SRSLM. Earlier frozen
+packages/results retain their original contracts and hashes; they must not
+be relabelled as the new canonical source.
 
-| Artifact | Frames | SHA-256 |
-| --- | ---: | --- |
-| No-entropy ARPE checkpoint | 500,015,104 | `bba7aafffe46f081da1e14b4bdafd4dc6c4a53c97c51ca7550afba7e35ea2dc4` |
-| No-entropy ARPE config | - | `b51ad91fdff118f0b95bd214db14d1b3a96d611be5ee6f5ec3de5f27b662895d` |
-| NoWait Switcher checkpoint | 100,016,128 | `222ac356ad073605d048d4fb4e1186446a28e983005439e51b34398e2a4ae905` |
-| NoWait Switcher config | - | `facb3e553530e7f47da5b6c3a83044db0d147738a94ae63c4bb2782fe270a3db` |
+The internal runner retains external comparison methods as well as the
+publication's current self-owned method bindings. Its public Git counterpart
+intentionally has a smaller registry. No experiment result is changed by this
+source-only synchronization.
 
-NoWait uses the **gated** ARPE candidate, the same one used by OnlyWait and
-Full SRSLM. Its Switcher directory is
-`weights/SRSLM-switcher-caar-nowait-100m/SRSLM-NoWait-CAAR-100M`, containing
-`checkpoint_p0/checkpoint_000024418_100016128.pth` and the config above.
-The NoWait loader selects the latest regular checkpoint in that directory;
-keep the selected reproduction directory separate from new training runs,
-and verify the emitted checkpoint SHA against this table. OnlyWait has no
-Switcher checkpoint. Newly retrained models need their own identities and
-must not be labelled as these retained paper artifacts.
+## Retained methods
 
-## Validated exact960 result
+- Planning: `RePlan` and `AORePlan`.
+- Learned policies and ablations: `EPOM`, `EPOM-Lifelong-FT`, `Direct`, and
+  `ARPE`.
+- Hybrid method and ablations: `SRSLM`, `SRSLM-NoWait`, and
+  `SRSLM-OnlyWait`.
+- Retained comparisons: `DCC` (selected DCC-L with an explicit weight path), `PRIMAL2`, `Follower`, and `CHS-Reconstructed`
+  together with the EPOM-L variants explicitly listed by the runner.
 
-Protocol: 32 held-out capacity-compatible maps; populations 100, 200, 300,
-400, 500, and 600; seeds 0, 42, 123, 2024, and 3407; `block_both`;
-lifelong `restart`; 512 steps; observation radius 5; 960 unique episodes.
+`Follower` is the official Learn-to-Follow policy. It remains opt-in because
+its released configuration uses its native `priority` collision protocol rather
+than the `block_both` and `soft` execution rules reported in the main table.
+CHS uses the audited reconstructed adapter and frozen EPOM-L, not a newly
+trained CHS model. Its selected soft-compatible adapter accepts both main-table
+execution rules.
 
-| Population | Mean throughput |
-| ---: | ---: |
-| 100 | 1.31678466796875 |
-| 200 | 1.91896972656250 |
-| 300 | 2.06967773437500 |
-| 400 | 2.06068115234375 |
-| 500 | 1.96484375000000 |
-| 600 | 1.83431396484375 |
-| **All** | **1.8608784993489584** |
+The AS comparison, the NoReweight runner entry and the historical
+NoReweight-based Direct were retired on 2026-09-10 because the final paper
+does not use them. The remaining NoReweight encoder, configuration, CLI field,
+training recipe and no-entropy ARPE candidate were removed on 2026-09-14.
+`PolicyBackbone` remains because the selected ARPE inference adapter uses it.
 
-The validation reports 960 finite error-free rows, a mean congestion rate of
-0.3411414636, and an AORePlan-wait bypass rate of 0.1559831659. The result JSON
-SHA-256 is
-`972a87918e5e2dd5eae2ac4b76c3682c48bb72a00a73df5397d35da828f7c3cc`.
+## Current implementation
 
-The archived formal code snapshot is
-`3cd786dc58a86aa1ad982207d1788fc175e4f93e9c3658b3a7157c3056dd397f`.
-This public tree has subsequently been curated: retired model branches were
-removed, immutable checkpoint configs are normalised on read, and the CLI now
-binds the paper's hash-pinned ARPE instead of the legacy independent model.
-It is not byte-for-byte identical to the original training snapshot.
+- `planning/replan_algo.py` and `planning/ao_replan_algo.py` implement the two
+  search methods. AORePlan checks a reverse proposal with static-map A*.
+- `agents/epom_trace_context.py` and
+  `learning/epom_trace_multiplier_actor_critic.py` implement the selected
+  ARPE trace-reweighting branch on the frozen EPOM-L base.
+- `agents/switcher.py`, `agents/switcher_core.py`, and
+  `learning/switcher_actor_critic.py` implement the retained two-branch
+  Switcher. An AORePlan wait directly selects ARPE; otherwise the learned
+  Switcher samples between ARPE and AORePlan.
+- `agents/srslm.py` is the deployed composition. Training and inference share
+  the same routing logic.
+- `agents/follower.py` and `third_party/learn-to-follow-official/` contain the
+  retained official FoLLow adapter and pinned release.
+- `run_experiments.py` is the canonical internal evaluator, including external method entries.
 
-The main soft result uses the same block-trained weights and the conservative
-static-step occupancy check: mean throughput **2.644156901041667**. The
-separate AORePlan search ablation uses `AORePlan-SoftNoCheck`. Do not substitute
-that standalone rule inside SRSLM when reproducing the retained main result.
+## Selected artifacts
+
+- ARPE: `weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902`,
+  selected checkpoint `checkpoint_000122074_500015104.pth`.
+- Final new-branch Switcher:
+  `weights/SRSLM-switcher-new-branches-500m/SRSLM-Switcher-NewBranches-500M`,
+  checkpoint `checkpoint_000122074_500015104.pth`.
+- Its frozen branch-zero candidate is
+  `weights/trace_residual_shaped200/TraceBonusSync200Entropy-20M-S0`,
+  checkpoint `best_000057500_235520000_avg_throughput_1.640.pth`.
+- The selected ARPE and frozen EPOM-L identities are pinned by
+  `artifacts/arpe_final_candidate.json`.
+
+The retained exact960 SRSLM results are:
+
+- `results/srslm_wait_aware_caar_100m_exact960_20260903`
+- `results/srslm_nowait_final_caar_exact960_20260903`
+- `results/srslm_onlywait_final_caar_exact960_20260903`
+
+These are historical result identifiers, not a claim that every server has
+every result directory at its canonical root. Formal result directories and
+checkpoint hashes are immutable evidence. New runs must use a new output
+directory; deployment of current source does not change a completed run.
+
+## Current artifact declarations
+
+`configs/arpe_final_candidate.json` is the path-relative declaration for the
+retained gated ARPE; the historical `artifacts/caar_final_candidate.json`
+remains untouched as immutable historical evidence. New training must use
+separate output directories and new declarations rather than reuse historical
+hashes.
+
+Direct explicitly uses EPOM-L and whole-crop free-cell centering. When the
+PRIMAL3 entropy gate opens, it takes the two statically legal movement
+directions with the largest original logits and adds 1 to the lower-pressure
+one. Wait and all other logits are unchanged. The retired signed, clipped-ReLU,
+candidate-centering and gate-selection CLI paths have been removed. DCC-L's selected
+checkpoint and provenance are documented in `docs/DCC_L_REPRODUCTION.md`;
+its code/weights remain private third-party dependencies, not a public source
+release. Selected paper result rows and pinned checkpoint files are unchanged;
+unneeded artifacts have been retired as documented in the cleanup records.
+
+## Server artifact availability
+
+Source, installed runtime, weights and result evidence are separate parts of
+reproduction. The following locations were checked on 2026-09-08; check their
+current hashes again before launching anything. Source synchronization does
+not install packages, move weights or change frozen experiments.
+
+- The gated ARPE, EPOM-L, Full and NoWait artifacts declared above exist at
+  the canonical relative paths on both servers. OnlyWait uses the same ARPE
+  and has no separately trained Switcher checkpoint.
+- DCC-L's portable layout `weights/dcc_l_reward_safe_u100_20260907/dcc_l.pth`
+  is installed at both S1 and S2 canonical roots. The selected checkpoint also remains available on
+  both servers at the following path relative to that root:
+  `artifacts/reproducibility/DCC_L_SELECTED_COMPLETE_20260908/private/frozen/root/dcc-reward-pilot-20260907/weights/throughput/100.pth`.
+  Its SHA256 is
+  `e3105b60f0a0b5c57bfafab756b07e55f9902e9cc5d9f275fcd98d8d5cd16915`.
+  Pass its resolved absolute path to `--dcc-weights-path`. S1 also retains
+  the original `/root/dcc-reward-pilot-20260907/weights/throughput/100.pth`.
+  Do not fall back to the official checkpoint and label it DCC-L.
+- Official FoLLow loads from
+  `third_party/learn-to-follow-official/model/follower`, not `weights/Follower`.
+  Its selected release is present on both servers and remains priority-only
+  for the retained comparison protocol.
+- PRIMAL2's converted checkpoint and planner source are present on both
+  servers.
+
+The consolidated DCC-L evidence package is private, hash-verified research
+material. Neither it nor third-party source/checkpoints is included in the
+public GitHub source release.

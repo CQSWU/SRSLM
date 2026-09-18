@@ -50,19 +50,6 @@ otherpolicy/
 data/
 renders/
 
-# Only the reviewed, sanitized aggregate releases below are public data.
-!/docs/data/
-/docs/data/*
-!/docs/data/quick_joint_action_timing_20260909.csv
-!/docs/data/long_horizon_20260908/
-/docs/data/long_horizon_20260908/*
-!/docs/data/long_horizon_20260908/B_episode_windows.csv
-!/docs/data/long_horizon_20260908/B_window_throughput.csv
-!/docs/data/long_horizon_20260908/B_window_by_population.csv
-!/docs/data/long_horizon_20260908/B_tail_comparison.csv
-!/docs/data/long_horizon_20260908/B_tail_by_population.csv
-!/docs/data/long_horizon_20260908/PROVENANCE.json
-
 # IDE and operating-system files
 .idea/
 .vscode/

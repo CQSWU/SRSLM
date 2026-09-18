@@ -25,8 +25,9 @@ OBSOLETE_SAVED_SETTINGS = frozenset({
     'trace_context_filters', 'trace_context_embedding_size',
     'trace_context_hidden_projection', 'trace_context_fusion_size',
     'trace_context_head_size', 'trace_context_residual_cap',
-    # Serialized defaults from the retired caar+tau actor. They are inert in
-    # the retained NoReweight, EPOM-L, ARPE and Switcher checkpoints.
+    # Serialized defaults from the retired CAAR/NoReweight actors. They are
+    # dropped while reading immutable historical configs.
+    'caar_num_filters', 'caar_num_res_blocks',
     'caar_tau_num_filters', 'caar_tau_num_conv_layers',
     'caar_tau_num_res_blocks', 'caar_tau_hidden_size',
     'caar_learn_residual', 'caar_contextual_pressure',
@@ -43,7 +44,7 @@ def checkpoint_experiment_config(config):
     for key in OBSOLETE_SAVED_SETTINGS:
         settings.pop(key, None)
     if settings.get('encoder_custom') in {
-        'pogema_residual', 'epom_finetune', 'caar', 'epom_trace_context',
+        'pogema_residual', 'epom_finetune', 'epom_trace_context',
     }:
         # An unused Switcher default leaked into early base-policy configs.
         # Do not migrate actual Switcher configs: there it can change routing.
@@ -191,7 +192,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
 
     encoder_custom: Optional[Literal[
-        'pogema_residual', 'epom_finetune', 'caar', 'epom_trace_context',
+        'pogema_residual', 'epom_finetune', 'epom_trace_context',
         'switcher', 'switcher_all_state',
     ]] = None
 
@@ -203,10 +204,6 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     decoder_mlp_layers: List[int] = Field(default_factory=list)
 
-
-    caar_num_filters: int = 64
-
-    caar_num_res_blocks: int = 3
 
     pogema_encoder_num_filters: int = Field(64, ge=1)
 
@@ -320,9 +317,8 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     grid_memory_obs_radius: int = Field(7, ge=1)
 
-    switcher_caar_weights_path: str = (
-        "weights/CAAR-p-identity-r5-1b/CAAR-P-Identity-R5-1B"
-    )
+    # Actual Switcher configs must name their pinned ARPE candidate explicitly.
+    switcher_caar_weights_path: str = ""
 
     switcher_caar_checkpoint_kind: Literal[
         "auto", "latest", "best"
@@ -693,14 +689,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 patch_switcher_learner_losses()
             return values
 
-        if settings.encoder_custom != 'caar':
-            return values
-
-        if environment is None or environment.name != 'POMAPF-v0':
-            raise ValueError(
-                "The retained caar encoder is NoReweight and requires "
-                "environment.name='POMAPF-v0' without tau."
-            )
         return values
 
 

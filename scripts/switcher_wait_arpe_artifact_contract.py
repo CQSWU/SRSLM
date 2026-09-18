@@ -14,7 +14,7 @@ if str(PROJECT_IMPORT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_IMPORT_ROOT))
 
 from agents.arpe import ArpeCandidateArtifact
-from scripts.switcher_artifact_contract import (
+from scripts.artifact_utils import (
     same_training_certificate,
     atomic_json,
     checkpoint_identity,

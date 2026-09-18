@@ -24,7 +24,6 @@ from train import register_custom_components, validate_config
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAL = ROOT / "learning" / "train_epom_trace_paper_conv_fusion_r5_500m.yaml"
-SMOKE = ROOT / "learning" / "train_epom_trace_paper_conv_fusion_r5_smoke.yaml"
 
 
 def _load(path: Path) -> dict:
@@ -34,13 +33,7 @@ def _load(path: Path) -> dict:
 @pytest.fixture(scope="module")
 def full_model():
     register_custom_components()
-    raw = _load(SMOKE)
-    base_dir = ROOT / raw["experiment_settings"]["epom_base_weights_path"]
-    if not (
-        (base_dir / "config.json").is_file()
-        or (base_dir / "cfg.json").is_file()
-    ):
-        pytest.skip("EPOM-L checkpoint is not included in the source repository")
+    raw = _load(FORMAL)
     raw["global_settings"]["device"] = "cpu"
     _, cfg = validate_config(raw)
     env = create_env(cfg.env, cfg=cfg, env_config={})
@@ -61,17 +54,13 @@ def full_model():
     return model, batch, cfg
 
 
-@pytest.mark.parametrize(
-    ("path", "steps"),
-    [(FORMAL, 500_000_000), (SMOKE, 1_000_000)],
-)
-def test_configs_are_unique_and_lock_full_centered_epom_l(path, steps):
-    experiment = Experiment(**_load(path))
+def test_config_locks_the_paper_arpe_contract():
+    experiment = Experiment(**_load(FORMAL))
     settings = experiment.experiment_settings
     environment = experiment.environment
     assert settings.trace_context_architecture == PAPER_ENTROPY_FUSION_ARCHITECTURE
     assert settings.encoder_custom == "epom_trace_context"
-    assert settings.train_for_env_steps == steps
+    assert settings.train_for_env_steps == 500_000_000
     assert settings.hidden_size == 512
     assert settings.trace_context_learned_gate == "entropy"
     assert settings.trace_gate_threshold == pytest.approx(0.46371241)
@@ -216,6 +205,29 @@ def test_inference_override_rejects_unknown_modes(full_model):
         model.set_inference_learned_gate_override("invalid")
 
 
+def test_inference_entropy_threshold_override_changes_only_gate(full_model):
+    model, _, _ = full_model
+    base = torch.tensor([[2.0, 0.5, 0.0, -0.5, -1.0]])
+    correction = torch.tensor([[0.4, -0.2, 0.1, 0.3, -0.1]])
+    entropy = model._base_entropy(base).item()
+    assert 0.0 < entropy < torch.log(torch.tensor(5.0)).item()
+
+    model.set_inference_learned_gate_override("checkpoint")
+    model.set_inference_entropy_threshold_override(entropy - 0.01)
+    open_logits, _, open_gate, _ = model.apply_effective_paper_correction(
+        base, correction
+    )
+    model.set_inference_entropy_threshold_override(entropy + 0.01)
+    closed_logits, _, closed_gate, _ = model.apply_effective_paper_correction(
+        base, correction
+    )
+    torch.testing.assert_close(open_gate, torch.ones(1, 1))
+    torch.testing.assert_close(open_logits, base - correction)
+    torch.testing.assert_close(closed_gate, torch.zeros(1, 1))
+    torch.testing.assert_close(closed_logits, base)
+
+    model.set_inference_entropy_threshold_override(None)
+    assert model.effective_entropy_threshold() == pytest.approx(0.46371241)
 
 
 def test_actor_gradient_and_linear_critic_are_independent(full_model):
@@ -259,7 +271,7 @@ def test_full_forward_and_frozen_base_contract(full_model):
     assert outputs["action_logits"].shape == (len(batch["obs"]), 5)
     assert outputs["values"].shape == (len(batch["obs"]),)
     assert model.reweight_mode == PAPER_ENTROPY_FUSION_ARCHITECTURE
-    assert model._resolved_critic_kind() == HLINEAR_CRITIC_KIND
+    assert model.critic_kind == HLINEAR_CRITIC_KIND
     assert model.verify_frozen_actor_backbone()["verified"] is True
     assert all(
         not parameter.requires_grad

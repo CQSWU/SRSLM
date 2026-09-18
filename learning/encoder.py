@@ -5,14 +5,9 @@ from sample_factory.model.encoder import default_make_encoder_func
 
 def _require_retained_encoder(cfg, obs_space=None):
     kind = getattr(cfg, 'encoder_custom', None)
-    if kind not in {None, 'pogema_residual', 'epom_finetune', 'caar',
+    if kind not in {None, 'pogema_residual', 'epom_finetune',
                     'epom_trace_context', 'switcher', 'switcher_all_state'}:
         raise ValueError(f'Unsupported or retired encoder_custom: {kind!r}')
-    if kind == 'caar' and obs_space is not None and 'tau' in obs_space.spaces:
-        raise ValueError(
-            'The caar+tau actor is retired. The retained caar encoder is '
-            'the no-tau NoReweight backbone; use epom_trace_context for ARPE.'
-        )
 
 
 def make_encoder(cfg, obs_space):
@@ -36,12 +31,6 @@ def make_encoder(cfg, obs_space):
         from learning.epom_encoder import EPOMEncoder
 
         return EPOMEncoder(cfg, obs_space)
-
-    if getattr(cfg, 'encoder_custom', None) == 'caar':
-
-        from learning.no_reweight_encoder import NoReweightEncoder
-
-        return NoReweightEncoder(cfg, obs_space)
 
     return default_make_encoder_func(cfg, obs_space)
 

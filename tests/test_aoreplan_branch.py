@@ -22,8 +22,11 @@ class FixedStaticAStar:
     def __init__(self, action):
         self.action = action
 
-    def get_action(self, observation):
-        del observation
+    def observe(self, observations):
+        pass
+
+    def get_action(self, index, observation):
+        del index, observation
         return self.action
 
 
@@ -75,4 +78,3 @@ def test_pending_step_must_be_committed_once():
     branch.commit([False])
     with pytest.raises(RuntimeError):
         branch.commit([False])
-
