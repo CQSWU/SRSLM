@@ -22,7 +22,7 @@ wheels = [
 ]
 
 [[package]]
-name = "caar-pomapf"
+name = "arpe-pomapf"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
