@@ -273,12 +273,6 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         learned_delta = -raw_correction
         return base_logits + learned_delta, learned_delta, gate, entropy
 
-    def _resolved_critic_kind(self) -> str:
-        return HLINEAR_CRITIC_KIND
-
-    def _critic_reads_trace(self) -> bool:
-        return False
-
     def _build_critic_modules(self) -> None:
         if self.core_out_size != 512:
             raise ValueError(

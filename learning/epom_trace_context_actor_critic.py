@@ -324,49 +324,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
 
     # ------------------------------------------------------------- features
 
-    @classmethod
-    def center_candidate_trace(
-        cls, tau: torch.Tensor, tau_free_mask: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Pure five-candidate Direct readout for diagnostics and tests.
-
-        Args:
-            tau: ``[B,1,S,S]`` raw or mean-shifted trace.  A spatially constant
-                shift cancels when the five legal candidates are centred.
-            tau_free_mask: exact aligned ``[B,1,S,S]`` mask, with one for
-                free cells.
-
-        Returns:
-            The five legal-candidate-centred pressures and the five-cell legal
-            mask, both ``[B,5]`` in POGEMA action order.
-        """
-        if tau.ndim != 4 or tau.shape[1] != 1:
-            raise ValueError(f"Expected tau [B,1,S,S], got {tuple(tau.shape)}.")
-        if tuple(tau_free_mask.shape) != tuple(tau.shape):
-            raise ValueError(
-                "tau_free_mask must match tau, got "
-                f"{tuple(tau_free_mask.shape)} and "
-                f"{tuple(tau.shape)}."
-            )
-        if tau.shape[-2] != tau.shape[-1] or tau.shape[-1] % 2 != 1:
-            raise ValueError(f"Expected odd square tau, got {tuple(tau.shape)}.")
-        centre = tau.shape[-1] // 2
-        values = torch.stack(
-            [tau[:, 0, centre + dx, centre + dy] for dx, dy in MOVES], dim=-1
-        )
-        legal = torch.stack(
-            [
-                tau_free_mask[:, 0, centre + dx, centre + dy]
-                for dx, dy in MOVES
-            ],
-            dim=-1,
-        ).to(tau.dtype)
-        legal = (legal > 0.5).to(tau.dtype)
-        count = legal.sum(dim=-1, keepdim=True).clamp_min(1.0)
-        mean = (values * legal).sum(dim=-1, keepdim=True) / count
-        centred = (values - mean) * legal
-        return centred, legal
-
     @staticmethod
     def _base_entropy(logits: torch.Tensor) -> torch.Tensor:
         probabilities = torch.softmax(logits, dim=-1)
@@ -374,25 +331,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
             probabilities
             * torch.log(probabilities + PRIMAL3_ENTROPY_EPS)
         ).sum(dim=-1)
-
-    @classmethod
-    def apply_direct_rule(
-        cls,
-        base_logits: torch.Tensor,
-        centred_trace: torch.Tensor,
-        entropy_threshold: float = PRIMAL3_ENTROPY_THRESHOLD,
-        rule_scale: float = 1.0,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Pure entropy-gated Direct baseline for diagnostics and tests."""
-        if base_logits.shape != centred_trace.shape:
-            raise ValueError(
-                "base_logits and centred_trace must match, got "
-                f"{tuple(base_logits.shape)} and {tuple(centred_trace.shape)}."
-            )
-        entropy = cls._base_entropy(base_logits)
-        gate = (entropy > float(entropy_threshold)).to(base_logits.dtype).unsqueeze(-1)
-        direct_logits = base_logits - float(rule_scale) * gate * centred_trace
-        return direct_logits, gate, entropy
 
     @staticmethod
     def _packed_like(reference: PackedSequence, data: torch.Tensor) -> PackedSequence:

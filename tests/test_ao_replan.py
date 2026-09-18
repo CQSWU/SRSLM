@@ -34,8 +34,11 @@ class FixedStaticAStar:
         self.action = action
         self.calls = 0
 
-    def get_action(self, observation):
-        del observation
+    def observe(self, observations):
+        pass
+
+    def get_action(self, index, observation):
+        del index, observation
         self.calls += 1
         return self.action
 

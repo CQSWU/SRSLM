@@ -128,8 +128,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
 
     if full_env_name == 'POMAPF-ST-v0':
         raise RuntimeError(
-            'POMAPF-ST-v0 is retired. NoReweight uses POMAPF-v0; '
-            'the paper ARPE uses POMAPF-EPOM-ST-v0.'
+            'POMAPF-ST-v0 is retired; ARPE uses POMAPF-EPOM-ST-v0.'
         )
 
     if full_env_name in ('POMAPF-SRSLM-v0', 'POMAPF-SRSLM-NoWait-v0'):

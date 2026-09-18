@@ -15,7 +15,7 @@ CONTRACT = "a" * 64
 
 def _task(seed=0):
     return {
-        "algorithm": "SRSLM-WaitDetectOnly",
+        "algorithm": "SRSLM-OnlyWait",
         "map_name": "map-a",
         "num_agents": 100,
         "seed": seed,
@@ -64,4 +64,3 @@ def test_result_journal_rejects_contract_and_duplicate_success(tmp_path: Path):
         _load_result_journal(journal, CONTRACT, tasks)
     with pytest.raises(ValueError, match="contract/header differs"):
         _load_result_journal(journal, "b" * 64, tasks)
-

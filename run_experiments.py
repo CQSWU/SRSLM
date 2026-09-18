@@ -18,7 +18,6 @@ import random
 
 import time
 
-import urllib.request
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -60,7 +59,7 @@ DEFAULT_MAPS = {
 
 SUPPORTED_ALGORITHMS = (
     "RePlan", "AORePlan", "AORePlan-SoftNoCheck",
-    "EPOM-Lifelong-FT", "NoReweight", "Direct", "ARPE",
+    "EPOM-Lifelong-FT", "Direct", "ARPE",
     "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
 )
 
@@ -74,8 +73,6 @@ ALGORITHM_ALIASES = {
     "epom-l": "EPOM-Lifelong-FT",
     "epom-lifelong-ft": "EPOM-Lifelong-FT",
     "epom_lifelong_ft": "EPOM-Lifelong-FT",
-    "noreweight": "NoReweight",
-    "no-reweight": "NoReweight",
     "direct": "Direct",
     "arpe": "ARPE",
     "srslm-nowait": "SRSLM-NoWait",
@@ -240,19 +237,6 @@ def _has_checkpoints(path):
 
     return False
 
-
-
-def _find_no_reweight_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = _find_weight_run_dir(root / "weights" / "NoReweight-block-1b")
-    if candidate is not None:
-        return str(candidate)
-    return str(
-        root
-        / "weights"
-        / "NoReweight-block-1b"
-        / "NoReweight-Block-R5-1B"
-    )
 
 
 def _find_switcher_weights(main_dir):
@@ -439,7 +423,6 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
 _EPISODE_FRESH_ALGORITHMS = frozenset(
     (
         "ARPE",
-        "NoReweight",
         "Direct",
         "SRSLM",
         "SRSLM-NoWait",
@@ -821,31 +804,6 @@ def build_algorithm(
 
 
 
-
-
-    if algo_name == "NoReweight":
-
-        from agents.policy_backbone import NoReweight, NoReweightConfig
-
-        weights_path = (
-            no_reweight_weights_path or _find_no_reweight_weights(main_dir)
-        )
-
-        return NoReweight(
-
-            NoReweightConfig(
-
-                path_to_weights=weights_path,
-
-                seed=seed,
-
-                checkpoint_kind="latest",
-
-                device="auto",
-
-            )
-
-        )
 
 
     if algo_name == "Direct":
@@ -2143,17 +2101,9 @@ def load_map_text(path_or_url, trim_border=False):
 
     path_or_url = str(path_or_url)
 
-    if path_or_url.startswith(("http://", "https://")):
+    raw_text = Path(path_or_url).read_text()
 
-        raw_text = urllib.request.urlopen(path_or_url, timeout=30).read().decode("utf-8")
-
-        source = path_or_url
-
-    else:
-
-        raw_text = Path(path_or_url).read_text()
-
-        source = str(Path(path_or_url).resolve())
+    source = str(Path(path_or_url).resolve())
 
 
     lines = raw_text.splitlines()
@@ -2185,7 +2135,7 @@ def load_map_text(path_or_url, trim_border=False):
         raise ValueError(f"Map source must contain a non-empty rectangular grid: {path_or_url}")
 
 
-    label = Path(path_or_url).name if not path_or_url.startswith(("http://", "https://")) else Path(path_or_url.split("?")[0]).name
+    label = Path(path_or_url).name
 
     return {
 
@@ -2330,391 +2280,6 @@ def _canonical_json_sha256(value):
     ).hexdigest()
 
 
-def load_explicit_task_manifest_snapshot(
-    path,
-    maps,
-    map_texts,
-    expected_map_list_sha256=None,
-):
-
-    """Load exact per-map starts/goals without changing legacy task grids."""
-
-    path = Path(path).resolve()
-
-    payload_bytes = path.read_bytes()
-
-    try:
-
-        payload = json.loads(payload_bytes.decode("utf-8"))
-
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-
-        raise ValueError(f"Could not parse task manifest {path}: {error}") from error
-
-    if payload.get("artifact_kind") != "paired_density_task_manifest":
-
-        raise ValueError(
-
-            "--task-manifest must be a paired_density_task_manifest"
-
-        )
-
-    protocol_id = payload.get("protocol_id")
-
-    if not isinstance(protocol_id, str) or not protocol_id:
-
-        raise ValueError("--task-manifest is missing protocol_id")
-
-    if (
-
-        expected_map_list_sha256 is not None
-
-        and payload.get("map_list_sha256") != expected_map_list_sha256
-
-    ):
-
-        raise ValueError(
-
-            "--task-manifest map_list_sha256 does not match --map-list"
-
-        )
-
-    family_rows = payload.get("families")
-
-    task_rows = payload.get("tasks")
-
-    if not isinstance(family_rows, list) or not family_rows:
-
-        raise ValueError("--task-manifest families must be a non-empty list")
-
-    if not isinstance(task_rows, list) or not task_rows:
-
-        raise ValueError("--task-manifest tasks must be a non-empty list")
-
-
-    def normalize_positions(value, label):
-
-        if not isinstance(value, list) or not value:
-
-            raise ValueError(f"{label} must be a non-empty list")
-
-        normalized = []
-
-        for position in value:
-
-            if (
-
-                not isinstance(position, list)
-
-                or len(position) != 2
-
-                or any(
-
-                    not isinstance(coordinate, int)
-
-                    or isinstance(coordinate, bool)
-
-                    for coordinate in position
-
-                )
-
-            ):
-
-                raise ValueError(f"{label} contains an invalid coordinate")
-
-            normalized.append([int(position[0]), int(position[1])])
-
-        return normalized
-
-    def normalize_target_sequences(value, label, initial_targets):
-        if value is None:
-            return None, None
-        if not isinstance(value, list) or len(value) != len(initial_targets):
-            raise ValueError(
-                f"{label} must contain one sequence per initial target"
-            )
-        sequences = []
-        for agent_index, sequence in enumerate(value):
-            if not isinstance(sequence, list) or len(sequence) < 2:
-                raise ValueError(
-                    f"{label}[{agent_index}] must contain at least two goals"
-                )
-            normalized = normalize_positions(
-                sequence,
-                f"{label}[{agent_index}]",
-            )
-            if normalized[0] != initial_targets[agent_index]:
-                raise ValueError(
-                    f"{label}[{agent_index}] does not start at the initial goal"
-                )
-            sequences.append(normalized)
-        return sequences, _canonical_json_sha256(sequences)
-
-
-    families = {}
-
-    for family in family_rows:
-
-        if not isinstance(family, dict):
-
-            raise ValueError("Every task-manifest family must be a mapping")
-
-        family_id = family.get("family_id")
-
-        if not isinstance(family_id, str) or not family_id:
-
-            raise ValueError("Every family must have a non-empty family_id")
-
-        if family_id in families:
-
-            raise ValueError(f"Duplicate family_id in task manifest: {family_id}")
-
-        agents_xy = normalize_positions(
-
-            family.get("agents_xy"),
-
-            f"{family_id}.agents_xy",
-
-        )
-
-        targets_xy = normalize_positions(
-
-            family.get("targets_xy"),
-
-            f"{family_id}.targets_xy",
-
-        )
-
-        target_sequences_xy, target_sequences_sha256 = (
-            normalize_target_sequences(
-                family.get("target_sequences_xy"),
-                f"{family_id}.target_sequences_xy",
-                targets_xy,
-            )
-        )
-        if target_sequences_xy is not None and family.get(
-            "target_sequences_sha256"
-        ) != target_sequences_sha256:
-            raise ValueError(f"{family_id}: target-sequence hash mismatch")
-
-        if len(agents_xy) != len(targets_xy):
-
-            raise ValueError(f"{family_id}: start/goal counts differ")
-
-        starts = {tuple(position) for position in agents_xy}
-
-        targets = {tuple(position) for position in targets_xy}
-
-        if len(starts) != len(agents_xy) or len(targets) != len(targets_xy):
-
-            raise ValueError(f"{family_id}: starts and goals must each be unique")
-
-        if starts & targets:
-
-            raise ValueError(f"{family_id}: starts and goals must be disjoint")
-
-        placement_sha256 = _canonical_json_sha256(
-
-            {"agents_xy": agents_xy, "targets_xy": targets_xy}
-
-        )
-
-        if family.get("placement_sha256") != placement_sha256:
-
-            raise ValueError(f"{family_id}: placement hash mismatch")
-
-        families[family_id] = {
-
-            "agents_xy": agents_xy,
-
-            "targets_xy": targets_xy,
-
-            "target_sequences_xy": target_sequences_xy,
-
-            "target_sequences_sha256": target_sequences_sha256,
-
-            "placement_sha256": placement_sha256,
-
-            "episode_seed": int(family["episode_seed"]),
-
-        }
-
-
-    task_specs = []
-
-    seen_task_ids = set()
-
-    seen_maps = set()
-
-    for row in task_rows:
-
-        if not isinstance(row, dict):
-
-            raise ValueError("Every task-manifest task must be a mapping")
-
-        task_id = row.get("task_id")
-
-        family_id = row.get("family_id")
-
-        map_name = row.get("map_name")
-
-        if not isinstance(task_id, str) or not task_id:
-
-            raise ValueError("Every explicit task must have a task_id")
-
-        if task_id in seen_task_ids:
-
-            raise ValueError(f"Duplicate task_id: {task_id}")
-
-        if family_id not in families:
-
-            raise ValueError(f"{task_id}: unknown family {family_id!r}")
-
-        if map_name not in maps or map_name not in map_texts:
-
-            raise ValueError(f"{task_id}: unknown map {map_name!r}")
-
-        if map_name in seen_maps:
-
-            raise ValueError(f"Explicit map appears in multiple tasks: {map_name}")
-
-        family = families[family_id]
-
-        num_agents = int(row["num_agents"])
-
-        episode_seed = int(row["episode_seed"])
-
-        density_percent = int(row["density_percent"])
-
-        if num_agents != len(family["agents_xy"]):
-
-            raise ValueError(f"{task_id}: num_agents does not match placements")
-
-        if episode_seed != family["episode_seed"]:
-
-            raise ValueError(f"{task_id}: episode seed differs from its family")
-
-        if row.get("placement_sha256") != family["placement_sha256"]:
-
-            raise ValueError(f"{task_id}: placement hash differs from its family")
-
-        if family["target_sequences_xy"] is not None and row.get(
-            "target_sequences_sha256"
-        ) != family["target_sequences_sha256"]:
-
-            raise ValueError(
-                f"{task_id}: target-sequence hash differs from its family"
-            )
-
-        grid_rows = map_texts[map_name].splitlines()
-
-        height = len(grid_rows)
-
-        width = len(grid_rows[0])
-
-        checked_positions = family["agents_xy"] + family["targets_xy"]
-        if family["target_sequences_xy"] is not None:
-            checked_positions += [
-                coordinate
-                for sequence in family["target_sequences_xy"]
-                for coordinate in sequence
-            ]
-        for coordinate in checked_positions:
-
-            first, second = coordinate
-
-            if (
-
-                first < 0
-
-                or first >= height
-
-                or second < 0
-
-                or second >= width
-
-                or grid_rows[first][second] != "."
-
-            ):
-
-                raise ValueError(
-
-                    f"{task_id}: placement {coordinate} is not a free map cell"
-
-                )
-
-        task_specs.append(
-
-            {
-
-                "task_id": task_id,
-
-                "family_id": family_id,
-
-                "density_percent": density_percent,
-
-                "map_name": map_name,
-
-                "num_agents": num_agents,
-
-                "seed": episode_seed,
-
-                "agents_xy": family["agents_xy"],
-
-                "targets_xy": (
-                    family["target_sequences_xy"]
-                    if family["target_sequences_xy"] is not None
-                    else family["targets_xy"]
-                ),
-
-                "initial_targets_xy": family["targets_xy"],
-
-                "target_sequences_sha256": family[
-                    "target_sequences_sha256"
-                ],
-
-                "placement_sha256": family["placement_sha256"],
-
-            }
-
-        )
-
-        seen_task_ids.add(task_id)
-
-        seen_maps.add(map_name)
-
-    if seen_maps != set(maps):
-
-        missing = sorted(set(maps) - seen_maps)
-
-        extra = sorted(seen_maps - set(maps))
-
-        raise ValueError(
-
-            "Task manifest and map list differ: "
-
-            f"missing={missing[:3]}, extra={extra[:3]}"
-
-        )
-
-    if payload.get("task_count") != len(task_specs):
-
-        raise ValueError("task_count does not match the explicit task list")
-
-    return (
-
-        task_specs,
-
-        hashlib.sha256(payload_bytes).hexdigest(),
-
-        protocol_id,
-
-        path,
-
-    )
-
-
-
 def build_tasks(
     algorithms,
     maps,
@@ -2723,7 +2288,6 @@ def build_tasks(
     args,
     custom_map=None,
     map_texts=None,
-    explicit_task_specs=None,
 ):
 
     map_items = (
@@ -2744,9 +2308,7 @@ def build_tasks(
 
     )
 
-    if explicit_task_specs is None:
-
-        return [
+    return [
 
         {
 
@@ -2811,102 +2373,6 @@ def build_tasks(
         for seed in seeds
 
     ]
-
-    if custom_map is not None or map_texts is None:
-
-        raise ValueError(
-
-            "Explicit task manifests require a YAML --map-list snapshot"
-
-        )
-
-    tasks = []
-
-    for algorithm in algorithms:
-
-        for spec in explicit_task_specs:
-
-            map_name = spec["map_name"]
-
-            tasks.append(
-
-                {
-
-                    "algorithm": algorithm,
-
-                    "map_type": "paired_density",
-
-                    "map_name": map_name,
-
-                    "map_text": map_texts[map_name],
-
-                    "map_source": None,
-
-                    "num_agents": spec["num_agents"],
-
-                    "obs_radius": args.obs_radius,
-
-                    "max_steps": args.max_steps,
-
-                    "seed": spec["seed"],
-
-                    "animate": args.animate,
-
-                    "main_dir": args.main_dir,
-
-                    "on_target": args.on_target,
-
-                    "collision_system": args.collision_system,
-
-                    "arpe_weights_path": args.arpe_weights_path,
-
-                    "arpe_candidate_manifest": getattr(
-                        args, "arpe_candidate_manifest", None
-                    ),
-
-                    "switcher_weights_path": args.switcher_weights_path,
-
-                    "no_reweight_weights_path": (
-                        args.no_reweight_weights_path
-                    ),
-
-
-                    "epom_weights_path": args.epom_weights_path,
-
-
-
-
-
-                    "direct_options": getattr(args, "direct_options", None),
-
-                    "cache_algorithms": should_cache_algorithm(
-                        algorithm,
-                        args.cache_algorithms,
-                    ),
-
-                    "task_id": spec["task_id"],
-
-                    "family_id": spec["family_id"],
-
-                    "density_percent": spec["density_percent"],
-
-                    "agents_xy": spec["agents_xy"],
-
-                    "targets_xy": spec["targets_xy"],
-
-                    "initial_targets_xy": spec.get("initial_targets_xy"),
-
-                    "target_sequences_sha256": spec.get(
-                        "target_sequences_sha256"
-                    ),
-
-                    "placement_sha256": spec["placement_sha256"],
-
-                }
-
-            )
-
-    return tasks
 
 
 
@@ -3475,31 +2941,9 @@ def parse_args():
 
     )
 
-    parser.add_argument("--map-url", type=str, default=None, help="Custom map URL. Supports MovingAI .map files.")
-
     parser.add_argument("--map-file", type=str, default=None, help="Custom local map file path.")
 
     parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/eval.yaml)")
-
-    parser.add_argument(
-
-        "--task-manifest",
-
-        type=str,
-
-        default=None,
-
-        help=(
-
-            "JSON manifest defining one explicit seed/start/goal assignment "
-
-            "per selected map; requires --map-list and bypasses the legacy "
-
-            "map/agent/seed Cartesian product"
-
-        ),
-
-    )
 
     parser.add_argument("--trim-border", dest="trim_border", action="store_true", help="Trim one-cell border from custom map")
 
@@ -3678,25 +3122,14 @@ def main():
 
         bool(value)
 
-        for value in (args.map_url, args.map_file, args.map_list)
+        for value in (args.map_file, args.map_list)
 
     )
 
     if map_sources > 1:
 
-        raise ValueError("--map-url, --map-file, and --map-list are mutually exclusive")
+        raise ValueError("--map-file and --map-list are mutually exclusive")
 
-    if args.task_manifest and not args.map_list:
-
-        raise ValueError("--task-manifest requires --map-list")
-
-    if args.task_manifest and (args.agents is not None or args.seeds is not None):
-
-        raise ValueError(
-
-            "--task-manifest cannot be combined with --agents or --seeds"
-
-        )
 
 
     if args.on_target is None:
@@ -3731,17 +3164,9 @@ def main():
 
     map_texts = None
 
-    explicit_task_specs = None
+    if args.map_file:
 
-    task_manifest_sha256 = None
-
-    task_manifest_protocol_id = None
-
-    task_manifest_path = None
-
-    if args.map_url or args.map_file:
-
-        custom_map = load_map_text(args.map_url or args.map_file, trim_border=args.trim_border)
+        custom_map = load_map_text(args.map_file, trim_border=args.trim_border)
 
         maps = {"custom": custom_map["map_name"]}
 
@@ -3773,37 +3198,6 @@ def main():
 
         )
 
-        if args.task_manifest:
-
-            (
-
-                explicit_task_specs,
-
-                task_manifest_sha256,
-
-                task_manifest_protocol_id,
-
-                task_manifest_path,
-
-            ) = load_explicit_task_manifest_snapshot(
-
-                _project_path(args.main_dir, args.task_manifest),
-
-                maps,
-
-                map_texts,
-
-                expected_map_list_sha256=map_list_sha256,
-
-            )
-
-            agent_counts = sorted(
-
-                {spec["num_agents"] for spec in explicit_task_specs}
-
-            )
-
-            seeds = sorted({spec["seed"] for spec in explicit_task_specs})
 
     else:
 
@@ -3826,7 +3220,6 @@ def main():
 
         map_texts=map_texts,
 
-        explicit_task_specs=explicit_task_specs,
 
     )
 
@@ -3996,30 +3389,6 @@ def main():
         "map_list_sha256": map_list_sha256,
 
         "map_registry_sha256": map_registry_sha256,
-
-        "task_manifest": (
-
-            str(task_manifest_path)
-
-            if task_manifest_path is not None
-
-            else None
-
-        ),
-
-        "task_manifest_sha256": task_manifest_sha256,
-
-        "task_manifest_protocol_id": task_manifest_protocol_id,
-
-        "explicit_task_count": (
-
-            len(explicit_task_specs)
-
-            if explicit_task_specs is not None
-
-            else None
-
-        ),
 
         "trim_border": args.trim_border,
 

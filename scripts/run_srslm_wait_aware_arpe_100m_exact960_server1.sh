@@ -70,7 +70,7 @@ for path in "${!expected_hashes[@]}"; do
 done
 
 checkpoint_json=$(
-  "$python_bin" scripts/switcher_artifact_contract.py checkpoint \
+  "$python_bin" scripts/artifact_utils.py checkpoint \
     --weights-dir "$switcher_weights"
 )
 "$python_bin" - "$checkpoint_json" "$expected_switcher_checkpoint_sha256" \
@@ -130,9 +130,9 @@ code_tracked=(
   scripts/run_srslm_wait_aware_arpe_100m_exact960_server1.sh
   scripts/validate_srslm_wait_aware_arpe_100m_exact960.py
   scripts/validate_switcher_wait_arpe_readiness.py
-  scripts/validate_srslm_wait_ablation_exact960.py
+  scripts/exact960_utils.py
   scripts/switcher_wait_arpe_artifact_contract.py
-  scripts/switcher_artifact_contract.py
+  scripts/artifact_utils.py
   scripts/switcher_checkpoint_identity.py
   run_experiments.py
   train.py

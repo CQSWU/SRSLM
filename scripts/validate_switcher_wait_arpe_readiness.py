@@ -23,7 +23,7 @@ if str(PROJECT_IMPORT_ROOT) not in sys.path:
 
 from agents.arpe import ArpeCandidateArtifact
 from run_experiments import validate_srslm_stats
-from scripts.switcher_artifact_contract import (
+from scripts.artifact_utils import (
     atomic_json,
     latest_regular_checkpoint,
     sha256_file,

@@ -80,9 +80,7 @@ def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
 
 class EPOMTraceContextConfig(EPOMTraceConfig, extra=Extra.forbid):
     name: Literal["EPOM-TraceContext"] = "EPOM-TraceContext"
-    path_to_weights: str = (
-        "weights/EPOM-TraceContext-R5/EPOM-TraceContext-R5"
-    )
+    path_to_weights: str
     checkpoint_kind: Literal[
         "auto", "latest", "best", "milestone"
     ] = "latest"

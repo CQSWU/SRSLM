@@ -76,6 +76,10 @@ class AORePlanBase:
             local_planner.plan_path(position, target)
             path = self._get_next_node(local_planner)
             if path is None or path[1][0] >= INF:
+                # This search exhausted the temporary failure constraints.
+                # Keep this step's original fallback; let the next observed
+                # planning step retry without stale failed destinations.
+                local_planner.release_failed_actions()
                 actions.append(None)
                 continue
             delta = (
@@ -159,33 +163,52 @@ def original_random_or_stay(observation, rnd, moves=None):
 
 
 class StaticAStarCheck:
-    """Run one fresh static-map A* query that ignores other agents."""
+    """Query each agent's accumulated observed walls, without traffic memory.
+
+    Observe every step, not only when a reverse triggers a query. Each private
+    planner keeps walls across target changes and is discarded with the wrapper
+    at episode reset. Unobserved cells retain the planner's free-cell default.
+    """
 
     def __init__(self, max_steps: int = INF):
         self.max_steps = int(max_steps)
+        self._planners = None
         grid_config = GridConfig()
         self.actions = {
             tuple(grid_config.MOVES[index]): index
             for index in range(len(grid_config.MOVES))
         }
 
-    def get_action(self, observation):
-        local_planner = planner(self.max_steps)
-        obstacle_map = np.asarray(observation["obstacles"])
-        radius = obstacle_map.shape[0] // 2
-        local_planner.update_obstacles(
-            np.transpose(np.nonzero(obstacle_map)),
-            [],
-            (
-                observation["xy"][0] - radius,
-                observation["xy"][1] - radius,
-            ),
-        )
-        local_planner.plan_path(
+    def observe(self, observations):
+        count = len(observations)
+        if self._planners is None:
+            self._planners = [planner(self.max_steps) for _ in range(count)]
+        elif len(self._planners) != count:
+            raise ValueError("Static A* agent count changed without reset.")
+        for local_planner, observation in zip(self._planners, observations):
+            obstacle_map = np.asarray(observation["obstacles"])
+            position = tuple(int(value) for value in observation["xy"])
+            local_planner.update_obstacles(
+                np.transpose(np.nonzero(obstacle_map)),
+                [],
+                (
+                    position[0] - obstacle_map.shape[0] // 2,
+                    position[1] - obstacle_map.shape[1] // 2,
+                ),
+            )
+
+    def get_action(self, index, observation):
+        if self._planners is None:
+            raise RuntimeError("Observe the agent batch before querying static A*.")
+        local_planner = self._planners[index]
+        # Reuse observed walls, but restart the search without dynamic agents
+        # or failed destinations. A static query is not an executed proposal.
+        local_planner.update_static_path(
             tuple(observation["xy"]),
             tuple(observation["target_xy"]),
         )
         path = local_planner.get_next_node(False)
+        local_planner.cancel_desired()
         if path is None or path[1][0] >= INF:
             return None
         delta = (
@@ -242,7 +265,7 @@ class AORePlanWrapper:
             raise ValueError("AORePlan agent count changed without reset.")
 
     def _static_astar_action(self, index, observation):
-        raw_action = self.static_astar.get_action(observation)
+        raw_action = self.static_astar.get_action(index, observation)
         self.last_static_astar_invoked_mask[index] = True
         conflict = bool(
             raw_action not in (None, 0)
@@ -326,6 +349,8 @@ class AORePlanWrapper:
     def act(self, observations, skip_agents=None):
         actions = list(self.agent.act(observations, skip_agents=skip_agents))
         self._ensure_state(len(actions))
+        # Even skipped planning and at-goal steps contribute observed walls.
+        self.static_astar.observe(observations)
         self._reset_diagnostics(actions)
 
         for index, raw_action in enumerate(self.last_raw_dynamic_actions):

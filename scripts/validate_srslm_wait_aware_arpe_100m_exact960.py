@@ -17,8 +17,8 @@ if str(PROJECT_IMPORT_ROOT) not in sys.path:
 
 from agents.arpe import ArpeCandidateArtifact
 from run_experiments import validate_srslm_stats
-from scripts.switcher_artifact_contract import latest_regular_checkpoint, sha256_file
-from scripts.validate_srslm_wait_ablation_exact960 import (
+from scripts.artifact_utils import latest_regular_checkpoint, sha256_file
+from scripts.exact960_utils import (
     EXPECTED_MAP_SHA256,
     EXPECTED_POPULATIONS,
     EXPECTED_ROWS,
@@ -28,7 +28,7 @@ from scripts.validate_srslm_wait_ablation_exact960 import (
     map_names,
     validate_move_metrics,
     validate_result_journal,
-    validate_routing,
+    validate_srslm_routing,
 )
 
 
@@ -330,7 +330,7 @@ def main() -> int:
         require(int(row.get("total_experiments", -1)) == EXPECTED_ROWS, f"{label}: total differs")
         require(isinstance(row.get("avg_throughput"), (int, float)) and math.isfinite(float(row["avg_throughput"])), f"{label}: throughput differs")
         validate_srslm_stats(row)
-        validate_routing(row, "SRSLM", EXPECTED_SWITCHER_CHECKPOINT_SHA256, label)
+        validate_srslm_routing(row, EXPECTED_SWITCHER_CHECKPOINT_SHA256, label)
         validate_move_metrics(row, label)
         require(row.get("switcher_config_sha256") == EXPECTED_SWITCHER_CONFIG_SHA256, f"{label}: Switcher config differs")
         validate_runtime_candidate(row, declaration, artifact, label)

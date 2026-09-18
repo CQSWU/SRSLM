@@ -154,6 +154,13 @@ public:
     {
         desired_position = {INF, INF};
     }
+    void release_failed_actions()
+    {
+        // Only AO's exhausted-search branch calls this. Keep the current
+        // observation and proposal untouched; update_obstacles() refreshes
+        // dynamic occupancy before the next planning step.
+        bad_actions.clear();
+    }
     void update_path(std::pair<int, int> s, std::pair<int, int> g)
     {
         if(has_desired_position())
@@ -216,6 +223,7 @@ PYBIND11_MODULE(planner, m) {
             .def("observe_position", &planner::observe_position)
             .def("plan_path", &planner::plan_path)
             .def("cancel_desired", &planner::cancel_desired)
+            .def("release_failed_actions", &planner::release_failed_actions)
             .def("update_path", &planner::update_path)
             .def("update_static_path", &planner::update_static_path)
             .def("get_path", &planner::get_path)

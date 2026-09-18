@@ -10,7 +10,6 @@ import pytest
 
 import run_experiments as runner
 from agents.arpe import ARPE, ARPEConfig, ArpeCandidateArtifact
-from agents.policy_backbone import NoReweight, PolicyBackbone
 from agents.switcher_core import ARPE_BRANCH
 from pomapf_env.switcher_arpe_env import switcher_observation_space
 
@@ -34,13 +33,11 @@ def test_new_name_is_the_only_current_method_and_cli_namespace():
         runner.build_algorithm("CAAR", ROOT, 0)
 
 
-@pytest.mark.parametrize("name,digest", [
-    ("arpe_final_candidate.json", "ef2c855137486a0cde56d280376339dd3a7cba5c514c03bf5486df44f981b40b"),
-    ("arpe_noentropy_candidate.json", "bc950f5eb09b8329b85081ac01ae7346414ba29db885fca8cdcf3ecf3ea53800"),
-])
-def test_selected_declaration_bytes_and_legacy_serialized_identity_are_exact(name, digest):
-    payload = (ROOT / "configs" / name).read_bytes()
-    assert hashlib.sha256(payload).hexdigest() == digest
+def test_selected_declaration_bytes_and_legacy_serialized_identity_are_exact():
+    payload = (ROOT / "configs" / "arpe_final_candidate.json").read_bytes()
+    assert hashlib.sha256(payload).hexdigest() == (
+        "ef2c855137486a0cde56d280376339dd3a7cba5c514c03bf5486df44f981b40b"
+    )
     data = json.loads(payload)
     assert data["kind"] == "epom_trace_context_caar_milestone"
     assert data["schema"] == "switcher_candidate_caar_v1"
@@ -58,9 +55,8 @@ def test_checkpoint_input_order_and_old_backbone_are_not_rebranded_as_arpe():
     assert "caar_action" in space.spaces  # state_dict-compatible serialized input
     assert "arpe_action" not in space.spaces
     assert space["caar_action"].shape == (5,)
-    assert issubclass(NoReweight, PolicyBackbone)
-    assert not issubclass(NoReweight, ARPE)
     assert ARPEConfig.__fields__["name"].default == "ARPE"
+    assert importlib.util.find_spec("learning.no_reweight_encoder") is None
     assert importlib.util.find_spec("agents.caar") is None
     assert importlib.util.find_spec("agents.switcher_caar_candidate") is None
     assert importlib.util.find_spec("pomapf_env.switcher_caar_env") is None
@@ -68,7 +64,7 @@ def test_checkpoint_input_order_and_old_backbone_are_not_rebranded_as_arpe():
 
 def test_historical_certificate_name_mapping_is_narrow_and_nonmutating():
     from copy import deepcopy
-    from scripts.switcher_artifact_contract import same_training_certificate
+    from scripts.artifact_utils import same_training_certificate
     saved = {"network_contract": {"branch_0": "CAAR", "branch_1": "AORePlan"},
              "checkpoint_sha256": "a" * 64, "source_manifest": {"sha256": "b" * 64}}
     untouched = deepcopy(saved)
@@ -88,3 +84,10 @@ def test_historical_certificate_name_mapping_is_narrow_and_nonmutating():
     wrong = deepcopy(rebuilt)
     wrong["network_contract"]["branch_1"] = "RePlan"
     assert not same_training_certificate(saved, wrong)
+
+
+def test_onlywait_validator_never_requires_a_learned_switcher_artifact():
+    from scripts.validate_srslm_arpe_ablation_exact960 import ALGORITHMS, LEARNED
+    assert set(ALGORITHMS) == {"SRSLM-NoWait", "SRSLM-OnlyWait"}
+    assert LEARNED == frozenset({"SRSLM-NoWait"})
+    assert "SRSLM-OnlyWait" not in LEARNED

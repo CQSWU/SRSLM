@@ -119,7 +119,7 @@ base_config="$base_weights/config.json"
 planner_binary=$(find planning -maxdepth 1 -type f -name 'planner*.so' -print | sort | head -n 1)
 tracked=(
   scripts/run_train_switcher_wait_arpe_server2.sh
-  scripts/switcher_wait_arpe_artifact_contract.py scripts/switcher_artifact_contract.py
+  scripts/switcher_wait_arpe_artifact_contract.py scripts/artifact_utils.py
   scripts/switcher_checkpoint_identity.py train_switcher_wait_arpe.py train.py "$config_path"
   pomapf_env/switcher_arpe_env.py pomapf_env/switcher_env.py pomapf_env/env.py
   pomapf_env/pomapf_config.py pomapf_env/stigmergic.py pomapf_env/wrappers.py

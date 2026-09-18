@@ -17,10 +17,7 @@ from pomapf_env.wrappers import MatrixObservationWrapper
 
 class EPOMTraceConfig(PolicyBackboneConfig, extra=Extra.forbid):
     name: Literal["EPOM-Trace"] = "EPOM-Trace"
-    path_to_weights: str = (
-        "weights/EPOM-Trace-gradient-long/seed0/"
-        "EPOM-Trace-RawSmooth-Long-s0"
-    )
+    path_to_weights: str
     checkpoint_kind: Literal["auto", "latest", "best"] = "latest"
 
 

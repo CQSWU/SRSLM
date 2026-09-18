@@ -357,6 +357,7 @@ class TauObservationWrapper(gym.Wrapper):
             )
 
         self.aco = AcoState(rho=rho)
+        self._trace_grid = None
         context_radius = height // 2
         self.tau_radius = (
             context_radius
@@ -393,7 +394,12 @@ class TauObservationWrapper(gym.Wrapper):
 
     def step(self, action):
         observations, rewards, terminated, truncated, infos = self.env.step(action)
-        self._observe(observations, reset=False)
+        # POGEMA creates a new grid on reset, including an inner auto-reset.
+        # A terminal observation without auto-reset still uses the old grid.
+        reset = self._grid() is not self._trace_grid
+        if reset:
+            self._configure_trace(clear=True)
+        self._observe(observations, reset=reset)
         return observations, rewards, terminated, truncated, infos
 
     def _observe(self, observations, reset):
@@ -440,8 +446,10 @@ class TauObservationWrapper(gym.Wrapper):
                 ].astype(np.float32, copy=False)
 
     def _configure_trace(self, clear):
-        obstacles = np.asarray(self._grid().obstacles, dtype=bool)
+        grid = self._grid()
+        obstacles = np.asarray(grid.obstacles, dtype=bool)
         self.aco.configure_from_obstacle_mask(obstacles, clear=clear)
+        self._trace_grid = grid
 
     def _global_positions(self):
         grid = self._grid()

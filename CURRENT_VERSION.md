@@ -1,128 +1,59 @@
-# Current verified version
+# Current public implementation
 
-This file identifies the implementation and artifacts behind the retained
-wait-aware SRSLM result completed on 2026-09-03. Checkpoints and result JSON
-files are intentionally not committed to Git.
+Updated 2026-09-18 from the active Server 1 source tree, followed by the final
+public-source cleanup. This repository intentionally contains only self-owned
+method code, focused tests, and portable evaluation utilities. Weights, raw
+results, server environments, private adapters, and third-party repositories
+are outside the Git release.
 
-## Method identities
+## Retained method path
 
-| Name | Role |
-| --- | --- |
-| `RePlan` | Original dynamic replanning baseline |
-| `AORePlan` | RePlan plus a static-map A* check for reverse proposals |
-| `EPOM-Lifelong-FT` | Lifelong fine-tuned recurrent base policy, abbreviated EPOM-L |
-| `NoReweight` | Historical independently trained backbone, not paper EPOM-L |
-| `Direct` | Explicit EPOM-L signed trace correction; entropy and clipped ReLU are separate options |
-| `ARPE` | Learned entropy-gated five-logit trace correction |
-| `Switcher` | Learned categorical selector between ARPE and AORePlan |
-| `SRSLM` | Wait-aware composition of ARPE, AORePlan, and Switcher |
-| `SRSLM-NoWait` | Independently trained all-state Switcher using the same ARPE |
-| `SRSLM-OnlyWait` | Deterministic wait-only ablation using the same ARPE |
-| `AORePlan-SoftNoCheck` | Standalone soft search ablation only; does not change SRSLM |
+- AORePlan uses the accumulated observed static map, current reverse detection,
+  conservative local occupancy check, cache-release fix, and randomized failure
+  caching.
+- ARPE uses the selected `paper_entropy_fusion` trace branch on a frozen EPOM-L
+  base. Trace state is cleared at every episode boundary.
+- SRSLM uses ARPE immediately for an AORePlan wait; otherwise Switcher samples
+  between the complete ARPE and AORePlan proposals.
+- NoWait and OnlyWait remain the two switching ablations. Retired historical
+  branches are not aliases and cannot be selected through the public runner.
 
-## ARPE architecture
+## Selected artifact identities
 
-The EPOM-L backbone is frozen. The actor-side trace branch receives the whole
-aligned 11x11 shared-trace crop after centring over its free cells. Obstacles
-and padding remain zero; no action or free-cell mask is given to the learned
-branch.
+Weights are not committed. The following hashes identify the selected paper
+artifacts and must be verified before inference:
 
-The trace encoder is Conv32 (3x3), two 32-channel residual blocks, and an FC32
-projection. Its 32 outputs are concatenated with the frozen 512-dimensional
-EPOM-L recurrent state and five base logits. An FC256 layer and a five-output
-head produce the learned correction. The correction is applied only when the
-base-policy entropy exceeds the configured reference threshold. The separate
-critic is a linear value head over the frozen 512-dimensional recurrent state;
-its value is not added to the frozen EPOM value. The complete learned branch
-has 303,846 trainable parameters.
+- EPOM-L base checkpoint:
+  `f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2`
+- ARPE 500M selected checkpoint:
+  `497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b`
+- final 1B Switcher checkpoint:
+  `65c255ad9a3ae0c5874001637f4a4ff4d8172bd5b0b2e9b5d5a8d0c156d9e547`
+- final 1B Switcher saved configuration:
+  `07ce3ef6d2e57dea46760cf5b98363cd1f11d6ecfad84e8f1fe707c198e12d52`
 
-## Switcher routing
+`configs/arpe_final_candidate.json` is the path-relative ARPE declaration. A
+declaration records an identity; it does not supply or download the files.
 
-AORePlan and ARPE first produce complete primitive-action candidates. An
-AORePlan wait selects ARPE immediately without a Switcher forward pass. A
-non-wait AORePlan candidate enters the feed-forward two-branch Switcher, which
-samples either ARPE or AORePlan. The controller used for PPO data collection is
-the same controller used during evaluation.
+## Current paper grid
 
-## Frozen artifact identities
+The current comparison uses 36 maps, six populations, and five seeds, for 1,080
+episodes per method and execution rule:
 
-| Artifact | Frames | SHA-256 |
-| --- | ---: | --- |
-| EPOM-L checkpoint | 100,016,128 | `f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2` |
-| EPOM-L config | - | `74c5cc0f1c5fdc0043bfcaa2e48e3be9c46c2c652f489a2b83379788e5da69b9` |
-| ARPE checkpoint | 500,015,104 | `497118e3aa4fbaecde35e53f31fe3126e11c1a1e5b0b621b89ac0d340002d41b` |
-| ARPE config | - | `e76a2b238f196752ec358ce8946eb353caa3a4fe3e4df2a92cf812506d008747` |
-| Switcher checkpoint | 100,016,128 | `4973fa420a093e043d2aafb2340863a2be3ad7dda3362ef278a98ef8c1a75185` |
-| Switcher policy tensors | - | `c2bd85a0cbcffe49dec8a393e84f022efe9bc8ce916190b497d0571acbb75aa9` |
-| Switcher config | - | `de387d7b00f7cb0d56b11d78389d702d301a39fb33a7f3f666189c685e7c0bc6` |
-| ARPE candidate manifest | - | `75df038934fd10a71ce5b7e97aca7456546a18940553aa49eb454c89510e654f` |
+- maps: the 32-map capacity-intersection registry plus four resized MovingAI
+  WC3 maps;
+- populations: 100, 200, 300, 400, 500, and 600;
+- seeds: 0, 42, 123, 2024, and 3407;
+- lifelong target replacement, 512 steps, observation radius 5;
+- separate `block_both` and `soft` evaluations using the same selected
+  block-trained learned weights.
 
-Expected local paths are:
+Older exact960 result names identify the original 32-map experiments. They
+remain valid historical evidence but are not the current 36-map aggregate.
 
-```text
-weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5
-weights/EPOM-TracePaperConvDirectCorrection-R5-500m/EPOM-TracePaperConvDirectCorrection-R5-S0-20260902
-weights/SRSLM-switcher-wait-aware-caar-100m/SRSLM-WaitAware-CAAR-100M
-artifacts/arpe_final_candidate.json
-```
+## Public/private boundary
 
-The same safe declaration is included at `configs/arpe_final_candidate.json`.
-Pass it explicitly for ARPE/NoWait/OnlyWait evaluation. The archived server
-launcher uses the `artifacts/` location, so copy that one JSON there when
-using the launcher; do not copy a private artifacts directory into Git.
-
-### Independently trained ablations
-
-The no-entropy ARPE is a separate 500M training run, not the gated ARPE with
-its gate disabled during inference. Its declaration is
-`configs/arpe_noentropy_candidate.json`; it uses the same EPOM-L base above.
-
-| Artifact | Frames | SHA-256 |
-| --- | ---: | --- |
-| No-entropy ARPE checkpoint | 500,015,104 | `bba7aafffe46f081da1e14b4bdafd4dc6c4a53c97c51ca7550afba7e35ea2dc4` |
-| No-entropy ARPE config | - | `b51ad91fdff118f0b95bd214db14d1b3a96d611be5ee6f5ec3de5f27b662895d` |
-| NoWait Switcher checkpoint | 100,016,128 | `222ac356ad073605d048d4fb4e1186446a28e983005439e51b34398e2a4ae905` |
-| NoWait Switcher config | - | `facb3e553530e7f47da5b6c3a83044db0d147738a94ae63c4bb2782fe270a3db` |
-
-NoWait uses the **gated** ARPE candidate, the same one used by OnlyWait and
-Full SRSLM. Its Switcher directory is
-`weights/SRSLM-switcher-caar-nowait-100m/SRSLM-NoWait-CAAR-100M`, containing
-`checkpoint_p0/checkpoint_000024418_100016128.pth` and the config above.
-The NoWait loader selects the latest regular checkpoint in that directory;
-keep the selected reproduction directory separate from new training runs,
-and verify the emitted checkpoint SHA against this table. OnlyWait has no
-Switcher checkpoint. Newly retrained models need their own identities and
-must not be labelled as these retained paper artifacts.
-
-## Validated exact960 result
-
-Protocol: 32 held-out capacity-compatible maps; populations 100, 200, 300,
-400, 500, and 600; seeds 0, 42, 123, 2024, and 3407; `block_both`;
-lifelong `restart`; 512 steps; observation radius 5; 960 unique episodes.
-
-| Population | Mean throughput |
-| ---: | ---: |
-| 100 | 1.31678466796875 |
-| 200 | 1.91896972656250 |
-| 300 | 2.06967773437500 |
-| 400 | 2.06068115234375 |
-| 500 | 1.96484375000000 |
-| 600 | 1.83431396484375 |
-| **All** | **1.8608784993489584** |
-
-The validation reports 960 finite error-free rows, a mean congestion rate of
-0.3411414636, and an AORePlan-wait bypass rate of 0.1559831659. The result JSON
-SHA-256 is
-`972a87918e5e2dd5eae2ac4b76c3682c48bb72a00a73df5397d35da828f7c3cc`.
-
-The archived formal code snapshot is
-`3cd786dc58a86aa1ad982207d1788fc175e4f93e9c3658b3a7157c3056dd397f`.
-This public tree has subsequently been curated: retired model branches were
-removed, immutable checkpoint configs are normalised on read, and the CLI now
-binds the paper's hash-pinned ARPE instead of the legacy independent model.
-It is not byte-for-byte identical to the original training snapshot.
-
-The main soft result uses the same block-trained weights and the conservative
-static-step occupancy check: mean throughput **2.644156901041667**. The
-separate AORePlan search ablation uses `AORePlan-SoftNoCheck`. Do not substitute
-that standalone rule inside SRSLM when reproducing the retained main result.
+The public runner exposes RePlan, AORePlan, AORePlan-SoftNoCheck, EPOM-L,
+Direct, ARPE, SRSLM-NoWait, SRSLM-OnlyWait, and SRSLM. External comparison
+adapters and separately licensed sources/checkpoints are deliberately not
+vendored. Generated binaries, caches, logs, results, and weights are ignored.

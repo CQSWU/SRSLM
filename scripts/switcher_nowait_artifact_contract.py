@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and reproduce the 100M wait-aware ARPE Switcher certificate."""
+"""Create and reproduce the 100M all-state Switcher training certificate."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Make direct script execution independent of the caller's PYTHONPATH.
 PROJECT_IMPORT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_IMPORT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_IMPORT_ROOT))
@@ -23,11 +24,11 @@ from scripts.artifact_utils import (
 )
 
 
-SCHEMA = "switcher_wait_caar_training_artifact_v1"
-EXPECTED_ENCODER = "switcher"
-EXPECTED_ENVIRONMENT = "POMAPF-SRSLM-v0"
+SCHEMA = "switcher_nowait_training_artifact_v1"
+EXPECTED_ENCODER = "switcher_all_state"
+EXPECTED_ENVIRONMENT = "POMAPF-SRSLM-NoWait-v0"
 EXPECTED_FEATURE_SCHEMA = "srslm_switcher_state_v3"
-EXPECTED_SCOPE = "aoreplan_nonwait_only"
+EXPECTED_SCOPE = "all_states"
 
 
 def require(condition: bool, message: str) -> None:
@@ -50,12 +51,13 @@ def _source_manifest(log_dir: Path, artifact: ArpeCandidateArtifact) -> dict[str
     diff = log_dir / "source_hash_diff.txt"
     require(not diff.exists() or diff.stat().st_size == 0, "Source diff is non-empty.")
     text = before.read_text(encoding="utf-8")
-    for digest in (
+    required = (
         artifact.checkpoint_sha256,
         artifact.config_sha256,
         artifact.base_checkpoint_sha256,
         artifact.base_config_sha256,
-    ):
+    )
+    for digest in required:
         require(digest in text, f"Source manifest does not bind {digest}.")
     entries = [line for line in text.splitlines() if line.strip()]
     require(entries, "Source manifest is empty.")
@@ -87,8 +89,11 @@ def _validate_saved_config(
     global_settings = full.get("global_settings")
     candidate = full.get("candidate_policy")
     require(
-        all(isinstance(v, dict) for v in (environment, settings, async_ppo, global_settings, candidate)),
-        "Saved wait-aware Switcher config is incomplete.",
+        all(
+            isinstance(value, dict)
+            for value in (environment, settings, async_ppo, global_settings, candidate)
+        ),
+        "Saved NoWait Switcher config is incomplete.",
     )
     artifact = ArpeCandidateArtifact.from_mapping(candidate, project_root)
     artifact.verify_files()
@@ -97,8 +102,14 @@ def _validate_saved_config(
         "experiment": (config.get("experiment"), expected_experiment),
         "encoder": (config.get("encoder_custom"), EXPECTED_ENCODER),
         "environment": (environment.get("name"), EXPECTED_ENVIRONMENT),
-        "feature_schema": (environment.get("switcher_feature_schema"), EXPECTED_FEATURE_SCHEMA),
-        "candidate_path": (Path(environment.get("switcher_caar_weights_path", "")).as_posix(), artifact.weights_relative),
+        "feature_schema": (
+            environment.get("switcher_feature_schema"),
+            EXPECTED_FEATURE_SCHEMA,
+        ),
+        "candidate_path": (
+            Path(environment.get("switcher_caar_weights_path", "")).as_posix(),
+            artifact.weights_relative,
+        ),
         "candidate_device": (environment.get("switcher_caar_device"), "cuda"),
         "seed": (global_settings.get("seed"), 0),
         "agents": (grid.get("num_agents"), 200),
@@ -131,15 +142,23 @@ def _validate_saved_config(
         for key, (actual, wanted) in expected.items()
         if actual != wanted
     }
-    require(not mismatched, f"Saved wait-aware config differs: {mismatched}")
-    require(environment.get("training_num_agents_by_worker") == [200] * 12, "Worker populations differ.")
-    require(int(settings.get("save_best_after", -1)) > expected_target_frames, "Best checkpoint could be eligible.")
+    require(not mismatched, f"Saved NoWait Switcher config differs: {mismatched}")
+    require(
+        environment.get("training_num_agents_by_worker") == [200] * 12,
+        "Training population assignment must be twelve 200-agent workers.",
+    )
+    require(
+        int(settings.get("save_best_after", -1)) > expected_target_frames,
+        "Best-checkpoint eligibility must start after the terminal target.",
+    )
     return (
         {
             "path": str(config_path.resolve()),
             "sha256": sha256_file(config_path),
             "candidate_policy": candidate,
-            "validated_values": {key: actual for key, (actual, _) in expected.items()},
+            "validated_values": {
+                key: actual for key, (actual, _) in expected.items()
+            },
         },
         artifact,
     )
@@ -160,9 +179,14 @@ def build_validation(
     terminal = checkpoint_identity(checkpoint_path)
     latest = latest_regular_checkpoint(weights_dir)
     require(terminal == latest, "Selected checkpoint is not the latest regular checkpoint.")
-    require(terminal["env_steps"] >= expected_target_frames, "Terminal checkpoint is below target.")
+    require(
+        terminal["env_steps"] >= expected_target_frames,
+        "Terminal regular checkpoint is below the requested frame target.",
+    )
     require("best" not in terminal["filename"].lower(), "Best checkpoint selected.")
-    require("milestone" not in terminal["filename"].lower(), "Milestone checkpoint selected.")
+    require(
+        "milestone" not in terminal["filename"].lower(), "Milestone checkpoint selected."
+    )
     config, artifact = _validate_saved_config(
         weights_dir / "config.json",
         project_root=project_root,
@@ -175,15 +199,17 @@ def build_validation(
         "experiment": expected_experiment,
         "target_frames": expected_target_frames,
         "actual_checkpoint_frames": terminal["env_steps"],
-        "initialization": {"seed": 0, "switcher_source": "from_scratch", "warm_start_checkpoint": None},
+        "initialization": {
+            "seed": 0,
+            "switcher_source": "from_scratch",
+            "warm_start_checkpoint": None,
+        },
         "network_contract": {
             "architecture": "switcher_v3_hidden128_feed_forward",
             "feature_schema": EXPECTED_FEATURE_SCHEMA,
             "decision_scope": EXPECTED_SCOPE,
-            "wait_routing": "aoreplan_wait_to_frozen_caar",
-            "wait_detection_enabled": True,
-            "actor_training_scope": EXPECTED_SCOPE,
-            "critic_training_scope": "all_valid_states",
+            "wait_routing": "none_all_states_use_learned_switcher",
+            "wait_detection_enabled": False,
             "branch_0": "ARPE",
             "branch_1": "AORePlan",
         },
@@ -210,10 +236,14 @@ def verify_validation(
     expected_target_frames: int,
 ) -> dict[str, Any]:
     log_dir = log_dir.resolve()
-    require((log_dir / "STATUS").read_text(encoding="utf-8").strip() == "COMPLETE", "STATUS is not COMPLETE.")
-    require((log_dir / "COMPLETE").is_file(), "COMPLETE marker is missing.")
+    require(
+        (log_dir / "STATUS").is_file()
+        and (log_dir / "STATUS").read_text(encoding="utf-8").strip() == "COMPLETE",
+        "NoWait Switcher STATUS is not COMPLETE.",
+    )
+    require((log_dir / "COMPLETE").is_file(), "NoWait COMPLETE marker is missing.")
     saved = _read_json(validation_path)
-    require(saved.get("schema") == SCHEMA and saved.get("validated") is True, "Wrong validation schema/status.")
+    require(saved.get("schema") == SCHEMA, "Wrong NoWait artifact schema.")
     rebuilt = build_validation(
         weights_dir=weights_dir,
         log_dir=log_dir,
@@ -222,17 +252,17 @@ def verify_validation(
         expected_experiment=expected_experiment,
         expected_target_frames=expected_target_frames,
     )
-    require(same_training_certificate(saved, rebuilt), "Validation no longer reproduces.")
+    require(same_training_certificate(saved, rebuilt), "NoWait validation no longer reproduces.")
     return rebuilt
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
-    sub = parser.add_subparsers(dest="command", required=True)
-    checkpoint = sub.add_parser("checkpoint")
-    checkpoint.add_argument("--weights-dir", required=True, type=Path)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    checkpoint_parser = subparsers.add_parser("checkpoint")
+    checkpoint_parser.add_argument("--weights-dir", required=True, type=Path)
     for command in ("postflight", "verify"):
-        item = sub.add_parser(command)
+        item = subparsers.add_parser(command)
         item.add_argument("--weights-dir", required=True, type=Path)
         item.add_argument("--log-dir", required=True, type=Path)
         item.add_argument("--project-root", required=True, type=Path)

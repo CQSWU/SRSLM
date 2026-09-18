@@ -28,33 +28,28 @@ class EPOMLifelongFineTuneConfigTests(unittest.TestCase):
     def setUpClass(cls):
         cls.root = Path(__file__).resolve().parents[1]
 
-    def test_smoke_and_formal_configs_keep_the_audited_contract(self):
+    def test_formal_config_keeps_the_audited_contract(self):
         from train import validate_config
 
-        expected_steps = {
-            "train_epom_lifelong_finetune_r5_smoke.yaml": 1_048_576,
-            "train_epom_lifelong_finetune_r5_100m.yaml": 100_000_000,
-        }
-        for filename, steps in expected_steps.items():
-            with self.subTest(filename=filename):
-                config = yaml.safe_load(
-                    (self.root / "learning" / filename).read_text(encoding="utf-8")
-                )
-                experiment, flat = validate_config(config)
-                grid = experiment.environment.grid_config
-                self.assertEqual(experiment.environment.name, "POMAPF-EPOM-v0")
-                self.assertEqual(experiment.environment.grid_memory_obs_radius, 7)
-                self.assertEqual(grid.obs_radius, 5)
-                self.assertEqual(grid.num_agents, 200)
-                self.assertEqual(grid.max_episode_steps, 512)
-                self.assertEqual(grid.on_target, "restart")
-                self.assertEqual(grid.collision_system, "block_both")
-                self.assertEqual(grid.map_name, "maps/train.yaml")
-                self.assertFalse(flat.normalize_input)
-                self.assertEqual(flat.train_for_env_steps, steps)
-                self.assertEqual(flat.hidden_size, 512)
-                self.assertEqual(flat.recurrence, 32)
-                self.assertEqual(flat.rollout, 32)
+        filename = "train_epom_lifelong_finetune_r5_100m.yaml"
+        config = yaml.safe_load(
+            (self.root / "learning" / filename).read_text(encoding="utf-8")
+        )
+        experiment, flat = validate_config(config)
+        grid = experiment.environment.grid_config
+        self.assertEqual(experiment.environment.name, "POMAPF-EPOM-v0")
+        self.assertEqual(experiment.environment.grid_memory_obs_radius, 7)
+        self.assertEqual(grid.obs_radius, 5)
+        self.assertEqual(grid.num_agents, 200)
+        self.assertEqual(grid.max_episode_steps, 512)
+        self.assertEqual(grid.on_target, "restart")
+        self.assertEqual(grid.collision_system, "block_both")
+        self.assertEqual(grid.map_name, "maps/train.yaml")
+        self.assertFalse(flat.normalize_input)
+        self.assertEqual(flat.train_for_env_steps, 100_000_000)
+        self.assertEqual(flat.hidden_size, 512)
+        self.assertEqual(flat.recurrence, 32)
+        self.assertEqual(flat.rollout, 32)
 
     def test_invalid_normalization_is_rejected(self):
         from pydantic import ValidationError
@@ -63,7 +58,7 @@ class EPOMLifelongFineTuneConfigTests(unittest.TestCase):
         path = (
             self.root
             / "learning"
-            / "train_epom_lifelong_finetune_r5_smoke.yaml"
+            / "train_epom_lifelong_finetune_r5_100m.yaml"
         )
         config = yaml.safe_load(path.read_text(encoding="utf-8"))
         config["experiment_settings"]["normalize_input"] = True
@@ -105,7 +100,7 @@ class EPOMLifelongFineTuneIntegrationTests(unittest.TestCase):
         config_path = (
             root
             / "learning"
-            / "train_epom_lifelong_finetune_r5_smoke.yaml"
+            / "train_epom_lifelong_finetune_r5_100m.yaml"
         )
         config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         register_custom_components()

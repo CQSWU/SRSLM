@@ -1,78 +1,63 @@
 # Reproducibility
 
-This note covers the small public method registry. Checkpoints and experiment
-evidence are distributed separately from Git. Artifact identities and the
-retained numerical result are listed in [CURRENT_VERSION.md](../CURRENT_VERSION.md);
-fresh-run examples are in [README.md](../README.md).
+This note covers the public method registry. Checkpoints and complete experiment
+evidence are distributed separately from Git. Selected identities are listed in
+[`CURRENT_VERSION.md`](../CURRENT_VERSION.md).
 
-## Execution rules
+## Fixed method behavior
 
-Run each method separately under `block_both` and `soft` on the same grid:
-32 held-out capacity-intersection maps, populations 100/200/300/400/500/600,
-seeds 0/42/123/2024/3407, lifelong `restart`, 512 steps and radius 5. This is
-960 unique map-population-seed episodes per method and rule. Keep the same
-selected block-trained EPOM-L, ARPE and Switcher weights in both rules.
+AORePlan first obtains RePlan's dynamic proposal, including its original
+BestMove/no-path fallback. A proposal returning to the previous timestep's
+position triggers A* on the accumulated observed static map. The previous
+position is updated every step, including waits and blocked moves. If the
+static query has no first action or that action targets a currently occupied
+cell, it becomes wait. A successful move releases the relevant planner failure
+cache. New failed destinations use the retained randomized caching rule.
 
-AORePlan first obtains the dynamic planner's proposal, including BestMove.
-If there is no proposal, it uses RePlan's original random-or-stay fallback
-without a static A* query. Otherwise, a proposal that returns to the position
-at the previous timestep is reverse and triggers static-map A*. The previous
-position is recorded even after waits or blocked moves. If static A* returns
-no action, use wait. If its first step targets a currently occupied cell,
-also use wait. After these guards, keep the dynamic proposal only when the
-static proposal is still reverse; otherwise replace it, including with wait.
-This conservative occupancy check also applies under soft inside SRSLM and
-its switching ablations.
+The separately named `AORePlan-SoftNoCheck` search ablation omits the local
+occupancy check under `soft`. It is not the planner used by SRSLM.
 
-The only exception is the separately named `AORePlan-SoftNoCheck` standalone
-search ablation. Under soft it omits the extra static-step occupancy check;
-it does not change the planner inside the retained SRSLM result.
+Direct and ARPE share the frozen EPOM-L base and whole-crop, free-cell-centred
+11x11 shared trace. Direct has no trainable trace parameters. ARPE trains only
+its trace branch and independent critic while keeping EPOM-L frozen. Trace,
+grid memory, recurrent state, and planner state are cleared through their
+method-specific episode reset paths.
 
-## Learned and fixed reweighting
+SRSLM first obtains complete AORePlan and ARPE proposals. An AORePlan wait uses
+ARPE without invoking Switcher. Every other state is sent to the two-action
+Switcher. Training and inference call the same routing implementation.
 
-Paper Direct uses frozen EPOM-L, signed pressure and free-cell centering over
-the entire 11x11 trace crop. Entropy gating and clipped ReLU are separate,
-explicitly recorded options. Clipped ReLU applies after centering. Learned
-ARPE is not changed by these Direct options.
+## Evaluation grid
 
-The gated ARPE declaration is `configs/arpe_final_candidate.json`. The
-independently trained 500M-step ungated ARPE uses
-`configs/arpe_noentropy_candidate.json`; it is not the gated checkpoint with
-its gate disabled only at inference. Both use the same frozen EPOM-L base.
-The historical NoReweight backbone is a different model, not an EPOM-L alias.
+The current paper evaluation contains 36 maps:
 
-Full SRSLM, NoWait and OnlyWait share the same selected gated ARPE. NoWait
-uses its independently trained all-state Switcher. OnlyWait has no Switcher
-checkpoint. Their soft runs keep Full's conservative occupancy check.
+- `maps/eval_capacity_intersection_n600.yaml` (32 maps);
+- `maps/eval_wc3_extra3.yaml` (three resized MovingAI WC3 maps);
+- `maps/eval_wc3_extra1_timbermawhold.yaml` (one resized MovingAI WC3 map).
 
-Declarations identify required artifacts; they do not supply the files.
-Verify the checkpoint and config hashes before inference. New training needs
-new run directories, artifact declarations and hashes. A recorded recipe
-does not promise byte-identical regeneration of a historical checkpoint.
+For each method and execution rule, run populations
+100/200/300/400/500/600 and seeds 0/42/123/2024/3407 with lifelong `restart`,
+512 steps, and radius 5. The complete grid therefore has 1,080 unique rows.
+Evaluate `block_both` and `soft` separately with the same selected learned
+weights. The older 32-map bundles contain 960 rows and remain separately named
+historical evidence.
 
-## Result evidence
+## Result audit
 
-The separate [quick timing comparison](QUICK_TIMING.md) measures 16 joint
-action calls on one map, three populations and one seed. It is not an
-exact960 experiment and is not subject to a 960-row completeness claim.
-Its full-precision aggregate table and evidence identifiers are recorded
-with that narrower protocol.
+Before using a result, require:
 
-For each exact960 result, check the exact grid and execution rule, all 960 unique
-finite error-free rows, selected checkpoint/config hashes and method-specific
-episode reset behavior. Keep the original source snapshot and validation
-records bound to the raw result. Where an original journal exists, compare
-every episode with the reported rows. Do not accept an incomplete soft arm
-as a completed ablation or infer correctness from a COMPLETE marker alone.
+1. the exact map/population/seed grid and execution rule;
+2. unique, finite, error-free rows;
+3. the original map, source, configuration, and checkpoint hashes;
+4. method-specific reset checks for recurrent, trace, grid-memory, and planner
+   state;
+5. the run's original journal and validation record when available.
 
-Historical raw rows, source hashes and limitations stay unchanged. A new
-validator, documentation update or current source tree cannot establish
-missing historical evidence retroactively. Explicitly report unavailable
-source or journal records instead of presenting reconstructed records as
-original evidence. Current curated source and an original frozen run may
-have different hashes; identify which one an experiment actually used.
+A completion marker alone is not validation. Current source or newly written
+documentation cannot retroactively fill a missing historical source snapshot.
+Keep each completed output directory immutable and report evidence gaps rather
+than reconstructing provenance as if it were original.
 
-This public source release does not include external comparison adapters,
-third-party checkpoints or private experiment bundles. Their original
-licenses and separate reproducibility requirements remain applicable; they
-are not brought under this project's license by a documentation update.
+The public release does not include external comparison adapters, third-party
+checkpoints, or private experiment bundles. Their licenses and reproduction
+requirements remain separate.

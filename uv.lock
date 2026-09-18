@@ -22,6 +22,54 @@ wheels = [
 ]
 
 [[package]]
+name = "arpe-pomapf"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "cppimport" },
+    { name = "gymnasium" },
+    { name = "numpy" },
+    { name = "pogema" },
+    { name = "pybind11" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "sample-factory" },
+    { name = "torch" },
+]
+
+[package.optional-dependencies]
+baselines = [
+    { name = "cython" },
+    { name = "gym" },
+    { name = "imageio" },
+    { name = "protobuf" },
+    { name = "setproctitle" },
+]
+test = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cppimport", specifier = ">=22.8.2" },
+    { name = "cython", marker = "extra == 'baselines'", specifier = "==0.29.28" },
+    { name = "gym", marker = "extra == 'baselines'", specifier = "==0.10.5" },
+    { name = "gymnasium", specifier = "==0.28.1" },
+    { name = "imageio", marker = "extra == 'baselines'", specifier = "==2.9.0" },
+    { name = "numpy", specifier = "==1.26.4" },
+    { name = "pogema", specifier = "==1.4.0" },
+    { name = "protobuf", marker = "extra == 'baselines'", specifier = "==3.20.3" },
+    { name = "pybind11", specifier = ">=2.10" },
+    { name = "pydantic", specifier = "==1.9.1" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<9" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "sample-factory", specifier = "==2.1.1" },
+    { name = "setproctitle", marker = "extra == 'baselines'", specifier = "==1.2.2" },
+    { name = "torch", specifier = "==2.8.0" },
+]
+provides-extras = ["baselines", "test"]
+
+[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -118,6 +166,19 @@ dependencies = [
     { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3b/71/07103183044d791dc8971387d34453c5237270807a96a3548878d624cd78/cppimport-26.4.17.tar.gz", hash = "sha256:1fd9c1f16b2cf346507ef81b17f9b4947ddf0d5818b26f6c03078e8e7b366444", size = 28620, upload-time = "2026-04-17T08:38:06.466Z" }
+
+[[package]]
+name = "cython"
+version = "0.29.28"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/cb/da/54a5d7a7d9afc90036d21f4b58229058270cc14b4c81a86d9b2c77fd072e/Cython-0.29.28.tar.gz", hash = "sha256:d6fac2342802c30e51426828fe084ff4deb1b3387367cf98976bb2e64b6f8e45", size = 2081368, upload-time = "2022-02-17T10:59:54.364Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/67/62de5606441f64653fc7f2e363621a2a97c23dc8507341c855ba6256dafd/Cython-0.29.28-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_24_aarch64.whl", hash = "sha256:31465dce7fd3f058d02afb98b13af962848cc607052388814428dc801cc26f57", size = 1841595, upload-time = "2022-02-17T11:00:20.523Z" },
+    { url = "https://files.pythonhosted.org/packages/94/6a/0d66e2d9cf405c87c74d1d29439c4910d3d1895fb122667920a4012d0bda/Cython-0.29.28-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_24_x86_64.whl", hash = "sha256:5658fa477e80d96c49d5ff011938dd4b62da9aa428f771b91f1a7c49af45aad8", size = 1945181, upload-time = "2022-02-17T11:00:23.208Z" },
+    { url = "https://files.pythonhosted.org/packages/76/39/5ae5a29f1afb00f2e6300d501092af99d568e34d5e932a05b16559bd59ef/Cython-0.29.28-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.manylinux_2_24_i686.whl", hash = "sha256:33b69ac9bbf2b93d8cae336cfe48889397a857e6ceeb5cef0b2f0b31b6c54f2b", size = 1946815, upload-time = "2022-02-17T11:00:26.014Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/25/d629ea45a0c518d9414e13b7b9c1c2f446725734d1925e8228e002535a68/Cython-0.29.28-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:9d39ee7ddef6856413f950b8959e852d83376d9db1c509505e3f4873df32aa70", size = 2050463, upload-time = "2022-02-17T11:00:28.242Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/79/311cfbca90332ab37ef8ea08f1af3266f20a9a0e7a1d652842db832226bb/Cython-0.29.28-py2.py3-none-any.whl", hash = "sha256:26d8d0ededca42be50e0ac377c08408e18802b1391caa3aea045a72c1bff47ac", size = 983774, upload-time = "2022-02-17T10:59:49.319Z" },
+]
 
 [[package]]
 name = "exceptiongroup"
@@ -234,6 +295,18 @@ wheels = [
 ]
 
 [[package]]
+name = "gym"
+version = "0.10.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pyglet" },
+    { name = "requests" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9b/50/ed4a03d2be47ffd043be2ee514f329ce45d98a30fe2d1b9c61dea5a9d861/gym-0.10.5.tar.gz", hash = "sha256:6baf3f3b163e237869d92a64daeaa88f14f62bb1105863e45312505a19dbd652", size = 1527704, upload-time = "2018-04-05T14:58:14.418Z" }
+
+[[package]]
 name = "gymnasium"
 version = "0.28.1"
 source = { registry = "https://pypi.org/simple" }
@@ -291,6 +364,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cd/63/9496c57188a2ee585e0f1db071d75089a11e98aa86eb99d9d7618fc1edce/idna-3.18.tar.gz", hash = "sha256:ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848", size = 196711, upload-time = "2026-06-02T14:34:07.794Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/5e/d4e9f1a599fb8e573b7b87160658329fbf28d19eac2718f51fc3def3aa5a/idna-3.18-py3-none-any.whl", hash = "sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2", size = 65455, upload-time = "2026-06-02T14:34:06.319Z" },
+]
+
+[[package]]
+name = "imageio"
+version = "2.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c3/73/f37f428748c4f10a7991ac5bff00f113a34bcc0d0a78957d6e1cdc29a94e/imageio-2.9.0.tar.gz", hash = "sha256:52ddbaeca2dccf53ba2d6dec5676ca7bc3b2403ef8b37f7da78b7654bb3e10f0", size = 3341646, upload-time = "2020-07-06T13:20:38.425Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/57/5d899fae74c1752f52869b613a8210a2480e1a69688e65df6cb26117d45d/imageio-2.9.0-py3-none-any.whl", hash = "sha256:3604d751f03002e8e0e7650aa71d8d9148144a87daf17cb1f3228e80747f2e6b", size = 3308141, upload-time = "2020-07-06T13:20:41.546Z" },
 ]
 
 [[package]]
@@ -828,6 +914,12 @@ wheels = [
 ]
 
 [[package]]
+name = "setproctitle"
+version = "1.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/7f/a1d4f4c7b66f0fc02f35dc5c85f45a8b4e4a7988357a29e61c14e725ef86/setproctitle-1.2.2.tar.gz", hash = "sha256:7dfb472c8852403d34007e01d6e3c68c57eb66433fb8a5c77b13b89a160d97df", size = 23960, upload-time = "2021-01-23T03:52:36.135Z" }
+
+[[package]]
 name = "setuptools"
 version = "83.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -849,6 +941,15 @@ wheels = [
 ]
 
 [[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
 name = "smmap"
 version = "5.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -856,42 +957,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/1f/ea/49c993d6dfdd7338c
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c1/d4/59e74daffcb57a07668852eeeb6035af9f32cbfd7a1d2511f17d2fe6a738/smmap-5.0.3-py3-none-any.whl", hash = "sha256:c106e05d5a61449cf6ba9a1e650227ecfb141590d2a98412103ff35d89fc7b2f", size = 24390, upload-time = "2026-03-09T03:43:24.361Z" },
 ]
-
-[[package]]
-name = "srlsm"
-version = "1.0.0"
-source = { editable = "." }
-dependencies = [
-    { name = "cppimport" },
-    { name = "gymnasium" },
-    { name = "numpy" },
-    { name = "pogema" },
-    { name = "pybind11" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "sample-factory" },
-    { name = "torch" },
-]
-
-[package.optional-dependencies]
-test = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cppimport", specifier = ">=22.8.2" },
-    { name = "gymnasium", specifier = "==0.28.1" },
-    { name = "numpy", specifier = "==1.26.4" },
-    { name = "pogema", specifier = "==1.4.0" },
-    { name = "pybind11", specifier = ">=2.10" },
-    { name = "pydantic", specifier = "==1.9.1" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<9" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "sample-factory", specifier = "==2.1.1" },
-    { name = "torch", specifier = "==2.8.0" },
-]
-provides-extras = ["test"]
 
 [[package]]
 name = "sympy"
