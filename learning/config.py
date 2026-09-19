@@ -289,7 +289,7 @@ class Evaluation(BaseModel, extra=Extra.forbid):
 
     policy_index: int = 0
 
-    env_frameskip: Optional[int] = None
+    env_frameskip: int = Field(1, ge=1)
 
 
 
@@ -502,9 +502,10 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     f'{settings.trace_context_architecture!r} requires '
                     'tau_raw=false.'
                 )
-            if environment.trace_variant != 'real':
+            if environment.trace_variant not in {'real', 'zero'}:
                 raise ValueError(
-                    "EPOM trace-context training requires trace_variant='real'."
+                    "EPOM trace-context training supports trace_variant='real' "
+                    "or the capacity-matched 'zero' control."
                 )
             if not np.isfinite(
                 environment.trace_context_team_reward_coefficient

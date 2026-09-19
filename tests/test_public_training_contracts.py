@@ -25,6 +25,21 @@ def _recipe():
     return yaml.safe_load(path.read_text())
 
 
+def test_zero_trace_control_is_capacity_and_budget_matched():
+    root = Path(__file__).resolve().parents[1]
+    real = _recipe()
+    zero = yaml.safe_load(
+        (root / 'learning/train_arpe_zero_trace.yaml').read_text()
+    )
+    assert zero['environment']['trace_variant'] == 'zero'
+
+    zero['name'] = real['name']
+    zero['global_settings']['train_dir'] = real['global_settings']['train_dir']
+    zero['environment']['trace_variant'] = 'real'
+    real['environment']['trace_variant'] = 'real'
+    assert zero == real
+
+
 @pytest.mark.parametrize('kind', ['epom_trace', 'nonexistent_trace'])
 def test_retired_or_unknown_encoder_is_rejected_by_schema_and_factories(kind):
     raw = _recipe()

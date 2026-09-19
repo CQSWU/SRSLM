@@ -49,7 +49,9 @@ def _grid(**changes):
 def environment_factory(monkeypatch):
     created = []
 
-    def factory(grid=None, *, auto_reset=True, raw_tau=False):
+    def factory(
+        grid=None, *, auto_reset=True, raw_tau=False, trace_variant='real'
+    ):
         grid = _grid() if grid is None else grid
         # Keep the actual training factory/observation stack; only select the
         # already-supported inner environment reset contract for this test.
@@ -70,6 +72,7 @@ def environment_factory(monkeypatch):
                     'tau_rho': 0.1,
                     'tau_radius': 5,
                     'tau_raw': raw_tau,
+                    'trace_variant': trace_variant,
                 }
             },
         )
@@ -83,6 +86,21 @@ def environment_factory(monkeypatch):
     yield factory
     for env in created:
         env.close()
+
+
+def test_zero_trace_control_preserves_shape_and_free_mask(environment_factory):
+    env, trace = environment_factory(trace_variant='zero')
+    observations, _ = env.reset()
+    assert trace.variant.variant == 'zero'
+    for observation in observations:
+        assert observation['tau'].shape == (1, 11, 11)
+        assert not np.any(observation['tau'])
+        assert observation['tau_free_mask'].shape == (1, 11, 11)
+        assert np.any(observation['tau_free_mask'])
+
+    observations, *_ = env.step([0, 0])
+    for observation in observations:
+        assert not np.any(observation['tau'])
 
 
 def _assert_first_frame(trace, observations):

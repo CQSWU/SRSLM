@@ -32,6 +32,7 @@ from sample_factory.model.model_utils import get_rnn_size
 
 from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
 from learning.grid_memory import MultipleGridMemory
+from pomapf_env.trace_variant import TraceVariant
 from pomapf_env.wrappers import MatrixObservationWrapper
 
 
@@ -56,6 +57,7 @@ def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
 
     radius = environment.get("tau_radius")
     raw_tau = environment.get("tau_raw")
+    trace_variant = environment.get("trace_variant", "real")
     if radius != TRACE_RADIUS:
         raise RuntimeError(
             "EPOM-TraceContext inference is fixed to the paper's 11x11 trace "
@@ -71,11 +73,17 @@ def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
             f"architecture={architecture!r} requires "
             f"tau_raw={expected_raw_tau!r}, got {raw_tau!r}."
         )
+    if trace_variant not in {"real", "zero"}:
+        raise RuntimeError(
+            "EPOM-TraceContext inference supports the paper trace or the "
+            f"capacity-matched zero-trace control, got {trace_variant!r}."
+        )
     return {
         "tau_radius": TRACE_RADIUS,
         "tau_size": TRACE_SIZE,
         "tau_raw": expected_raw_tau,
         "trace_context_architecture": architecture,
+        "trace_variant": trace_variant,
     }
 
 
@@ -115,6 +123,9 @@ class EPOMTraceContext(PolicyBackbone):
         # assertion therefore verifies the actual checkpoint family rather
         # than trusting a command-line radius.
         self._trace_contract = _read_r5_trace_contract(self.config_path)
+        self._trace_variant = TraceVariant(
+            self._trace_contract["trace_variant"], seed=int(algo_cfg.seed)
+        )
         gate_override = getattr(
             self.ppo, "set_inference_learned_gate_override", None
         )
@@ -248,6 +259,7 @@ class EPOMTraceContext(PolicyBackbone):
             raw_tau=bool(self._trace_contract["tau_raw"]),
             radius=TRACE_RADIUS,
         )
+        self._trace_variant.apply(observations)
         self._add_exact_free_mask(observations, positions)
         for observation in observations:
             if observation["tau"].shape != (1, TRACE_SIZE, TRACE_SIZE):
