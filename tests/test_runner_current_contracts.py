@@ -58,15 +58,19 @@ def test_main_supplies_selected_rule_to_srslm_contract():
     assert ast.unparse(calls[0].args[1]) == 'args.collision_system'
 
 
-def test_direct_uses_epom_l_and_only_the_selected_top2_rule():
+def test_direct_uses_epom_l_and_only_the_selected_top2_rule(tmp_path):
     with patch('agents.epom_direct_reweight.EPOMDirectReweight') as policy:
         runner.build_algorithm('Direct', '.', 42, epom_weights_path='weights/base')
     cfg = policy.call_args.args[0]
     assert cfg.artifact_profile == 'lifelong_finetuned'
     assert Path(cfg.path_to_weights).is_absolute()
     assert cfg.reweight_bonus == 1.0
+    weights = tmp_path / 'weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5'
+    (weights / 'checkpoint_p0').mkdir(parents=True)
+    (weights / 'config.json').write_text('{}')
+    (weights / 'checkpoint_p0/checkpoint.pth').touch()
     with patch('agents.epom_direct_reweight.EPOMDirectReweight') as auto_policy:
-        runner.build_algorithm('Direct', Path(__file__).resolve().parents[1], 42)
+        runner.build_algorithm('Direct', tmp_path, 42)
     auto_cfg = auto_policy.call_args.args[0]
     assert auto_cfg.path_to_weights.endswith('EPOM-Lifelong-Finetune-R5')
 
