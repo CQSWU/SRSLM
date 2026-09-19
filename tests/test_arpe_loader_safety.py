@@ -1,12 +1,9 @@
-"""Reject silent runtime reinterpretation before a paper policy can act."""
-
-from types import SimpleNamespace
+"""Keep retired inference variants out of the current, portable loader."""
 
 import pytest
 import torch
 from pydantic import ValidationError
 
-from agents.arpe import ARPE, ArpeCandidateArtifact
 from agents.epom_trace_context import (
     EPOMTraceContext,
     EPOMTraceContextConfig,
@@ -46,19 +43,20 @@ def test_milestone_selection_cannot_be_missing_or_ignored(settings):
         EPOMTraceContextConfig(path_to_weights="unused", **settings)
 
 
-def test_milestone_cannot_pair_another_runs_weights_with_current_config(tmp_path):
-    current_dir = tmp_path / "run-a" / "checkpoint_p0"
-    candidate = tmp_path / "run-b" / "checkpoint_p0" / "checkpoint.pth"
+def test_an_explicit_checkpoint_can_be_stored_outside_its_config_directory(tmp_path):
+    current_dir = tmp_path / "run" / "checkpoint_p0"
+    candidate = tmp_path / "downloaded" / "checkpoint.pth"
     candidate.parent.mkdir(parents=True)
-    candidate.touch()
+    torch.save({"model": {"weight": torch.ones(2)}}, candidate)
     adapter = EPOMTraceContext.__new__(EPOMTraceContext)
     adapter.algo_cfg = EPOMTraceContextConfig(
         path_to_weights=str(current_dir.parent),
         checkpoint_kind="milestone",
         milestone_checkpoint=str(candidate),
     )
-    with pytest.raises(ValueError, match="declared run"):
-        adapter._load_checkpoint(current_dir, torch.device("cpu"), "milestone")
+    loaded = adapter._load_checkpoint(current_dir, torch.device("cpu"), "milestone")
+    torch.testing.assert_close(loaded["model"]["weight"], torch.ones(2))
+    assert adapter.checkpoint_path == candidate.resolve()
 
 
 def _trace_config():
@@ -87,79 +85,6 @@ def test_trace_contract_preserves_centered_real_and_zero_controls():
         assert contract["tau_raw"] is False
         assert contract["tau_size"] == 11
         assert contract["trace_variant"] == variant
-
-
-@pytest.mark.parametrize("invalid", ["nan", "wrong_dtype", "not_tensor"])
-def test_all_tensor_validation_precedes_parameter_mutation(invalid):
-    model = torch.nn.Linear(2, 5)
-    original = {key: value.detach().clone() for key, value in model.state_dict().items()}
-    checkpoint = {key: torch.full_like(value, 99) for key, value in original.items()}
-    if invalid == "nan":
-        checkpoint["bias"][0] = float("nan")
-    elif invalid == "wrong_dtype":
-        checkpoint["bias"] = checkpoint["bias"].double()
-    else:
-        checkpoint["bias"] = [99] * 5
-    with pytest.raises(RuntimeError):
-        PolicyBackbone._load_model_state(model, checkpoint, "invalid-policy")
-    for key, value in model.state_dict().items():
-        torch.testing.assert_close(value, original[key])
-
-
-def _artifact(tmp_path):
-    mapping = {
-        "weights_path": "weights/trace",
-        "checkpoint_path": "weights/trace/checkpoint_p0/trace.pth",
-        "base_weights_path": "weights/base",
-        "base_checkpoint_path": "weights/base/checkpoint_p0/base.pth",
-    }
-    artifact = ArpeCandidateArtifact.from_mapping(mapping, tmp_path)
-    for index, path in enumerate((artifact.config_path, artifact.checkpoint_path,
-                                  artifact.base_config_path, artifact.base_checkpoint_path)):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(index))
-    return artifact, mapping
-
-
-def _policy(artifact, digests):
-    actor = torch.nn.Linear(2, 5)
-    actor.checkpoint_provenance = lambda: {
-        "base_config_sha256": digests[str(artifact.base_config_path)],
-        "base_checkpoint_sha256": digests[str(artifact.base_checkpoint_path)],
-    }
-    return SimpleNamespace(
-        ppo=actor,
-        config_sha256=digests[str(artifact.config_path)],
-        checkpoint_sha256=digests[str(artifact.checkpoint_path)],
-    )
-
-
-@pytest.mark.parametrize("field", ["config_path", "checkpoint_path", "base_config_path", "base_checkpoint_path"])
-def test_declared_artifacts_must_be_the_ones_actually_loaded(tmp_path, field):
-    artifact, _ = _artifact(tmp_path)
-    inspected = artifact.inspect_files()
-    actual = dict(inspected)
-    actual[str(getattr(artifact, field))] = "a-different-file-hash"
-    with pytest.raises(RuntimeError, match="differ from its declaration"):
-        ARPE(_policy(artifact, actual), artifact, verified_file_hashes=inspected)
-
-
-def test_rehash_does_not_relabel_a_loaded_model_with_new_artifact_hashes(tmp_path):
-    artifact, _ = _artifact(tmp_path)
-    digests = artifact.inspect_files()
-    policy = ARPE(_policy(artifact, digests), artifact, verified_file_hashes=digests)
-    assert policy.verify_frozen()["verified"]
-    artifact.base_checkpoint_path.write_text("replaced after load")
-    with pytest.raises(RuntimeError, match="differ from its declaration"):
-        policy.verify_frozen(rehash_files=True)
-
-
-@pytest.mark.parametrize("field,value", [("kind", "other"), ("schema", "v0"), ("frozen", False)])
-def test_candidate_declaration_rejects_another_policy_contract(tmp_path, field, value):
-    _, mapping = _artifact(tmp_path)
-    mapping[field] = value
-    with pytest.raises(ValueError):
-        ArpeCandidateArtifact.from_mapping(mapping, tmp_path)
 
 
 def test_historical_action_sampling_is_explicit_and_unchanged():

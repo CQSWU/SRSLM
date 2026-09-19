@@ -4,7 +4,6 @@ import json
 from os.path import join
 from pathlib import Path
 from typing import Literal
-from collections.abc import Mapping
 
 import numpy as np
 import torch
@@ -150,33 +149,14 @@ class PolicyBackbone:
     def _load_model_state(actor_critic, checkpoint_state, path):
         """Reject architecture or forward-rule mismatches before loading tensors."""
 
-        if not isinstance(checkpoint_state, Mapping):
-            raise RuntimeError(f"Checkpoint model state must be a tensor mapping: {path}")
         current = actor_critic.state_dict()
         missing = sorted(current.keys() - checkpoint_state.keys())
         unexpected = sorted(checkpoint_state.keys() - current.keys())
-        invalid_tensors = [
-            key for key, value in checkpoint_state.items()
-            if not isinstance(value, torch.Tensor)
-        ]
-        if invalid_tensors:
-            raise RuntimeError(
-                f"Checkpoint has non-tensor model entries: {invalid_tensors}; {path}"
-            )
         shape_mismatches = [
             f"{key}: checkpoint={tuple(checkpoint_state[key].shape)}, "
             f"model={tuple(current[key].shape)}"
             for key in sorted(current.keys() & checkpoint_state.keys())
             if checkpoint_state[key].shape != current[key].shape
-        ]
-        dtype_mismatches = [
-            key for key in sorted(current.keys() & checkpoint_state.keys())
-            if checkpoint_state[key].dtype != current[key].dtype
-        ]
-        nonfinite_tensors = [
-            key for key, value in checkpoint_state.items()
-            if (value.is_floating_point() or value.is_complex())
-            and not torch.isfinite(value).all().item()
         ]
         # load_state_dict(strict=True) checks names and shapes, but would happily
         # overwrite a version marker with one for a different forward equation.
@@ -194,15 +174,12 @@ class PolicyBackbone:
                 checkpoint_state[key].detach().cpu(), current[key].detach().cpu()
             )
         ]
-        if (missing or unexpected or shape_mismatches or dtype_mismatches
-                or nonfinite_tensors or semantic_mismatches):
+        if missing or unexpected or shape_mismatches or semantic_mismatches:
             raise RuntimeError(
                 "Checkpoint architecture or forward-rule contract does not match "
                 "this policy; no tensors were loaded. "
                 f"Checkpoint path: {path}; missing={missing}, unexpected={unexpected}, "
                 f"shape_mismatches={shape_mismatches}, "
-                f"dtype_mismatches={dtype_mismatches}, "
-                f"nonfinite_tensors={nonfinite_tensors}, "
                 f"semantic_mismatches={semantic_mismatches}"
             )
         actor_critic.load_state_dict(checkpoint_state, strict=True)

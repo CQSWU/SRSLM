@@ -158,11 +158,6 @@ class EPOMTraceContext(PolicyBackbone):
             project_root = Path(__file__).resolve().parents[1]
             candidate = project_root / candidate
         candidate = candidate.resolve()
-        if candidate.parent != Path(checkpoint_dir).resolve():
-            raise ValueError(
-                "Milestone checkpoint must belong to the declared run and policy "
-                f"directory {Path(checkpoint_dir).resolve()}: {candidate}"
-            )
         if not candidate.is_file():
             raise FileNotFoundError(
                 f"Missing requested milestone checkpoint: {candidate}"

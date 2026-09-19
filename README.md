@@ -12,7 +12,7 @@ Python 3.10 or 3.11 and a C++ compiler are required.
 ```bash
 git clone https://github.com/CQSWU/SRSLM.git
 cd SRSLM
-uv sync --extra test
+uv sync
 ```
 
 The planner extension is compiled automatically on first use.
@@ -29,6 +29,7 @@ uv run python run_experiments.py \
 
 For EPOM-L, Direct, ARPE, and SRSLM, place the released `weights/` directory
 in the project root before running the evaluator.
+Custom compatible weights are supported; recorded hashes do not restrict loading.
 
 ## Training
 

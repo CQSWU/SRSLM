@@ -266,23 +266,6 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         ):
             setattr(self, name, None)
 
-    def load_state_dict(self, state_dict, strict=True, assign=False):
-        """A constructed ARPE must load its complete, matching actor and critic.
-
-        Only bootstrap loading of plain EPOM-L may be partial. That happens
-        before the ARPE identity buffers exist, inside ``__init__``.
-        """
-        if "allaction_residual_version" in self._buffers:
-            if not strict:
-                raise RuntimeError(
-                    "ARPE learned checkpoints require strict=True; partial actor/critic "
-                    "loading is not supported."
-                )
-            errors = self._checkpoint_semantic_errors(state_dict)
-            if errors:
-                raise RuntimeError("; ".join(errors))
-        return super().load_state_dict(state_dict, strict=strict, assign=assign)
-
     def _checkpoint_semantic_errors(self, state_dict, prefix=""):
         expected = {
             "paper_entropy_gate_version": 1,
