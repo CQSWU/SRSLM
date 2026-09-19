@@ -25,10 +25,7 @@ AORePlan does not require pretrained weights:
 uv run python run_experiments.py \
   --algorithms RePlan,AORePlan \
   --map-types wc3 --map wc3=wc3-128x64-TimbermawHold \
-  --agents 16 --seeds 0 --workers 1 \
-  --obs-radius 5 --max-steps 128 \
-  --on-target restart --collision-system block_both \
-  --output-dir results --output example.json
+  --agents 16
 ```
 
 For EPOM-L, Direct, ARPE, and SRSLM, place the released `weights/` directory
