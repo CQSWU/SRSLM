@@ -15,6 +15,16 @@ if sys.platform != "win32":
     BACKENDS.append(("native", NativePlanner))
 
 
+class FixedCacheRng:
+    def __init__(self, value=0.0):
+        self.value = float(value)
+        self.calls = 0
+
+    def random(self):
+        self.calls += 1
+        return self.value
+
+
 def observation(target=(0, 2), *, occupied=(), walls=()):
     obstacles = np.zeros((11, 11), dtype=np.int8)
     agents = np.zeros_like(obstacles)
@@ -31,7 +41,36 @@ def observation(target=(0, 2), *, occupied=(), walls=()):
 @pytest.fixture(params=BACKENDS, ids=[name for name, _ in BACKENDS])
 def base(request, monkeypatch):
     monkeypatch.setattr(ao, "planner", request.param[1])
-    return ao.AORePlanBase(max_steps=1000, seed=0)
+    result = ao.AORePlanBase(max_steps=1000, seed=0)
+    # These tests isolate cache lifetime and release from admission sampling.
+    result.failure_cache_rnd = FixedCacheRng(0.0)
+    return result
+
+
+@pytest.mark.parametrize(
+    "backend",
+    [item[1] for item in BACKENDS],
+    ids=[item[0] for item in BACKENDS],
+)
+def test_randomized_failure_cache_admission_controls_retry(backend, monkeypatch):
+    monkeypatch.setattr(ao, "planner", backend)
+
+    declined = ao.AORePlanBase(max_steps=1000, seed=0)
+    declined.failure_cache_rnd = FixedCacheRng(0.75)
+    assert declined.act(observation()) == [4]
+    declined.commit_proposals([True])
+    # The failed right move was not admitted, so it can be proposed again.
+    assert declined.act(observation()) == [4]
+    assert declined.failure_cache_rnd.calls == 1
+
+    admitted = ao.AORePlanBase(max_steps=1000, seed=0)
+    admitted.failure_cache_rnd = FixedCacheRng(0.25)
+    assert admitted.act(observation()) == [4]
+    admitted.commit_proposals([True])
+    # The same physical failure was admitted and is avoided on the retry.
+    retry = admitted.act(observation())[0]
+    assert retry is not None and retry != 4
+    assert admitted.failure_cache_rnd.calls == 1
 
 
 def exhaust_four_directions(base):

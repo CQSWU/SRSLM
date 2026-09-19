@@ -13,8 +13,9 @@ repositories are distributed separately and are not committed here.
 - **RePlan** is the original dynamic replanning baseline.
 - **AORePlan** checks a reverse proposal with A* on the accumulated static map.
   A missing or locally conflicting static first step becomes wait; the original
-  RePlan no-path fallback is otherwise preserved. The planner also contains the
-  current cache-release and randomized failure-caching fixes.
+  RePlan no-path fallback is otherwise preserved. A separate seeded coin admits
+  each physically failed proposal to the failure cache with probability 0.5;
+  this is independent of exhausted-cache release and the no-path fallback.
 - **EPOM-L** is the lifelong fine-tuned recurrent base policy used by Direct and
   ARPE.
 - **Direct** applies a parameter-free shared-trace correction to frozen EPOM-L.

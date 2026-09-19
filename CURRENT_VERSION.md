@@ -10,7 +10,10 @@ third-party repositories are outside the Git release.
 
 - AORePlan uses the accumulated observed static map, current reverse detection,
   conservative local occupancy check, cache-release fix, and randomized failure
-  caching.
+  caching. When a submitted dynamic-planner proposal fails to move, a separate
+  seeded coin admits that destination to the failure cache with probability
+  0.5. This admission rule is separate from both exhausted-cache release and
+  the original random no-path fallback.
 - ARPE uses the selected `paper_entropy_fusion` trace branch on a frozen EPOM-L
   base. Trace state is cleared at every episode boundary.
 - SRSLM uses ARPE immediately for an AORePlan wait; otherwise Switcher samples

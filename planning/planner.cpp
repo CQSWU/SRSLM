@@ -57,10 +57,14 @@ class planner {
     {
         return desired_position.first < INF;
     }
-    void consume_execution_feedback(std::pair<int, int> s)
+    void consume_execution_feedback(std::pair<int, int> s,
+                                    bool cache_failed_action)
     {
         if(desired_position != s) {
-            bad_actions.insert(desired_position);
+            // The seeded Python-side controller makes the randomized
+            // admission decision. Once admitted, cache lifetime is unchanged.
+            if(cache_failed_action)
+                bad_actions.insert(desired_position);
             if (start == s)
                 for (auto bad_a: bad_actions)
                     other_agents.insert(bad_a);
@@ -130,10 +134,15 @@ public:
         for(auto o:_other_agents)
             other_agents.insert({cur_pos.first + o.first, cur_pos.second + o.second});
     }
-    void observe_position(std::pair<int, int> s)
+    bool proposal_failed(std::pair<int, int> s) const
+    {
+        return has_desired_position() and desired_position != s;
+    }
+    void observe_position(std::pair<int, int> s,
+                          bool cache_failed_action=true)
     {
         if(has_desired_position())
-            consume_execution_feedback(s);
+            consume_execution_feedback(s, cache_failed_action);
     }
     void plan_path(std::pair<int, int> s, std::pair<int, int> g)
     {
@@ -161,10 +170,11 @@ public:
         // dynamic occupancy before the next planning step.
         bad_actions.clear();
     }
-    void update_path(std::pair<int, int> s, std::pair<int, int> g)
+    void update_path(std::pair<int, int> s, std::pair<int, int> g,
+                     bool cache_failed_action=true)
     {
         if(has_desired_position())
-            consume_execution_feedback(s);
+            consume_execution_feedback(s, cache_failed_action);
         else
             bad_actions.clear();
         plan_path(s, g);
@@ -220,11 +230,15 @@ PYBIND11_MODULE(planner, m) {
     py::class_<planner>(m, "planner")
             .def(py::init<int>())
             .def("update_obstacles", &planner::update_obstacles)
-            .def("observe_position", &planner::observe_position)
+            .def("proposal_failed", &planner::proposal_failed)
+            .def("observe_position", &planner::observe_position,
+                 py::arg("position"), py::arg("cache_failed_action")=true)
             .def("plan_path", &planner::plan_path)
             .def("cancel_desired", &planner::cancel_desired)
             .def("release_failed_actions", &planner::release_failed_actions)
-            .def("update_path", &planner::update_path)
+            .def("update_path", &planner::update_path,
+                 py::arg("start"), py::arg("goal"),
+                 py::arg("cache_failed_action")=true)
             .def("update_static_path", &planner::update_static_path)
             .def("get_path", &planner::get_path)
             .def("get_next_node", &planner::get_next_node);

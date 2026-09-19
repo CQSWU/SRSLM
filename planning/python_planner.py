@@ -42,10 +42,15 @@ class planner:
     def _has_desired_position(self) -> bool:
         return self.desired_position[0] < INF
 
-    def _consume_execution_feedback(self, position) -> None:
+    def _consume_execution_feedback(
+        self,
+        position,
+        cache_failed_action: bool = True,
+    ) -> None:
         position = _pair(position)
         if self.desired_position != position:
-            self.bad_actions.add(self.desired_position)
+            if cache_failed_action:
+                self.bad_actions.add(self.desired_position)
             if self.start == position:
                 self.other_agents.update(self.bad_actions)
         else:
@@ -131,9 +136,17 @@ class planner:
             ai, aj = _pair(agent)
             self.other_agents.add((cur_pos[0] + ai, cur_pos[1] + aj))
 
-    def observe_position(self, position: Sequence[int]) -> None:
+    def proposal_failed(self, position: Sequence[int]) -> bool:
+        position = _pair(position)
+        return self._has_desired_position() and self.desired_position != position
+
+    def observe_position(
+        self,
+        position: Sequence[int],
+        cache_failed_action: bool = True,
+    ) -> None:
         if self._has_desired_position():
-            self._consume_execution_feedback(position)
+            self._consume_execution_feedback(position, cache_failed_action)
 
     def plan_path(
         self,
@@ -162,9 +175,10 @@ class planner:
         self,
         start: Sequence[int],
         goal: Sequence[int],
+        cache_failed_action: bool = True,
     ) -> None:
         if self._has_desired_position():
-            self._consume_execution_feedback(start)
+            self._consume_execution_feedback(start, cache_failed_action)
         else:
             self.bad_actions.clear()
         self.plan_path(start, goal)

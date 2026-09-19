@@ -16,6 +16,8 @@ else:
 
 
 INF = 1_000_000_000
+FAILURE_CACHE_PROBABILITY = 0.5
+_FAILURE_CACHE_SEED_SALT = 0xFA11CA
 
 
 class AORePlanBase:
@@ -30,6 +32,14 @@ class AORePlanBase:
         self.planner = None
         self.max_steps = int(max_steps)
         self.rnd = np.random.default_rng(seed)
+        cache_seed = (
+            None
+            if seed is None
+            else np.random.SeedSequence([int(seed), _FAILURE_CACHE_SEED_SALT])
+        )
+        # Keep cache admission independent from the original no-path fallback
+        # RNG, so the new coin does not change that fallback's random stream.
+        self.failure_cache_rnd = np.random.default_rng(cache_seed)
 
     def act(self, observations, skip_agents=None):
         count = len(observations)
@@ -65,9 +75,17 @@ class AORePlanBase:
                     position[1] - radius,
                 ),
             )
-            # Every current caller uses explicit proposal feedback. A cancelled
-            # proposal has no desired position, so observing it is a no-op.
-            local_planner.observe_position(position)
+            # A physically failed submitted proposal is admitted to the local
+            # failure cache with probability 0.5. Cancelled proposals have no
+            # desired position, and successful proposals clear the cache, so a
+            # coin is drawn only for real execution failures.
+            cache_failed_action = True
+            if local_planner.proposal_failed(position):
+                cache_failed_action = bool(
+                    self.failure_cache_rnd.random()
+                    < FAILURE_CACHE_PROBABILITY
+                )
+            local_planner.observe_position(position, cache_failed_action)
 
             if position == target or skip[index]:
                 actions.append(None)
