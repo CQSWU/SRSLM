@@ -4,8 +4,8 @@ The current paper method is **ARPE (Action Reweight with Policy Entropy)**.
 This is the new name of the selected entropy-gated method previously called
 CAAR, not a new network or a newly trained checkpoint.
 
-Use `--algorithms ARPE`, `--arpe-candidate-manifest`, and
-`--arpe-weights-path` with the current evaluator. The implementation is
+Use `--algorithms ARPE` with the current evaluator. Set weight paths through
+`--arpe-candidate-manifest` when needed. The implementation is
 `agents/arpe.py`, exposing `ARPE`, `ARPEConfig`, and
 `ArpeCandidateArtifact`. The selected declarations are
 `configs/arpe_final_candidate.json`. The declaration contains portable paths;

@@ -1,7 +1,6 @@
 import hashlib
 import io
 import json
-from copy import deepcopy
 from os.path import join
 from pathlib import Path
 from typing import Literal
@@ -10,17 +9,13 @@ import numpy as np
 import torch
 from pydantic import Extra
 from sample_factory.algo.learning.learner import Learner
-from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
-from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.envs.create_env import create_env
 from sample_factory.model.actor_critic import create_actor_critic
-from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.utils import log
 
 from agents.utils_agents import AlgoBase
 from learning.config import Environment, checkpoint_experiment_config
 from pomapf_env.stigmergic import AcoState
-from pomapf_env.wrappers import MatrixObservationWrapper
 from train import register_custom_components, validate_config
 
 
@@ -32,8 +27,6 @@ class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
 
 class PolicyBackbone:
     """Shared checkpoint-loading backbone for trace-aware EPOM policies."""
-
-    USE_PHEROMONE = True
 
     def __init__(self, algo_cfg: PolicyBackboneConfig):
         self.algo_cfg = algo_cfg
@@ -49,12 +42,9 @@ class PolicyBackbone:
         _, flat_config = validate_config(checkpoint_experiment_config(config["full_config"]))
 
         env = create_env(flat_config.env, cfg=flat_config, env_config={})
-        self.model_uses_tau = "tau" in env.observation_space.spaces
-        self.uses_tau = self.USE_PHEROMONE
-        if self.model_uses_tau != self.uses_tau:
-            expected = "with" if self.uses_tau else "without"
+        if "tau" not in env.observation_space.spaces:
             raise RuntimeError(
-                f"{type(self).__name__} requires a checkpoint trained {expected} "
+                f"{type(self).__name__} requires a checkpoint trained with "
                 f"the separate tau observation. Checkpoint path: {path}"
             )
         actor_critic = create_actor_critic(flat_config, env.observation_space, env.action_space)
@@ -86,21 +76,7 @@ class PolicyBackbone:
         self.env_cfg = Environment(**self.cfg.full_config["environment"])
         self.tau_radius = self.env_cfg.tau_radius
         self.rnn_states = None
-        self.aco = (
-            AcoState(
-                rho=self.env_cfg.tau_rho,
-            )
-            if self.uses_tau
-            else None
-        )
-        self._last_augmented_observations = None
-        self._action_correction_samples = []
-        self._candidate_pressure_samples = []
-        self._predicted_pressure_samples = []
-        self._tau_residual_samples = []
-        self._movement_adjustment_samples = []
-        self._pressure_multiplier_samples = []
-        self._last_switch_context = None
+        self.aco = AcoState(rho=self.env_cfg.tau_rho)
         self.env = None
 
     @staticmethod
@@ -222,210 +198,20 @@ class PolicyBackbone:
             )
 
     def set_grid_config(self, grid_config):
-        if self.uses_tau:
-            self.aco.configure_from_grid_config(grid_config, clear=True)
+        self.aco.configure_from_grid_config(grid_config, clear=True)
 
     def set_env(self, env):
         self.env = env
-        if not self.uses_tau:
-            return
         grid_obstacles = getattr(getattr(env, "grid", None), "obstacles", None)
         if grid_obstacles is not None:
-            self.aco.configure_from_obstacle_mask(np.asarray(grid_obstacles, dtype=bool), clear=True)
+            self.aco.configure_from_obstacle_mask(
+                np.asarray(grid_obstacles, dtype=bool), clear=True
+            )
 
     def after_reset(self):
         torch.manual_seed(self.algo_cfg.seed)
         self.rnn_states = None
-        if self.uses_tau:
-            self.aco.clear()
-        self._last_augmented_observations = None
-        self._action_correction_samples = []
-        self._candidate_pressure_samples = []
-        self._predicted_pressure_samples = []
-        self._tau_residual_samples = []
-        self._movement_adjustment_samples = []
-        self._pressure_multiplier_samples = []
-        self._last_switch_context = None
-
-    def act(self, observations, rewards=None, dones=None, infos=None):
-        raw_observations = deepcopy(observations)
-        num_agents = len(raw_observations)
-
-        if self.rnn_states is None or len(self.rnn_states) != num_agents:
-            self.rnn_states = torch.zeros(
-                [num_agents, get_rnn_size(self.cfg)],
-                dtype=torch.float32,
-                device=self.device,
-            )
-        observations = MatrixObservationWrapper.to_matrix(raw_observations)
-        if self.uses_tau:
-            if self.aco.tau is None:
-                raise RuntimeError(
-                    "ARPE trace state is not initialized. Call set_grid_config() "
-                    "after env.reset() and before act()."
-                )
-            self.aco.observe_for_inference(
-                observations,
-                positions=self._global_positions(),
-                radius=self.tau_radius,
-            )
-
-        self._last_augmented_observations = deepcopy(observations)
-
-        with torch.no_grad():
-            obs_torch = TensorDict({
-                key: np.stack([obs[key] for obs in observations])
-                for key in observations[0]
-            })
-            for key, value in obs_torch.items():
-                obs_torch[key] = torch.from_numpy(value).to(self.device).float()
-            obs_torch = prepare_and_normalize_obs(self.ppo, obs_torch)
-            policy_outputs = self.ppo(obs_torch, self.rnn_states)
-            self.rnn_states = policy_outputs["new_rnn_states"]
-            actions = policy_outputs["actions"]
-            if self.uses_tau:
-                corrections = getattr(self.ppo, "last_action_correction", None)
-                if corrections is None:
-                    raise RuntimeError("ARPE model did not produce action corrections.")
-                self._action_correction_samples.append(
-                    corrections.float().cpu().numpy().reshape(-1)
-                )
-                pressures = getattr(self.ppo, "last_candidate_pressure", None)
-                if pressures is not None:
-                    self._candidate_pressure_samples.append(
-                        pressures.float().cpu().numpy().reshape(-1)
-                    )
-                residuals = getattr(self.ppo, "last_tau_residual", None)
-                if residuals is not None:
-                    self._tau_residual_samples.append(
-                        residuals.float().cpu().numpy().reshape(-1)
-                    )
-                predicted = getattr(self.ppo, "last_predicted_pressure", None)
-                if predicted is not None:
-                    self._predicted_pressure_samples.append(
-                        predicted.float().cpu().numpy().reshape(-1)
-                    )
-                adjustments = getattr(self.ppo, "last_movement_adjustment", None)
-                if adjustments is None:
-                    raise RuntimeError("ARPE model did not expose movement adjustments.")
-                self._movement_adjustment_samples.append(
-                    adjustments.float().cpu().numpy().reshape(-1)
-                )
-                multipliers = getattr(self.ppo, "last_pressure_multiplier", None)
-                if multipliers is not None:
-                    self._pressure_multiplier_samples.append(
-                        multipliers.float().cpu().numpy().reshape(-1)
-                    )
-                switch_tensors = {
-                    "decoder_output": getattr(
-                        self.ppo, "last_decoder_output", None
-                    ),
-                    "base_logits": getattr(self.ppo, "last_base_logits", None),
-                    "adjusted_logits": getattr(
-                        self.ppo, "last_adjusted_logits", None
-                    ),
-                    "values": getattr(self.ppo, "last_values", None),
-                }
-                missing = [
-                    name
-                    for name, value in switch_tensors.items()
-                    if value is None
-                ]
-                if missing:
-                    raise RuntimeError(
-                        "ARPE model did not expose switch context: "
-                        + ", ".join(missing)
-                    )
-                self._last_switch_context = {
-                    name: value.float().cpu().numpy().copy()
-                    for name, value in switch_tensors.items()
-                }
-                if residuals is not None:
-                    self._last_switch_context["tau_residual"] = (
-                        residuals.float().cpu().numpy().copy()
-                    )
-                if predicted is not None:
-                    self._last_switch_context["predicted_pressure"] = (
-                        predicted.float().cpu().numpy().copy()
-                    )
-                if pressures is not None:
-                    self._last_switch_context["candidate_pressure"] = (
-                        pressures.float().cpu().numpy().copy()
-                    )
-                self._last_switch_context["actions"] = (
-                    actions.detach().cpu().numpy().copy()
-                )
-
-        action_array = actions.detach().cpu().numpy()
-
-        return action_array
-
-    def last_switch_context(self):
-        """Return frozen ARPE features from the most recent policy decision."""
-        return self._last_switch_context
-
-    def get_action_correction_stats(self):
-        if not self._action_correction_samples:
-            return {}
-        values = np.concatenate(self._action_correction_samples)
-        stats = {
-            "action_correction_mean": float(values.mean()),
-            "action_correction_median": float(np.median(values)),
-            "action_correction_p05": float(np.quantile(values, 0.05)),
-            "action_correction_p95": float(np.quantile(values, 0.95)),
-        }
-        if self._candidate_pressure_samples:
-            pressures = np.concatenate(self._candidate_pressure_samples)
-            stats.update(
-                {
-                    "candidate_pressure_mean": float(pressures.mean()),
-                    "candidate_pressure_median": float(np.median(pressures)),
-                    "candidate_pressure_p05": float(np.quantile(pressures, 0.05)),
-                    "candidate_pressure_p95": float(np.quantile(pressures, 0.95)),
-                }
-            )
-        if self._predicted_pressure_samples:
-            predicted = np.concatenate(self._predicted_pressure_samples)
-            stats.update(
-                {
-                    "predicted_pressure_mean": float(predicted.mean()),
-                    "predicted_pressure_median": float(np.median(predicted)),
-                    "predicted_pressure_p05": float(np.quantile(predicted, 0.05)),
-                    "predicted_pressure_p95": float(np.quantile(predicted, 0.95)),
-                }
-            )
-        if self._tau_residual_samples:
-            residuals = np.concatenate(self._tau_residual_samples)
-            stats.update(
-                {
-                    "tau_residual_mean": float(residuals.mean()),
-                    "tau_residual_abs_mean": float(np.abs(residuals).mean()),
-                    "tau_residual_median": float(np.median(residuals)),
-                    "tau_residual_p05": float(np.quantile(residuals, 0.05)),
-                    "tau_residual_p95": float(np.quantile(residuals, 0.95)),
-                }
-            )
-        if self._movement_adjustment_samples:
-            adjustments = np.concatenate(self._movement_adjustment_samples)
-            stats.update(
-                {
-                    "movement_adjustment_mean": float(adjustments.mean()),
-                    "movement_adjustment_median": float(np.median(adjustments)),
-                    "movement_adjustment_p05": float(np.quantile(adjustments, 0.05)),
-                    "movement_adjustment_p95": float(np.quantile(adjustments, 0.95)),
-                }
-            )
-        if self._pressure_multiplier_samples:
-            multipliers = np.concatenate(self._pressure_multiplier_samples)
-            stats.update(
-                {
-                    "pressure_multiplier_mean": float(multipliers.mean()),
-                    "pressure_multiplier_median": float(np.median(multipliers)),
-                    "pressure_multiplier_p05": float(np.quantile(multipliers, 0.05)),
-                    "pressure_multiplier_p95": float(np.quantile(multipliers, 0.95)),
-                }
-            )
-        return stats
+        self.aco.clear()
 
     def _global_positions(self):
         grid = getattr(self.env, "grid", None) if self.env is not None else None
@@ -443,7 +229,4 @@ class PolicyBackbone:
     def after_step(self, dones):
         if all(dones):
             self.rnn_states = None
-            if self.uses_tau:
-                self.aco.clear()
-            self._last_augmented_observations = None
-            self._last_switch_context = None
+            self.aco.clear()

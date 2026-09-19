@@ -43,13 +43,10 @@ class SwitcherEnv(gym.Env):
         self.controller.set_grid_config(self.base_env.grid_config)
         self.controller.set_env(self.base_env)
         count = len(observations)
-        self._last_rewards = np.zeros(count, dtype=np.float32)
-        self._last_dones = np.zeros(count, dtype=np.bool_)
-        self._last_infos = infos
         self._prepared = self.controller.prepare_actions(
             observations,
-            self._last_rewards,
-            self._last_dones,
+            np.zeros(count, dtype=np.float32),
+            np.zeros(count, dtype=np.bool_),
             infos,
         )
         return self._feature_observations(self._prepared.switcher_state)
@@ -115,9 +112,6 @@ class SwitcherEnv(gym.Env):
             # belong to the next episode here.
             next_features = self._start_policy_episode(observations, infos)
         else:
-            self._last_rewards = rewards_array
-            self._last_dones = done
-            self._last_infos = infos
             self._prepared = self.controller.prepare_actions(
                 observations,
                 rewards_array,

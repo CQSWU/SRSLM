@@ -130,9 +130,6 @@ class ArpeSwitcherEnv(SwitcherEnv):
         self.num_agents = int(grid_config.num_agents)
         self.is_multiagent = True
         self._prepared = None
-        self._last_rewards = None
-        self._last_dones = None
-        self._last_infos = None
 
     def get_candidate_provenance(self) -> dict[str, object]:
         current = self.candidate.get_model_provenance()

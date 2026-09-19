@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Literal
 
-import numpy as np
 from pydantic import Extra, Field
 
 from agents.switcher_arpe import AllStateArpeSwitcher, AllStateArpeSwitcherConfig
@@ -17,7 +16,6 @@ from agents.arpe import (
 )
 from agents.switcher_core import (
     AllStateSwitcherController,
-    SwitcherController,
     OnlyWaitController,
 )
 from agents.utils_agents import AlgoBase

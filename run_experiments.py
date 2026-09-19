@@ -41,26 +41,25 @@ from pomapf_env.env import make_pomapf
 from pomapf_env.pomapf_config import POMAPFConfig
 
 
-
 DEFAULT_MAPS = {
-
     "mazes": "mazes-s0_wc8_od55",
-
     "random": "random-s0_d0.15",
-
     "sc1": "sc1-AcrosstheCape",
-
     "street": "street-Berlin_0",
-
     "wc3": "wc3-Battleground",
-
 }
 
 
 SUPPORTED_ALGORITHMS = (
-    "RePlan", "AORePlan", "AORePlan-SoftNoCheck",
-    "EPOM-Lifelong-FT", "Direct", "ARPE",
-    "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
+    "RePlan",
+    "AORePlan",
+    "AORePlan-SoftNoCheck",
+    "EPOM-Lifelong-FT",
+    "Direct",
+    "ARPE",
+    "SRSLM-NoWait",
+    "SRSLM-OnlyWait",
+    "SRSLM",
 )
 
 DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
@@ -80,20 +79,17 @@ ALGORITHM_ALIASES = {
 }
 
 
-ALGORITHM_COLUMN_WIDTH = max(13, *(len(algorithm) for algorithm in SUPPORTED_ALGORITHMS))
+ALGORITHM_COLUMN_WIDTH = max(
+    13, *(len(algorithm) for algorithm in SUPPORTED_ALGORITHMS)
+)
 
 
 _worker_algo_cache = {}
 
 
-
 def canonical_algorithm_name(value):
 
     return ALGORITHM_ALIASES.get(value.strip().lower())
-
-
-
-
 
 
 def epom_lifelong_result_manifest(results, algorithms):
@@ -107,9 +103,7 @@ def epom_lifelong_result_manifest(results, algorithms):
     if not selected:
         return None
     error_rows = [
-        row
-        for row in results
-        if row.get("algorithm") in selected and row.get("error")
+        row for row in results if row.get("algorithm") in selected and row.get("error")
     ]
     if error_rows:
         return {
@@ -126,12 +120,7 @@ def epom_lifelong_result_manifest(results, algorithms):
         if algorithm not in rows_by_algorithm or row.get("error"):
             continue
         rows_by_algorithm[algorithm] += 1
-        provenance = row.get("model_provenance") or {}
-        epom = (
-            provenance
-            if algorithm == "EPOM-Lifelong-FT"
-            else provenance.get("epom_provenance") or {}
-        )
+        epom = row.get("model_provenance") or {}
         if epom.get("artifact_profile") != "lifelong_finetuned":
             raise RuntimeError(
                 f"{algorithm} row is missing lifelong_finetuned EPOM provenance"
@@ -203,21 +192,14 @@ def srslm_contract_metadata(algorithms, collision_system="block_both"):
     }
 
 
-
-
-
-
 def quiet_model_logs():
 
     logging.getLogger("rl").setLevel(logging.ERROR)
 
     with suppress(Exception):
-
         from sample_factory.utils.utils import log
 
-
         log.setLevel(logging.ERROR)
-
 
 
 def _has_config(path):
@@ -225,17 +207,13 @@ def _has_config(path):
     return (path / "config.json").exists()
 
 
-
 def _has_checkpoints(path):
 
     for d in path.glob("checkpoint_p*"):
-
         if d.is_dir() and any(d.glob("*.pth")):
-
             return True
 
     return False
-
 
 
 def _find_switcher_weights(main_dir):
@@ -264,10 +242,6 @@ def _find_epom_lifelong_weights(main_dir):
     return str(candidate)
 
 
-
-
-
-
 def _sha256_file(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as source:
@@ -286,9 +260,7 @@ def runtime_provenance():
         "torch": torch.__version__,
         "torch_cuda": torch.version.cuda,
         "cuda_available": torch.cuda.is_available(),
-        "accelerator_visible_devices": os.environ.get(
-            "CUDA_VISIBLE_DEVICES"
-        ),
+        "accelerator_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "ppu_sdk_version": os.environ.get("PPU_SDK_VERSION"),
     }
 
@@ -393,8 +365,7 @@ def vertex_flow_metric_metadata():
             "sum of pairwise same-destination movement proposals over steps"
         ),
         "vertex_flow_move_denominator": (
-            "submitted non-wait proposals whose destination is an in-bounds "
-            "free cell"
+            "submitted non-wait proposals whose destination is an in-bounds free cell"
         ),
         "vertex_flow_pair_cost_per_move": (
             "vertex_flow_pair_count divided by vertex_flow_move_denominator"
@@ -415,9 +386,7 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
 
     if manifest_path is None:
         manifest_path = str(
-            Path(main_dir).resolve()
-            / "configs"
-            / "arpe_final_candidate.json"
+            Path(main_dir).resolve() / "configs" / "arpe_final_candidate.json"
         )
     path = _project_path(main_dir, manifest_path)
     if not path.is_file():
@@ -485,14 +454,21 @@ def srslm_integrity_metadata(
     )
     # Hash the candidate actually bound by the Switcher, not an independently
     # discovered latest ARPE that the deployed policy never loads.
-    serialized = json.loads((switcher_weights / "config.json").read_text(encoding="utf-8"))
+    serialized = json.loads(
+        (switcher_weights / "config.json").read_text(encoding="utf-8")
+    )
     full_config = serialized.get("full_config", serialized)
     from agents.arpe import ArpeCandidateArtifact
     from agents.switcher import Switcher
-    artifact = ArpeCandidateArtifact.from_mapping(full_config.get("candidate_policy", {}), root)
+
+    artifact = ArpeCandidateArtifact.from_mapping(
+        full_config.get("candidate_policy", {}), root
+    )
     arpe_weights = artifact.weights_path
     arpe_checkpoint = artifact.checkpoint_path
-    switcher_checkpoint = Switcher._resolve_checkpoint(switcher_weights / "checkpoint_p0", "auto")
+    switcher_checkpoint = Switcher._resolve_checkpoint(
+        switcher_weights / "checkpoint_p0", "auto"
+    )
     files = {
         "caar_config": arpe_weights / "config.json",
         "caar_checkpoint": arpe_checkpoint,
@@ -504,8 +480,10 @@ def srslm_integrity_metadata(
         "agents/policy_backbone.py": code_root / "agents/policy_backbone.py",
         "agents/epom_trace_context.py": code_root / "agents/epom_trace_context.py",
         "agents/arpe.py": code_root / "agents/arpe.py",
-        "learning/epom_trace_context_actor_critic.py": code_root / "learning/epom_trace_context_actor_critic.py",
-        "learning/epom_trace_multiplier_actor_critic.py": code_root / "learning/epom_trace_multiplier_actor_critic.py",
+        "learning/epom_trace_context_actor_critic.py": code_root
+        / "learning/epom_trace_context_actor_critic.py",
+        "learning/epom_trace_multiplier_actor_critic.py": code_root
+        / "learning/epom_trace_multiplier_actor_critic.py",
         "agents/srslm.py": code_root / "agents/srslm.py",
         "agents/switcher.py": code_root / "agents/switcher.py",
         "agents/switcher_core.py": code_root / "agents/switcher_core.py",
@@ -515,9 +493,7 @@ def srslm_integrity_metadata(
             code_root / "learning/switcher_actor_critic.py"
         ),
         "planning/ao_replan_algo.py": code_root / "planning/ao_replan_algo.py",
-        "planning/aoreplan_branch.py": (
-            code_root / "planning/aoreplan_branch.py"
-        ),
+        "planning/aoreplan_branch.py": (code_root / "planning/aoreplan_branch.py"),
         "pomapf_env/switcher_env.py": code_root / "pomapf_env/switcher_env.py",
     }
     if getattr(args, "map_list", None):
@@ -542,107 +518,49 @@ def srslm_integrity_metadata(
         "artifact_sha256": hashes,
         "aggregate_sha256": aggregate,
         "map_list_sha256": (
-            map_list_sha256
-            if map_list_sha256 is not None
-            else hashes.get("map_list")
+            map_list_sha256 if map_list_sha256 is not None else hashes.get("map_list")
         ),
         "map_registry_sha256": map_registry_sha256,
     }
-
-
-
-
-
-
-def _find_weight_run_dir(root):
-    root = Path(root)
-    if not root.exists():
-        return None
-    if _has_config(root) and _has_checkpoints(root):
-        return root
-
-    configs = sorted(root.rglob("config.json"), key=lambda path: path.stat().st_mtime, reverse=True)
-    for config_path in configs:
-        candidate = config_path.parent
-        if _has_checkpoints(candidate):
-            return candidate
-    return None
-
 
 
 def _replan_cfg(seed, max_planning_steps=10000):
 
     from agents.replan import RePlanConfig
 
-
     return RePlanConfig(
-
         name="RePlan",
-
         fix_loops=True,
-
         add_none_if_loop=False,
-
         no_path_random=True,
-
         use_best_move=True,
-
         fix_nones=True,
-
         max_planning_steps=max_planning_steps,
-
         seed=seed,
-
     )
 
 
-
 def _ao_replan_cfg(
-
     seed,
-
     max_planning_steps=10000,
-
 ):
 
     from agents.ao_replan import AORePlanConfig
 
-
     return AORePlanConfig(
-
         name="AORePlan",
-
         max_planning_steps=max_planning_steps,
-
         seed=seed,
-
     )
 
 
 def build_algorithm(
-
     algo_name,
-
     main_dir,
-
     seed,
-
-    arpe_weights_path=None,
-
     arpe_candidate_manifest=None,
-
     switcher_weights_path=None,
-
-
-
     epom_weights_path=None,
-
-
-
-
-
-
-
 ):
 
     algo_name = canonical_algorithm_name(algo_name) or algo_name
@@ -650,26 +568,19 @@ def build_algorithm(
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
 
     if algo_name == "RePlan":
-
         from agents.replan import RePlan
-
 
         return RePlan(_replan_cfg(seed))
 
-
     if algo_name == "AORePlan":
-
         from agents.ao_replan import AORePlan
-
 
         return AORePlan(_ao_replan_cfg(seed))
 
     if algo_name == "AORePlan-SoftNoCheck":
         from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck
+
         return AORePlanSoftNoCheck(_ao_replan_cfg(seed))
-
-
-
 
     if algo_name in (
         "SRSLM-NoWait",
@@ -718,17 +629,15 @@ def build_algorithm(
             seed=seed,
             device="auto",
         )
-        if algo_name == "SRSLM-NoWait":
-            return SRSLMNoWait(
-                SRSLMNoWaitConfig(
-                    candidate=candidate,
-                    switcher=switcher,
-                    seed=seed,
-                    device="auto",
-                ),
-                project_root=Path(main_dir).resolve(),
-            )
-        raise ValueError(f"Unsupported SRSLM ablation: {algo_name}")
+        return SRSLMNoWait(
+            SRSLMNoWaitConfig(
+                candidate=candidate,
+                switcher=switcher,
+                seed=seed,
+                device="auto",
+            ),
+            project_root=Path(main_dir).resolve(),
+        )
 
     if algo_name == "SRSLM":
         from agents.srslm import SRSLM, SRSLMConfig
@@ -740,8 +649,7 @@ def build_algorithm(
                     path_to_weights=str(
                         _project_path(
                             main_dir,
-                            switcher_weights_path
-                            or _find_switcher_weights(main_dir),
+                            switcher_weights_path or _find_switcher_weights(main_dir),
                         )
                     ),
                     checkpoint_kind="auto",
@@ -754,48 +662,36 @@ def build_algorithm(
         )
         return policy
 
-
-
     if algo_name == "EPOM-Lifelong-FT":
-
         from agents.epom import EPOM, EPOMConfig
 
         epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
 
         return EPOM(
-
             EPOMConfig(
-
                 path_to_weights=str(_project_path(main_dir, epom_weights_path)),
-
                 seed=seed,
-
                 device="auto",
-
                 artifact_profile="lifelong_finetuned",
-
             )
-
         )
-
-
-
-
-
-
-
 
     if algo_name == "Direct":
         from agents.epom_direct_reweight import (
-            EPOMDirectReweight, EPOMDirectReweightConfig,
+            EPOMDirectReweight,
+            EPOMDirectReweightConfig,
         )
-        epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
-        return EPOMDirectReweight(EPOMDirectReweightConfig(
-            path_to_weights=str(_project_path(main_dir, epom_weights_path)),
-            artifact_profile="lifelong_finetuned", seed=seed, device="auto",
-            reweight_bonus=1.0,
-        ))
 
+        epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
+        return EPOMDirectReweight(
+            EPOMDirectReweightConfig(
+                path_to_weights=str(_project_path(main_dir, epom_weights_path)),
+                artifact_profile="lifelong_finetuned",
+                seed=seed,
+                device="auto",
+                reweight_bonus=1.0,
+            )
+        )
 
     if algo_name == "ARPE":
         from agents.arpe import ARPE
@@ -809,7 +705,6 @@ def build_algorithm(
             seed=int(seed),
             device="auto",
         )
-
 
     raise ValueError(f"Unsupported algorithm: {algo_name}")
 
@@ -842,9 +737,7 @@ def validate_srslm_stats(stats):
     )
     missing = [key for key in required if key not in stats]
     if missing:
-        raise RuntimeError(
-            "SRSLM diagnostics are incomplete: " + ", ".join(missing)
-        )
+        raise RuntimeError("SRSLM diagnostics are incomplete: " + ", ".join(missing))
 
     total = int(stats["total_action_count"])
     choices = int(stats["switcher_choice_count"])
@@ -905,14 +798,6 @@ def validate_srslm_stats(stats):
             violations.append(f"{key} is not a probability")
     if violations:
         raise RuntimeError("SRSLM contract failed: " + "; ".join(violations))
-
-
-
-
-
-
-
-
 
 
 def validate_final_srslm_ablation_stats(algorithm, stats):
@@ -1037,9 +922,10 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
     frozen = candidate.get("frozen_verification") or {}
     if candidate.get("schema") != ARPE_CANDIDATE_SCHEMA:
         violations.append("candidate provenance schema differs")
-    if frozen.get("verified") is not True or frozen.get(
-        "trainable_parameter_count"
-    ) != 0:
+    if (
+        frozen.get("verified") is not True
+        or frozen.get("trainable_parameter_count") != 0
+    ):
         violations.append("candidate is not verified frozen")
     artifact = candidate.get("candidate") or {}
     if artifact.get("frozen") is not True:
@@ -1058,10 +944,6 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
         raise RuntimeError(f"{algorithm} contract failed: " + "; ".join(violations))
 
 
-
-
-
-
 class _MoveFailureTracker:
     """Track movement outcomes and agent contention without changing actions."""
 
@@ -1070,9 +952,7 @@ class _MoveFailureTracker:
     VERTEX_FLOW_METRIC_VERSION = "submitted_one_step_vertex_flow_pairs_v1"
 
     def __init__(self, moves, obstacle_mask=None):
-        self.moves = tuple(
-            tuple(int(value) for value in move) for move in moves
-        )
+        self.moves = tuple(tuple(int(value) for value in move) for move in moves)
         self.obstacle_mask = (
             None
             if obstacle_mask is None
@@ -1105,11 +985,7 @@ class _MoveFailureTracker:
             return True
         x, y = target
         height, width = self.obstacle_mask.shape
-        return (
-            0 <= x < height
-            and 0 <= y < width
-            and not bool(self.obstacle_mask[x, y])
-        )
+        return 0 <= x < height and 0 <= y < width and not bool(self.obstacle_mask[x, y])
 
     def capture(
         self,
@@ -1125,8 +1001,7 @@ class _MoveFailureTracker:
             else [self._point(observation) for observation in observations]
         )
         active = [
-            not bool(dones[index])
-            and bool(infos[index].get("is_active", True))
+            not bool(dones[index]) and bool(infos[index].get("is_active", True))
             for index in range(len(observations))
         ]
         attempts = []
@@ -1172,8 +1047,7 @@ class _MoveFailureTracker:
             target_counts[target] = target_counts.get(target, 0) + 1
 
         attempts_by_agent = {
-            index: (before, target)
-            for index, before, target in pending["attempts"]
+            index: (before, target) for index, before, target in pending["attempts"]
         }
         contention_participants = set()
 
@@ -1188,8 +1062,7 @@ class _MoveFailureTracker:
         for _, _, target in pending["flow_attempts"]:
             flow_target_counts[target] = flow_target_counts.get(target, 0) + 1
         vertex_flow_pairs = sum(
-            count * (count - 1) // 2
-            for count in flow_target_counts.values()
+            count * (count - 1) // 2 for count in flow_target_counts.values()
         )
         contested_flow_destinations = sum(
             count > 1 for count in flow_target_counts.values()
@@ -1235,9 +1108,7 @@ class _MoveFailureTracker:
         self.successful_move_count += successes
         self.conflict_count += failed_this_step
         self.agent_conflict_count += agent_conflicts
-        self.other_or_unattributed_conflict_count += (
-            failed_this_step - agent_conflicts
-        )
+        self.other_or_unattributed_conflict_count += failed_this_step - agent_conflicts
         if failed_this_step:
             self.conflict_step_count += 1
         self.contention_participant_count += len(contention_participants)
@@ -1245,9 +1116,7 @@ class _MoveFailureTracker:
             self.contention_step_count += 1
         self.vertex_flow_pair_count += vertex_flow_pairs
         self.vertex_flow_move_denominator += len(pending["flow_attempts"])
-        self.vertex_flow_contested_destination_count += (
-            contested_flow_destinations
-        )
+        self.vertex_flow_contested_destination_count += contested_flow_destinations
         if vertex_flow_pairs:
             self.vertex_flow_step_count += 1
         self.vertex_flow_max_inflow = max(
@@ -1350,14 +1219,10 @@ def run_algorithm(
         gc_kwargs["map_name"] = map_name
 
     if (agents_xy is None) != (targets_xy is None):
-        raise ValueError(
-            "Explicit placements require both agents_xy and targets_xy"
-        )
+        raise ValueError("Explicit placements require both agents_xy and targets_xy")
     if agents_xy is not None:
         if len(agents_xy) != num_agents or len(targets_xy) != num_agents:
-            raise ValueError(
-                "Explicit placement count must equal num_agents"
-            )
+            raise ValueError("Explicit placement count must equal num_agents")
         gc_kwargs["agents_xy"] = [list(position) for position in agents_xy]
         gc_kwargs["targets_xy"] = [list(position) for position in targets_xy]
 
@@ -1448,17 +1313,11 @@ def run_algorithm(
                 dtype=bool,
             )
             if not np.array_equal(actual_agents, expected_agents):
-                raise RuntimeError(
-                    "Environment changed the explicit start coordinates"
-                )
+                raise RuntimeError("Environment changed the explicit start coordinates")
             if not np.array_equal(actual_targets, expected_targets):
-                raise RuntimeError(
-                    "Environment changed the explicit goal coordinates"
-                )
+                raise RuntimeError("Environment changed the explicit goal coordinates")
             if not np.array_equal(actual_obstacles, expected_obstacles):
-                raise RuntimeError(
-                    "Environment changed the explicit obstacle grid"
-                )
+                raise RuntimeError("Environment changed the explicit obstacle grid")
             padding = int(grid_config.obs_radius)
             if not np.array_equal(
                 np.asarray(grid.positions_xy, dtype=np.int64),
@@ -1502,9 +1361,7 @@ def run_algorithm(
                     infos,
                     global_positions=global_positions(),
                 )
-                observations, rewards, terminated, truncated, infos = env.step(
-                    actions
-                )
+                observations, rewards, terminated, truncated, infos = env.step(actions)
                 # Same event as LifeLongAverageThroughputMetric; goals have already
                 # been reassigned here, so do not infer completion from rewards/goals.
                 if on_target == "restart":
@@ -1523,19 +1380,19 @@ def run_algorithm(
                 ]
                 results_holder.after_step(infos)
                 algo.after_step(dones)
-                if on_target == "restart" and (
-                    decision_calls % 512 == 0 or all(dones)
-                ):
+                if on_target == "restart" and (decision_calls % 512 == 0 or all(dones)):
                     segment_steps = decision_calls - previous_segment_end
                     segment_targets = completed_targets - previous_segment_targets
-                    throughput_segments.append({
-                        "start_step": previous_segment_end + 1,
-                        "end_step": decision_calls,
-                        "step_count": segment_steps,
-                        "completed_targets": segment_targets,
-                        "throughput": segment_targets / segment_steps,
-                        "cumulative_throughput": completed_targets / decision_calls,
-                    })
+                    throughput_segments.append(
+                        {
+                            "start_step": previous_segment_end + 1,
+                            "end_step": decision_calls,
+                            "step_count": segment_steps,
+                            "completed_targets": segment_targets,
+                            "throughput": segment_targets / segment_steps,
+                            "cumulative_throughput": completed_targets / decision_calls,
+                        }
+                    )
                     previous_segment_end = decision_calls
                     previous_segment_targets = completed_targets
                 if all(dones):
@@ -1549,16 +1406,22 @@ def run_algorithm(
         )
         results["policy_decision_timing_scope"] = "algo.act_only_perf_counter_v1"
         results["throughput_segments"] = throughput_segments
-        results["completed_targets_observed"] = completed_targets if on_target == "restart" else None
+        results["completed_targets_observed"] = (
+            completed_targets if on_target == "restart" else None
+        )
         if on_target == "restart":
             reported_targets = float(results["avg_throughput"]) * max_episode_steps
-            if not np.isfinite(reported_targets) or abs(reported_targets - completed_targets) > 1e-6:
-                raise RuntimeError("Segment goal events disagree with POGEMA throughput")
+            if (
+                not np.isfinite(reported_targets)
+                or abs(reported_targets - completed_targets) > 1e-6
+            ):
+                raise RuntimeError(
+                    "Segment goal events disagree with POGEMA throughput"
+                )
         results["algorithm"] = type(algo).__name__
         return results
     finally:
         env.close()
-
 
 
 def run_single_experiment(task):
@@ -1583,130 +1446,47 @@ def run_single_experiment(task):
     )
 
     cache_key = (
-
         algo_name,
-
         str(Path(main_dir).resolve()),
-
         seed,
-
-        task.get("arpe_weights_path"),
-
         task.get("arpe_candidate_manifest"),
-
         task.get("switcher_weights_path"),
-
-
-
         task.get("epom_weights_path"),
-
-
-
-
-
-
-
     )
 
-
     try:
-
-        if use_cache:
-
-            if cache_key not in _worker_algo_cache:
-
-                _worker_algo_cache[cache_key] = build_algorithm(
-
-                    algo_name,
-
-                    main_dir,
-
-                    seed,
-
-                    arpe_weights_path=task.get("arpe_weights_path"),
-
-                    arpe_candidate_manifest=task.get(
-                        "arpe_candidate_manifest"
-                    ),
-
-                    switcher_weights_path=task.get("switcher_weights_path"),
-
-
-
-                    epom_weights_path=task.get("epom_weights_path"),
-
-
-
-
-
-
-                )
-
+        if use_cache and cache_key in _worker_algo_cache:
             algo = _worker_algo_cache[cache_key]
-
         else:
-
             algo = build_algorithm(
-
                 algo_name,
-
                 main_dir,
-
                 seed,
-
-                arpe_weights_path=task.get("arpe_weights_path"),
-
-                arpe_candidate_manifest=task.get(
-                    "arpe_candidate_manifest"
-                ),
-
+                arpe_candidate_manifest=task.get("arpe_candidate_manifest"),
                 switcher_weights_path=task.get("switcher_weights_path"),
-
-
-
                 epom_weights_path=task.get("epom_weights_path"),
-
-
-
-
-
-
             )
-
+            if use_cache:
+                _worker_algo_cache[cache_key] = algo
 
         start = time.time()
 
         result = run_algorithm(
-
             algo,
-
             map_name=task["map_name"],
-
             max_episode_steps=task["max_steps"],
-
             seed=seed,
-
             num_agents=task["num_agents"],
-
             obs_radius=task.get("obs_radius"),
-
             animate=task["animate"],
-
             on_target=task.get("on_target", "restart"),
-
             collision_system=task.get("collision_system"),
-
             map_text=task.get("map_text"),
-
             agents_xy=task.get("agents_xy"),
-
             targets_xy=task.get("targets_xy"),
-
         )
 
         run_time = time.time() - start
-
-
 
         on_target = task.get("on_target", "restart")
         is_restart = on_target == "restart"
@@ -1751,17 +1531,11 @@ def run_single_experiment(task):
                     "family_id": task["family_id"],
                     "density_percent": task["density_percent"],
                     "placement_sha256": task["placement_sha256"],
-                    "target_sequences_sha256": task.get(
-                        "target_sequences_sha256"
-                    ),
+                    "target_sequences_sha256": task.get("target_sequences_sha256"),
                 }
             )
         result_record.update(
-            {
-                key: value
-                for key, value in result.items()
-                if key != "algorithm"
-            }
+            {key: value for key, value in result.items() if key != "algorithm"}
         )
         result_record.update(correction_stats)
 
@@ -1772,7 +1546,9 @@ def run_single_experiment(task):
 
         if is_restart:
             if is_replan:
-                result_record["reverse_action_rate"] = getattr(algo, "reverse_action_rate", None)
+                result_record["reverse_action_rate"] = getattr(
+                    algo, "reverse_action_rate", None
+                )
                 result_record["reverse_action_count"] = getattr(
                     algo,
                     "reverse_action_count",
@@ -1810,43 +1586,28 @@ def run_single_experiment(task):
                         None,
                     )
 
-
         return result_record
 
     except Exception as exc:
-
         import traceback
 
-
         error_record = {
-
             "algorithm": algo_name,
-
             "map_name": task["map_name"],
-
             "num_agents": task["num_agents"],
-
             "max_steps": task["max_steps"],
-
             "seed": seed,
-
             "on_target": task.get("on_target", "restart"),
-
             "avg_throughput": None,
-
             "run_time_seconds": 0.0,
-
             "policy_decision_seconds": None,
             "policy_decision_calls": 0,
             "policy_decision_ms_per_joint_action": None,
             "policy_decision_timing_scope": "algo.act_only_perf_counter_v1",
             "throughput_segments": [],
             "completed_targets_observed": None,
-
             "error": str(exc),
-
             "traceback": traceback.format_exc(),
-
         }
         if task.get("task_id") is not None:
             error_record.update(
@@ -1855,20 +1616,16 @@ def run_single_experiment(task):
                     "family_id": task["family_id"],
                     "density_percent": task["density_percent"],
                     "placement_sha256": task["placement_sha256"],
-                    "target_sequences_sha256": task.get(
-                        "target_sequences_sha256"
-                    ),
+                    "target_sequences_sha256": task.get("target_sequences_sha256"),
                 }
             )
         return error_record
-
 
 
 def parse_algorithms(value):
 
     if value.strip().lower() == "all":
         return list(DEFAULT_ALGORITHMS)
-
 
     raw_algorithms = [item.strip() for item in value.split(",") if item.strip()]
 
@@ -1879,74 +1636,60 @@ def parse_algorithms(value):
     unknown = []
 
     for item in raw_algorithms:
-
         canonical = canonical_algorithm_name(item)
 
         if canonical is None:
-
             unknown.append(item)
 
         else:
-
             if canonical not in seen:
-
                 algorithms.append(canonical)
 
                 seen.add(canonical)
 
     if unknown:
-
         choices = ", ".join(SUPPORTED_ALGORITHMS)
 
-        raise argparse.ArgumentTypeError(f"Unknown algorithm(s): {unknown}. Choices: {choices}")
+        raise argparse.ArgumentTypeError(
+            f"Unknown algorithm(s): {unknown}. Choices: {choices}"
+        )
 
     if not algorithms:
-
         raise argparse.ArgumentTypeError("No algorithms selected")
 
     return algorithms
 
 
-
 def parse_agent_counts(args):
 
     if args.agents:
-
         counts = [int(item.strip()) for item in args.agents.split(",") if item.strip()]
 
     else:
-
         if args.agent_step <= 0:
-
             raise ValueError("--agent-step must be positive")
 
         counts = list(range(args.agent_start, args.agent_stop + 1, args.agent_step))
 
-
     counts = sorted(set(counts))
 
     if not counts:
-
         raise ValueError("No agent counts selected")
 
     if any(count <= 0 for count in counts):
-
         raise ValueError("Agent counts must all be positive")
 
     return counts
 
 
-
 def parse_seeds(args):
 
     if args.seeds:
-
         seeds = [int(item.strip()) for item in args.seeds.split(",") if item.strip()]
 
         seeds = sorted(set(seeds))
 
         if not seeds:
-
             raise ValueError("No seeds selected")
 
         return seeds
@@ -1954,36 +1697,30 @@ def parse_seeds(args):
     return [args.seed]
 
 
-
 def parse_maps(map_types_value, map_overrides):
 
     if map_types_value.strip().lower() == "custom":
-
         maps = {}
 
         for item in map_overrides:
-
             map_name = item.strip()
 
             if not map_name:
-
                 continue
 
             maps[map_name] = map_name
 
         if not maps:
-
-            raise ValueError("When --map-types=custom, --map must provide at least one map name")
+            raise ValueError(
+                "When --map-types=custom, --map must provide at least one map name"
+            )
 
         return maps
-
 
     maps = dict(DEFAULT_MAPS)
 
     for item in map_overrides:
-
         if "=" not in item:
-
             raise ValueError("--map must use the format map_type=map_name")
 
         map_type, map_name = item.split("=", 1)
@@ -1993,40 +1730,32 @@ def parse_maps(map_types_value, map_overrides):
         map_name = map_name.strip()
 
         if not map_type or not map_name:
-
             raise ValueError("--map must use non-empty map_type=map_name values")
 
         maps[map_type] = map_name
 
-
     if map_types_value.strip().lower() == "all":
-
         selected_types = list(DEFAULT_MAPS.keys())
 
     else:
-
-        selected_types = [item.strip() for item in map_types_value.split(",") if item.strip()]
-
+        selected_types = [
+            item.strip() for item in map_types_value.split(",") if item.strip()
+        ]
 
     unknown = [item for item in selected_types if item not in maps]
 
     if unknown:
-
         raise ValueError(f"Unknown map type(s): {unknown}. Available: {sorted(maps)}")
 
     if not selected_types:
-
         raise ValueError("No map types selected")
 
-
     return {map_type: maps[map_type] for map_type in selected_types}
-
 
 
 def _looks_like_movingai_map(lines):
 
     if not lines:
-
         return False
 
     head = [line.strip().lower() for line in lines[:4]]
@@ -2034,13 +1763,15 @@ def _looks_like_movingai_map(lines):
     return "map" in head and any(line.startswith("type ") for line in head)
 
 
-
 def _translate_map_rows(rows):
 
     trans = {".": ".", "G": ".", "S": ".", "W": "#", "T": "#", "@": "#", "O": "#"}
 
-    return ["".join(trans.get(ch, "#") for ch in row.rstrip()) for row in rows if row.strip()]
-
+    return [
+        "".join(trans.get(ch, "#") for ch in row.rstrip())
+        for row in rows
+        if row.strip()
+    ]
 
 
 def load_map_text(path_or_url, trim_border=False):
@@ -2051,77 +1782,60 @@ def load_map_text(path_or_url, trim_border=False):
 
     source = str(Path(path_or_url).resolve())
 
-
     lines = raw_text.splitlines()
 
     if _looks_like_movingai_map(lines):
-
-        map_start = next(i for i, line in enumerate(lines) if line.strip().lower() == "map") + 1
+        map_start = (
+            next(i for i, line in enumerate(lines) if line.strip().lower() == "map") + 1
+        )
 
         rows = _translate_map_rows(lines[map_start:])
 
     else:
-
         rows = [line.rstrip() for line in lines if line.strip()]
 
-
     if trim_border and len(rows) >= 3 and len(rows[0]) >= 3:
-
         rows = [row[1:-1] for row in rows[1:-1]]
 
-
     if not rows:
-
         raise ValueError(f"Map source produced no rows: {path_or_url}")
 
     width = len(rows[0])
 
     if width == 0 or any(len(row) != width for row in rows):
-
-        raise ValueError(f"Map source must contain a non-empty rectangular grid: {path_or_url}")
-
+        raise ValueError(
+            f"Map source must contain a non-empty rectangular grid: {path_or_url}"
+        )
 
     label = Path(path_or_url).name
 
     return {
-
         "map_name": label or "custom-map",
-
         "map_text": "\n".join(rows),
-
         "map_source": source,
-
         "map_size": [len(rows[0]), len(rows)],
-
     }
 
 
-
 def load_map_list_snapshot(path, registry_path=None):
-
     """Snapshot selected names and the exact grids sent to workers."""
 
     import yaml
-
 
     path = Path(path).resolve()
 
     payload = path.read_bytes()
 
     try:
-
         data = yaml.safe_load(payload.decode("utf-8"))
 
     except (UnicodeDecodeError, yaml.YAMLError) as error:
-
         raise ValueError(f"Could not parse map list {path}: {error}") from error
 
     if not isinstance(data, dict) or not data:
-
         raise ValueError("--map-list must contain a non-empty YAML mapping")
 
     if any(not isinstance(name, str) or not name for name in data):
-
         raise ValueError("--map-list keys must be non-empty strings")
 
     registry_payload = payload
@@ -2129,29 +1843,22 @@ def load_map_list_snapshot(path, registry_path=None):
     registry = data
 
     if any(not isinstance(value, str) or not value.strip() for value in data.values()):
-
         if registry_path is None:
-
-            raise ValueError(
-                "--map-list entries without grid text require a registry"
-            )
+            raise ValueError("--map-list entries without grid text require a registry")
 
         registry_path = Path(registry_path).resolve()
 
         registry_payload = registry_path.read_bytes()
 
         try:
-
             registry = yaml.safe_load(registry_payload.decode("utf-8"))
 
         except (UnicodeDecodeError, yaml.YAMLError) as error:
-
             raise ValueError(
                 f"Could not parse map registry {registry_path}: {error}"
             ) from error
 
         if not isinstance(registry, dict) or not registry:
-
             raise ValueError(
                 f"Map registry must be a non-empty mapping: {registry_path}"
             )
@@ -2159,70 +1866,44 @@ def load_map_list_snapshot(path, registry_path=None):
     map_texts = {}
 
     for name, selected_value in data.items():
-
         value = (
-
             selected_value
-
             if isinstance(selected_value, str) and selected_value.strip()
-
             else registry.get(name)
-
         )
 
         if not isinstance(value, str) or not value.strip():
-
             raise ValueError(f"No grid text found for map {name!r}")
 
         rows = value.splitlines()
 
         if (
-
             not rows
-
             or len({len(row) for row in rows}) != 1
-
             or not rows[0]
-
             or any(set(row) - {".", "#"} for row in rows)
-
         ):
-
-            raise ValueError(
-                f"Map {name!r} must be a non-empty rectangular .# grid"
-            )
+            raise ValueError(f"Map {name!r} must be a non-empty rectangular .# grid")
 
         map_texts[name] = value
 
     return (
-
         {name: name for name in data},
-
         map_texts,
-
         hashlib.sha256(payload).hexdigest(),
-
         hashlib.sha256(registry_payload).hexdigest(),
-
         path,
-
     )
 
 
 def _canonical_json_sha256(value):
 
     return hashlib.sha256(
-
         json.dumps(
-
             value,
-
             sort_keys=True,
-
             separators=(",", ":"),
-
         ).encode("utf-8")
-
     ).hexdigest()
 
 
@@ -2237,11 +1918,15 @@ def build_tasks(
 ):
 
     map_items = (
-
-        [("custom", custom_map["map_name"], custom_map["map_text"], custom_map["map_source"])]
-
+        [
+            (
+                "custom",
+                custom_map["map_name"],
+                custom_map["map_text"],
+                custom_map["map_source"],
+            )
+        ]
         if custom_map is not None
-
         else [
             (
                 map_type,
@@ -2251,85 +1936,46 @@ def build_tasks(
             )
             for map_type, map_name in maps.items()
         ]
-
     )
 
     return [
-
         {
-
             "algorithm": algorithm,
-
             "map_type": map_type,
-
             "map_name": map_name,
-
             "map_text": map_text,
-
             "map_source": map_source,
-
             "num_agents": num_agents,
-
             "obs_radius": args.obs_radius,
-
             "max_steps": args.max_steps,
-
             "seed": seed,
-
             "animate": args.animate,
-
             "main_dir": args.main_dir,
-
             "on_target": args.on_target,
-
             "collision_system": args.collision_system,
-
-            "arpe_weights_path": args.arpe_weights_path,
-
-            "arpe_candidate_manifest": getattr(
-                args, "arpe_candidate_manifest", None
-            ),
-
+            "arpe_candidate_manifest": getattr(args, "arpe_candidate_manifest", None),
             "switcher_weights_path": args.switcher_weights_path,
-
-
-
             "epom_weights_path": args.epom_weights_path,
-
-
-
-
-
-
             "cache_algorithms": should_cache_algorithm(
                 algorithm,
                 args.cache_algorithms,
             ),
-
         }
-
         for algorithm in algorithms
-
         for map_type, map_name, map_text, map_source in map_items
-
         for num_agents in agent_counts
-
         for seed in seeds
-
     ]
-
 
 
 def format_duration(seconds):
 
     if seconds < 60:
-
         return f"{seconds:.1f}s"
 
     minutes, rem = divmod(seconds, 60)
 
     if minutes < 60:
-
         return f"{int(minutes)}m{int(rem):02d}s"
 
     hours, minutes = divmod(minutes, 60)
@@ -2337,42 +1983,29 @@ def format_duration(seconds):
     return f"{int(hours)}h{int(minutes):02d}m"
 
 
-
 def _journal_task_key(value):
-
     """Return the stable identity of one experiment task/result row."""
 
     try:
-
         return (
-
             str(value["algorithm"]),
-
             str(value["map_name"]),
-
             int(value["num_agents"]),
-
             int(value["seed"]),
-
             str(value.get("task_id") or ""),
-
         )
 
     except (KeyError, TypeError, ValueError) as error:
-
         raise ValueError("Experiment journal entry has an invalid task key") from error
 
 
 def _append_journal_record(path, record):
 
     encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(
-
         "utf-8"
-
     )
 
     with Path(path).open("ab", buffering=0) as stream:
-
         stream.write(encoded)
 
         os.fsync(stream.fileno())
@@ -2385,33 +2018,24 @@ def _initialize_result_journal(path, contract, total):
     path.parent.mkdir(parents=True, exist_ok=True)
 
     record = {
-
         "record_type": "header",
-
         "schema": "experiment_result_journal_v1",
-
         "contract_sha256": contract,
-
         "expected_tasks": int(total),
-
     }
 
     encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(
-
         "utf-8"
-
     )
 
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
 
     try:
-
         os.write(descriptor, encoded)
 
         os.fsync(descriptor)
 
     finally:
-
         os.close(descriptor)
 
 
@@ -2422,11 +2046,9 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
     raw = path.read_bytes()
 
     if raw and not raw.endswith(b"\n"):
-
         last_newline = raw.rfind(b"\n")
 
         if not repair_final_record or last_newline < 0:
-
             raise ValueError("Result journal has a truncated final record")
 
         raw = raw[: last_newline + 1]
@@ -2434,7 +2056,6 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
         temporary = path.with_name(f".{path.name}.{os.getpid()}.repair")
 
         with temporary.open("wb") as stream:
-
             stream.write(raw)
 
             stream.flush()
@@ -2446,35 +2067,25 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
     lines = raw.splitlines()
 
     if not lines:
-
         raise ValueError("Result journal is empty")
 
     try:
-
         header = json.loads(lines[0])
 
     except json.JSONDecodeError as error:
-
         raise ValueError("Result journal header is malformed") from error
 
     if header != {
-
         "record_type": "header",
-
         "schema": "experiment_result_journal_v1",
-
         "contract_sha256": contract,
-
         "expected_tasks": len(tasks),
-
     }:
-
         raise ValueError("Result journal contract/header differs from this run")
 
     expected_keys = {_journal_task_key(task) for task in tasks}
 
     if len(expected_keys) != len(tasks):
-
         raise ValueError("Experiment tasks are not uniquely journalable")
 
     successful = {}
@@ -2482,43 +2093,33 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
     ordered = []
 
     for line_number, line in enumerate(lines[1:], 2):
-
         try:
-
             record = json.loads(line)
 
         except json.JSONDecodeError as error:
-
             raise ValueError(
-
                 f"Result journal record {line_number} is malformed"
-
             ) from error
 
         if record.get("record_type") != "result":
-
             raise ValueError(f"Unexpected result journal record {line_number}")
 
         result = record.get("result")
 
         if not isinstance(result, dict):
-
             raise ValueError(f"Result journal record {line_number} has no result")
 
         key = _journal_task_key(result)
 
         if record.get("task_key") != list(key) or key not in expected_keys:
-
             raise ValueError(f"Result journal record {line_number} has a foreign task")
 
         if result.get("error"):
-
             # Failed attempts remain as audit events but are safe to retry.
 
             continue
 
         if key in successful:
-
             raise ValueError(f"Result journal repeats successful task {key}")
 
         successful[key] = result
@@ -2529,19 +2130,12 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
 
 
 def run_experiments(
-
     tasks,
-
     workers,
-
     *,
-
     result_journal=None,
-
     journal_contract=None,
-
     resume_result_journal=False,
-
 ):
 
     results = []
@@ -2555,93 +2149,64 @@ def run_experiments(
     journal_path = Path(result_journal) if result_journal is not None else None
 
     if journal_path is not None:
-
-        if not isinstance(journal_contract, str) or len(journal_contract) != 64 or any(
-
-            char not in "0123456789abcdef" for char in journal_contract
-
+        if (
+            not isinstance(journal_contract, str)
+            or len(journal_contract) != 64
+            or any(char not in "0123456789abcdef" for char in journal_contract)
         ):
-
             raise ValueError("A lowercase SHA256 --result-journal-contract is required")
 
         if journal_path.exists():
-
             if not resume_result_journal:
-
                 raise FileExistsError(
-
                     f"Result journal already exists without resume permission: {journal_path}"
-
                 )
 
             results = _load_result_journal(
-
                 journal_path,
-
                 journal_contract,
-
                 tasks,
-
                 repair_final_record=True,
-
             )
 
             elapsed_offset = max(
-
                 (float(row.get("elapsed_since_start_seconds", 0.0)) for row in results),
-
                 default=0.0,
-
             )
 
         else:
-
             _initialize_result_journal(journal_path, journal_contract, total)
 
         completed_keys = {_journal_task_key(row) for row in results}
 
         tasks_to_run = [
-
             task for task in tasks if _journal_task_key(task) not in completed_keys
-
         ]
 
     else:
-
         if resume_result_journal:
-
             raise ValueError("--resume-result-journal requires --result-journal")
 
         tasks_to_run = list(tasks)
 
-
     print(f"Starting experiments: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     print(
-
         f"Total: {total} | Workers: {workers} | "
-
         f"Recovered: {len(results)} | Remaining: {len(tasks_to_run)}"
-
     )
 
     print("-" * 110, flush=True)
 
-
     if not tasks_to_run:
-
         return results, elapsed_offset
 
     with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(run_single_experiment, task) for task in tasks_to_run
+        ]
 
-        futures = [executor.submit(run_single_experiment, task) for task in tasks_to_run]
-
-        for index, future in enumerate(
-
-            as_completed(futures), start=len(results) + 1
-
-        ):
-
+        for index, future in enumerate(as_completed(futures), start=len(results) + 1):
             result = future.result()
 
             elapsed = elapsed_offset + time.time() - start_time
@@ -2661,67 +2226,45 @@ def run_experiments(
             results.append(result)
 
             if journal_path is not None:
-
                 _append_journal_record(
-
                     journal_path,
-
                     {
-
                         "record_type": "result",
-
                         "task_key": list(_journal_task_key(result)),
-
                         "result": result,
-
                     },
-
                 )
 
-
             if result.get("error"):
-
                 status = f"ERROR: {result['error']}"
 
             else:
-
                 on_target = result.get("on_target", "restart")
 
                 gate_str = ""
 
                 if result.get("learning_ratio") is not None:
-
                     switch_label = "caar"
 
                     gate_str += f" {switch_label}={result['learning_ratio']:.1%}"
 
                 if result.get("planner_ratio") is not None:
-
                     gate_str += f" planner={result['planner_ratio']:.1%}"
 
                 for key, label in (
                     ("caar_action_ratio", "caar_actions"),
                     ("guided_agent_step_ratio", "guided"),
                 ):
-
                     if result.get(key) is not None:
-
                         gate_str += f" {label}={result[key]:.1%}"
 
                 diag_str = ""
 
                 if result.get("congestion_rate") is not None:
-
-                    diag_str += (
-
-                        f" congestion={result['congestion_rate']:.1%}"
-
-                    )
+                    diag_str += f" congestion={result['congestion_rate']:.1%}"
 
                 if on_target != "restart":
-
                     if result.get("ep_length") is not None:
-
                         diag_str += f" ep_len={result['ep_length']:.1f}"
 
                     isr = result.get("ISR")
@@ -2729,45 +2272,28 @@ def run_experiments(
                     csr = result.get("CSR")
 
                     status = (
-
                         f"isr={(0.0 if isr is None else isr):.1%} "
-
                         f"csr={(0.0 if csr is None else csr):.1%}{gate_str}{diag_str} "
-
                         f"run={format_duration(result['run_time_seconds'])}"
-
                     )
 
                 else:
-
                     if result.get("reverse_action_rate") is not None:
-
                         diag_str += f" rev={result['reverse_action_rate']:.1%}"
 
                     status = (
-
                         f"throughput={result['avg_throughput']:.4f}{gate_str}{diag_str} "
-
                         f"run={format_duration(result['run_time_seconds'])}"
-
                     )
 
-
             print(
-
                 f"[{index:>3}/{total:<3}] {result['algorithm']:<{ALGORITHM_COLUMN_WIDTH}} | "
-
                 f"{result['map_name']:<22} | {result['num_agents']:>3} agents | "
-
                 f"{status:<34}",
-
                 flush=True,
-
             )
 
-
     return results, elapsed_offset + time.time() - start_time
-
 
 
 def save_results(results, metadata, output_dir, filename=None):
@@ -2775,27 +2301,21 @@ def save_results(results, metadata, output_dir, filename=None):
     os.makedirs(output_dir, exist_ok=True)
 
     if filename:
-
         output_path = Path(output_dir) / filename
 
     else:
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         output_path = Path(output_dir) / f"experiments_{timestamp}.json"
 
     payload = {
-
         "metadata": metadata,
-
         "results": results,
-
     }
 
     temporary_path = output_path.with_name(f".{output_path.name}.tmp")
 
     with temporary_path.open("w", encoding="utf-8") as f:
-
         json.dump(payload, f, indent=2)
 
         f.flush()
@@ -2809,143 +2329,148 @@ def save_results(results, metadata, output_dir, filename=None):
     return output_path
 
 
-
 def parse_args():
 
-    parser = argparse.ArgumentParser(description="Unified Lifelong MAPF experiment runner")
+    parser = argparse.ArgumentParser(
+        description="Unified Lifelong MAPF experiment runner"
+    )
 
     parser.add_argument(
-
         "--algorithms",
-
         type=parse_algorithms,
-
         default=list(DEFAULT_ALGORITHMS),
-
         help=(
             "Comma-separated algorithms, or 'all'. "
             f"Choices: {', '.join(SUPPORTED_ALGORITHMS)}"
         ),
-
     )
 
-    parser.add_argument("--agents", type=str, default=None, help="Comma-separated agent counts, e.g. 50,100,200")
-
-    parser.add_argument("--agent-start", type=int, default=50, help="First agent count when --agents is not set")
-
-    parser.add_argument("--agent-stop", type=int, default=500, help="Last inclusive agent count when --agents is not set")
-
-    parser.add_argument("--agent-step", type=int, default=50, help="Agent count step when --agents is not set")
-
-    parser.add_argument("--workers", "--works", dest="workers", type=int, default=8, help="Parallel workers")
-
     parser.add_argument(
-
-        "--obs-radius",
-
-        type=int,
-
+        "--agents",
+        type=str,
         default=None,
-
-        help="Override the local observation radius (default: environment configuration)",
-
+        help="Comma-separated agent counts, e.g. 50,100,200",
     )
 
     parser.add_argument(
-
-        "--cache-algorithms",
-
-        action="store_true",
-
-        help="Reuse algorithm objects inside each worker. Faster, but less isolated between experiment tasks.",
-
+        "--agent-start",
+        type=int,
+        default=50,
+        help="First agent count when --agents is not set",
     )
 
-    parser.add_argument("--animate", action="store_true", help="Generate SVG animations")
+    parser.add_argument(
+        "--agent-stop",
+        type=int,
+        default=500,
+        help="Last inclusive agent count when --agents is not set",
+    )
+
+    parser.add_argument(
+        "--agent-step",
+        type=int,
+        default=50,
+        help="Agent count step when --agents is not set",
+    )
+
+    parser.add_argument(
+        "--workers",
+        "--works",
+        dest="workers",
+        type=int,
+        default=8,
+        help="Parallel workers",
+    )
+
+    parser.add_argument(
+        "--obs-radius",
+        type=int,
+        default=None,
+        help="Override the local observation radius (default: environment configuration)",
+    )
+
+    parser.add_argument(
+        "--cache-algorithms",
+        action="store_true",
+        help="Reuse algorithm objects inside each worker. Faster, but less isolated between experiment tasks.",
+    )
+
+    parser.add_argument(
+        "--animate", action="store_true", help="Generate SVG animations"
+    )
 
     parser.add_argument("--max-steps", type=int, default=512, help="Episode length")
 
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
 
-    parser.add_argument("--seeds", type=str, default=None, help="Comma-separated seeds, e.g. 0,1,2")
-
-    parser.add_argument("--main-dir", type=str, default="./", help="Project root directory")
-
-    parser.add_argument("--map-types", type=str, default="all", help="Comma-separated map types, or 'all'")
-
     parser.add_argument(
-
-        "--map",
-
-        action="append",
-
-        default=[],
-
-        help="Override one representative map with map_type=map_name. Can be repeated.",
-
+        "--seeds", type=str, default=None, help="Comma-separated seeds, e.g. 0,1,2"
     )
 
-    parser.add_argument("--map-file", type=str, default=None, help="Custom local map file path.")
+    parser.add_argument(
+        "--main-dir", type=str, default="./", help="Project root directory"
+    )
 
-    parser.add_argument("--map-list", type=str, default=None, help="YAML file whose top-level keys are map names (e.g. maps/test.yaml)")
+    parser.add_argument(
+        "--map-types",
+        type=str,
+        default="all",
+        help="Comma-separated map types, or 'all'",
+    )
 
-    parser.add_argument("--trim-border", dest="trim_border", action="store_true", help="Trim one-cell border from custom map")
+    parser.add_argument(
+        "--map",
+        action="append",
+        default=[],
+        help="Override one representative map with map_type=map_name. Can be repeated.",
+    )
 
-    parser.add_argument("--no-trim-border", dest="trim_border", action="store_false", help="Do not trim border from custom map")
+    parser.add_argument(
+        "--map-file", type=str, default=None, help="Custom local map file path."
+    )
+
+    parser.add_argument(
+        "--map-list",
+        type=str,
+        default=None,
+        help="YAML file whose top-level keys are map names (e.g. maps/test.yaml)",
+    )
+
+    parser.add_argument(
+        "--trim-border",
+        dest="trim_border",
+        action="store_true",
+        help="Trim one-cell border from custom map",
+    )
+
+    parser.add_argument(
+        "--no-trim-border",
+        dest="trim_border",
+        action="store_false",
+        help="Do not trim border from custom map",
+    )
 
     parser.set_defaults(trim_border=None)
 
     parser.add_argument(
-
         "--on-target",
-
         choices=("restart", "finish", "nothing"),
-
         default=None,
-
         help="Override Pogema on_target mode",
-
     )
 
     parser.add_argument(
-
         "--collision-system",
-
         choices=("soft", "block_both", "priority"),
-
         default="block_both",
-
         help="Override collision system",
-
     )
 
-
     parser.add_argument(
-
         "--epom-weights-path",
-
         type=str,
-
         default=None,
-
         help="Override EPOM weights directory",
-
-    )
-
-
-
-    parser.add_argument(
-
-        "--arpe-weights-path",
-
-        dest="arpe_weights_path",
-
-        type=str,
-
-        default=None,
-
-        help="Deprecated compatibility option; ARPE paths come from the candidate JSON.",
-
     )
 
     parser.add_argument(
@@ -2965,56 +2490,56 @@ def parse_args():
         help="Override the Switcher weights directory",
     )
 
-    parser.add_argument("--output-dir", type=str, default="exp_result", help="Directory for JSON results")
-
-    parser.add_argument("--output", type=str, default=None, help="Output filename (default: experiments_TIMESTAMP.json)")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="exp_result",
+        help="Directory for JSON results",
+    )
 
     parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output filename (default: experiments_TIMESTAMP.json)",
+    )
 
+    parser.add_argument(
         "--result-journal",
-
         type=str,
-
         default=None,
-
         help=(
-
             "Append every completed tuple to a fsync-backed JSONL journal so "
-
             "an interrupted formal run can be resumed"
-
         ),
-
     )
 
     parser.add_argument(
-
         "--result-journal-contract",
-
         type=str,
-
         default=None,
-
         help="Lowercase SHA256 binding a result journal to one frozen protocol",
-
     )
 
     parser.add_argument(
-
         "--resume-result-journal",
-
         action="store_true",
-
         help="Reuse successful tuples from an existing matching result journal",
-
     )
 
-    parser.add_argument("--save", dest="save", action="store_true", default=True, help="Save JSON results")
+    parser.add_argument(
+        "--save",
+        dest="save",
+        action="store_true",
+        default=True,
+        help="Save JSON results",
+    )
 
-    parser.add_argument("--no-save", dest="save", action="store_false", help="Do not save JSON results")
+    parser.add_argument(
+        "--no-save", dest="save", action="store_false", help="Do not save JSON results"
+    )
 
     return parser.parse_args()
-
 
 
 def main():
@@ -3026,43 +2551,27 @@ def main():
     args = parse_args()
 
     if args.workers < 1:
-
         raise ValueError("--workers must be at least 1")
 
     if args.max_steps < 1:
-
         raise ValueError("--max-steps must be at least 1")
 
     if args.obs_radius is not None and args.obs_radius < 1:
-
         raise ValueError("--obs-radius must be at least 1")
 
-    map_sources = sum(
-
-        bool(value)
-
-        for value in (args.map_file, args.map_list)
-
-    )
+    map_sources = sum(bool(value) for value in (args.map_file, args.map_list))
 
     if map_sources > 1:
-
         raise ValueError("--map-file and --map-list are mutually exclusive")
 
-
-
     if args.on_target is None:
-
         args.on_target = "restart"
 
     if args.collision_system is None:
-
         args.collision_system = "block_both"
 
     if args.trim_border is None:
-
         args.trim_border = False
-
 
     algorithms = args.algorithms
     srslm_contract = srslm_contract_metadata(algorithms, args.collision_system)
@@ -3071,7 +2580,6 @@ def main():
     agent_counts = parse_agent_counts(args)
 
     seeds = parse_seeds(args)
-
 
     custom_map = None
 
@@ -3084,62 +2592,36 @@ def main():
     map_texts = None
 
     if args.map_file:
-
         custom_map = load_map_text(args.map_file, trim_border=args.trim_border)
 
         maps = {"custom": custom_map["map_name"]}
 
     elif args.map_list:
-
         (
-
             maps,
-
             map_texts,
-
             map_list_sha256,
-
             map_registry_sha256,
-
             map_list_path,
-
         ) = load_map_list_snapshot(
-
             _project_path(args.main_dir, args.map_list),
-
             registry_path=_project_path(
-
                 args.main_dir,
-
                 "maps/test.yaml",
-
             ),
-
         )
 
-
     else:
-
         maps = parse_maps(args.map_types, args.map)
 
-
     tasks = build_tasks(
-
         algorithms,
-
         maps,
-
         agent_counts,
-
         seeds,
-
         args,
-
         custom_map=custom_map,
-
         map_texts=map_texts,
-
-
     )
 
     if srslm_contract is not None:
@@ -3157,192 +2639,107 @@ def main():
     )
 
     metadata = {
-
         "started_at": datetime.now().isoformat(timespec="seconds"),
-
         "runtime_provenance": runtime_provenance(),
-
-
-
         "congestion_metric": {
-
             "version": _MoveFailureTracker.METRIC_VERSION,
-
             "conflict_definition": (
-
                 "an active agent submitted a non-wait movement action but "
-
                 "its xy position was unchanged after env.step"
-
             ),
-
-            "congestion_rate_denominator": (
-
-                "submitted non-wait movement actions"
-
-            ),
-
+            "congestion_rate_denominator": ("submitted non-wait movement actions"),
             "agent_conflict_classification": (
-
                 "the failed move targeted a cell occupied by another agent "
-
                 "before the step, or multiple agents targeted the same cell"
-
             ),
-
         },
-
         "contention_metric": contention_metric_metadata(),
-
         "vertex_flow_metric": vertex_flow_metric_metadata(),
-
         "reverse_metric": {
-
             "version": "previous_timestep_position_target_segment_v3",
-
             "definition": (
-
                 "a submitted movement proposes the position occupied at the "
-
                 "immediately previous timestep in the current target segment"
-
             ),
-
             "reverse_rate_denominator": "submitted non-wait movement actions",
-
             "history_update": (
-
                 "the observed position is recorded every timestep, including "
-
                 "waits and blocked moves; a target change resets it"
-
             ),
-
         },
-
         "static_astar_metric": static_astar_metric_metadata(),
-
         "runtime_metric": runtime_metric_metadata(),
-
         "algorithms": algorithms,
-
         "agent_counts": agent_counts,
-
         "seeds": seeds,
-
         "maps": maps,
-
         "workers": args.workers,
-
         "obs_radius": args.obs_radius,
-
         "animate": args.animate,
-
         "max_steps": args.max_steps,
-
         "on_target": args.on_target,
-
         "collision_system": args.collision_system,
-
         "custom_map": custom_map,
-
         "main_dir": args.main_dir,
-
-        "arpe_weights_path": args.arpe_weights_path,
-
-        "arpe_candidate_manifest": getattr(
-            args, "arpe_candidate_manifest", None
-        ),
-
+        "arpe_candidate_manifest": getattr(args, "arpe_candidate_manifest", None),
         "switcher_weights_path": args.switcher_weights_path,
-
-
-
         "epom_weights_path": args.epom_weights_path,
-
-
-
-
-
-
         "hybrid_mode": (
-            hybrid_contract["hybrid_mode"]
-            if hybrid_contract is not None
-            else None
+            hybrid_contract["hybrid_mode"] if hybrid_contract is not None else None
         ),
-
         "hybrid_components": (
             hybrid_contract["hybrid_components"]
             if hybrid_contract is not None
             else None
         ),
-
         "hybrid_action_policy": (
-            hybrid_contract["action_policy"]
-            if hybrid_contract is not None
-            else None
+            hybrid_contract["action_policy"] if hybrid_contract is not None else None
         ),
-
         "hybrid_guide_algorithm": (
-            hybrid_contract["guide_algorithm"]
-            if hybrid_contract is not None
-            else None
+            hybrid_contract["guide_algorithm"] if hybrid_contract is not None else None
         ),
-
         "hybrid_contract": hybrid_contract,
-
         "integrity": integrity_metadata,
-
         "cache_algorithms_requested": algorithm_cache["requested"],
-
         "cache_algorithms_effective_by_algorithm": (
             algorithm_cache["effective_by_algorithm"]
         ),
-
         "cache_algorithms_exceptions": algorithm_cache["exceptions"],
-
         "map_list": str(map_list_path) if map_list_path is not None else None,
-
         "map_list_sha256": map_list_sha256,
-
         "map_registry_sha256": map_registry_sha256,
-
         "trim_border": args.trim_border,
-
         "result_journal": args.result_journal,
-
         "result_journal_contract": args.result_journal_contract,
-
         "resume_result_journal": args.resume_result_journal,
-
     }
 
     print("Configuration")
 
     print(f"  algorithms: {', '.join(algorithms)}")
 
-    print(f"  agent_counts: {agent_counts[0]}..{agent_counts[-1]} ({len(agent_counts)} values)")
+    print(
+        f"  agent_counts: {agent_counts[0]}..{agent_counts[-1]} ({len(agent_counts)} values)"
+    )
 
     print(f"  maps: {', '.join(maps.values())}")
 
-    print(f"  obs_radius: {args.obs_radius if args.obs_radius is not None else 'default'}")
+    print(
+        f"  obs_radius: {args.obs_radius if args.obs_radius is not None else 'default'}"
+    )
 
-    print(f"  max_steps: {args.max_steps} | seeds: {', '.join(str(seed) for seed in seeds)} | animate: {args.animate}")
+    print(
+        f"  max_steps: {args.max_steps} | seeds: {', '.join(str(seed) for seed in seeds)} | animate: {args.animate}"
+    )
 
     print(f"  on_target: {args.on_target} | collision: {args.collision_system}")
 
     results, elapsed = run_experiments(
-
         tasks,
-
         args.workers,
-
         result_journal=args.result_journal,
-
         journal_contract=args.result_journal_contract,
-
         resume_result_journal=args.resume_result_journal,
-
     )
 
     metadata["epom_lifelong_manifest"] = epom_lifelong_result_manifest(
@@ -3354,28 +2751,19 @@ def main():
 
     metadata["total_elapsed_seconds"] = elapsed
 
-
     print(f"\nTotal elapsed: {format_duration(elapsed)}")
 
-
     if args.save:
-
         save_results(results, metadata, args.output_dir, args.output)
 
     failed = [result for result in results if result.get("error")]
 
     if failed:
-
         raise RuntimeError(
-
             f"{len(failed)} of {len(results)} experiments failed; "
-
             f"first error: {failed[0]['error']}"
-
         )
 
 
-
 if __name__ == "__main__":
-
     main()

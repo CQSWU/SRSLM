@@ -13,8 +13,7 @@ third-party repositories stay outside Git.
 | `planning/aoreplan_branch.py` | Proposal/commit interface shared by SRSLM |
 | `agents/epom.py` | EPOM/EPOM-L inference backbone |
 | `agents/epom_direct_reweight.py` | Parameter-free Direct trace correction |
-| `agents/epom_trace.py` | Shared trace state and episode reset |
-| `agents/epom_trace_context.py` | Selected ARPE inference adapter |
+| `agents/epom_trace_context.py` | ARPE inference, shared trace and episode reset |
 | `learning/epom_trace_multiplier_actor_critic.py` | Selected learned trace actor and critic |
 | `agents/arpe.py` | Portable ARPE candidate loader |
 | `agents/switcher_core.py` | Shared wait-aware routing and Switcher features |

@@ -131,9 +131,6 @@ class ArpeCandidateArtifact:
             inspected[str(path)] = _sha256(path)
         return inspected
 
-    # Backward-compatible name used by historical checkpoints and callers.
-    verify_files = inspect_files
-
     def as_dict(self) -> dict[str, object]:
         return {
             "kind": ARPE_CANDIDATE_KIND,
@@ -185,7 +182,7 @@ class ARPE:
         self._verified_file_hashes = dict(
             verified_file_hashes
             if verified_file_hashes is not None
-            else artifact.verify_files()
+            else artifact.inspect_files()
         )
         self.ppo.eval()
         for parameter in self.ppo.parameters():
@@ -199,7 +196,7 @@ class ARPE:
         seed: int,
         device: str,
     ) -> "ARPE":
-        verified = artifact.verify_files()
+        verified = artifact.inspect_files()
         policy = EPOMTraceContext(
             EPOMTraceContextConfig(
                 path_to_weights=str(artifact.weights_path),

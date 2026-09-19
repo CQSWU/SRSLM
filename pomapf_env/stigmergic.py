@@ -33,8 +33,7 @@ class AcoState:
 
         if self._obstacle_mask is None or not np.array_equal(self._obstacle_mask, obstacle_mask):
             self._obstacle_mask = obstacle_mask.copy()
-            if self.tau is not None:
-                self.tau[self._obstacle_mask] = 0.0
+            self.tau[self._obstacle_mask] = 0.0
         return result
 
     def clear(self):
@@ -53,7 +52,7 @@ class AcoState:
         self._ensure_runtime(obs_batch)
         self.tau.fill(0.0)
 
-        positions = self._positions(obs_batch, positions)
+        positions = self._positions(positions)
         self._update_trace(positions, evaporate=False)
         self.prev_positions = positions
         self.add_tau_observation(
@@ -71,7 +70,7 @@ class AcoState:
         radius=None,
     ):
         self._ensure_runtime(obs_batch)
-        positions = self._positions(obs_batch, positions)
+        positions = self._positions(positions)
         if self.prev_positions is None:
             self.reset_episode(
                 obs_batch,
@@ -117,7 +116,8 @@ class AcoState:
         radius=None,
     ):
         self._ensure_runtime(obs_batch)
-        positions = self._positions(obs_batch, positions)
+        positions = self._positions(positions)
+        extract = self.extract_local_raw_tau if raw_tau else self.extract_local_tau
 
         for obs, (x, y) in zip(obs_batch, positions):
             x, y = int(x), int(y)
@@ -126,18 +126,7 @@ class AcoState:
                 if radius is None
                 else int(radius)
             )
-            if raw_tau:
-                tau_local = self.extract_local_raw_tau(
-                    x,
-                    y,
-                    local_radius,
-                )
-            else:
-                tau_local = self.extract_local_tau(
-                    x,
-                    y,
-                    local_radius,
-                )
+            tau_local = extract(x, y, local_radius)
             obs["tau"] = tau_local[np.newaxis, ...].astype(
                 np.float32,
                 copy=False,
@@ -153,7 +142,7 @@ class AcoState:
 
     def _local_tau_and_free_mask(self, x, y, radius):
         size = 2 * radius + 1
-        valid_mask = np.zeros((size, size), dtype=bool)
+        free_mask = np.zeros((size, size), dtype=bool)
         local = np.zeros((size, size), dtype=np.float32)
         height, width = self.tau.shape
         x, y = int(x), int(y)
@@ -163,29 +152,14 @@ class AcoState:
         if x0 < x1 and y0 < y1:
             lx0 = x0 - (x - radius)
             ly0 = y0 - (y - radius)
-            local[lx0 : lx0 + (x1 - x0), ly0 : ly0 + (y1 - y0)] = self.tau[x0:x1, y0:y1]
-            valid_mask[lx0 : lx0 + (x1 - x0), ly0 : ly0 + (y1 - y0)] = True
+            crop = np.s_[lx0 : lx0 + (x1 - x0), ly0 : ly0 + (y1 - y0)]
+            local[crop] = self.tau[x0:x1, y0:y1]
+            free_mask[crop] = (
+                True if self._obstacle_mask is None
+                else ~self._obstacle_mask[x0:x1, y0:y1]
+            )
 
-        obstacle_mask = self._extract_local_mask(x, y, radius)
-        free_mask = valid_mask & ~obstacle_mask
         return local, free_mask
-
-    def _extract_local_mask(self, x, y, radius):
-        if self._obstacle_mask is None:
-            return np.zeros((2 * radius + 1, 2 * radius + 1), dtype=bool)
-
-        size = 2 * radius + 1
-        local = np.zeros((size, size), dtype=bool)
-        height, width = self._obstacle_mask.shape
-        x, y = int(x), int(y)
-        x0, x1 = max(0, x - radius), min(height, x + radius + 1)
-        y0, y1 = max(0, y - radius), min(width, y + radius + 1)
-
-        if x0 < x1 and y0 < y1:
-            lx0 = x0 - (x - radius)
-            ly0 = y0 - (y - radius)
-            local[lx0 : lx0 + (x1 - x0), ly0 : ly0 + (y1 - y0)] = self._obstacle_mask[x0:x1, y0:y1]
-        return local
 
     def _ensure_runtime(self, obs_batch):
         if self.tau is None:
@@ -194,18 +168,14 @@ class AcoState:
             self.prev_positions = None
 
     @staticmethod
-    def _positions(obs_batch, positions=None):
+    def _positions(positions):
         if positions is None:
             raise RuntimeError(
                 "Shared trace memory requires global agent positions. Raw "
                 "observation coordinates are relative to each agent's initial "
                 "position and cannot index the global trace map."
             )
-        return AcoState._as_int_pairs(positions)
-
-    @staticmethod
-    def _as_int_pairs(values):
-        return np.rint(np.asarray(values, dtype=np.float32)).astype(np.int64)
+        return np.rint(np.asarray(positions, dtype=np.float32)).astype(np.int64)
 
     def _update_trace(self, positions, evaporate=True):
         if evaporate:

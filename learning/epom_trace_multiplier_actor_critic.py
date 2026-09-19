@@ -139,7 +139,6 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         self.reweight_mode = architecture
         self.trace_size = 11
         self.trace_radius = 5
-        self.trace_centre = 5
         mask_shape = (
             tuple(obs_space["tau_free_mask"].shape)
             if "tau_free_mask" in obs_space.spaces
@@ -201,7 +200,6 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
 
         self.actor_trace_embedding_size = self.actor_trace_encoder.OUTPUT_SIZE
         self.critic_trace_embedding_size = 0
-        self.trace_embedding_size = self.actor_trace_embedding_size
         # The three five-action diagnostic slots retain the saved recurrent
         # training interface; only actor_trace enters the learned trace head.
         self.head_extra_size = 3 * self.NUM_ACTIONS + self.actor_trace_embedding_size

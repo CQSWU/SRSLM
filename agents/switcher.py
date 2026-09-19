@@ -45,6 +45,7 @@ class Switcher:
     expected_encoder_custom = "switcher"
     allow_aoreplan_wait = False
     policy_label = "Switcher"
+    require_candidate_policy = False
 
     def __init__(self, cfg: SwitcherConfig):
         self.cfg = cfg
@@ -56,6 +57,8 @@ class Switcher:
         config = json.loads(payload.decode("utf-8"))
         full_config = deepcopy(config["full_config"])
         declaration = full_config.pop("candidate_policy", None)
+        if declaration is None and self.require_candidate_policy:
+            raise RuntimeError("Switcher checkpoint has no candidate_policy paths.")
         if declaration is not None and not isinstance(declaration, dict):
             raise RuntimeError("Switcher candidate_policy declaration is malformed.")
         candidate_artifact = None

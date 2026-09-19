@@ -409,6 +409,11 @@ class EPOM:
                 device=self.device,
             )
 
+        outputs = self._forward_observations(observations)
+        return outputs["actions"].cpu().numpy()
+
+    def _forward_observations(self, observations):
+        """Apply grid memory and run one recurrent base-policy forward pass."""
         self.grid_memory.update(observations)
         self.grid_memory.modify_observation(
             observations,
@@ -431,7 +436,7 @@ class EPOM:
         with torch.no_grad():
             outputs = self.ppo(model_input, self.rnn_states)
         self.rnn_states = outputs["new_rnn_states"]
-        return outputs["actions"].cpu().numpy()
+        return outputs
 
     def get_additional_info(self):
         return {"rl_used": 1.0}

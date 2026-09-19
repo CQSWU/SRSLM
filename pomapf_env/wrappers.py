@@ -197,7 +197,7 @@ class MultiMapWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
 
-        if self._configs is not None and len(self._configs) >= 1:
+        if self._configs:
             cfg = deepcopy(self._configs[self._rnd.integers(0, len(self._configs))])
             self.env.unwrapped.grid_config = cfg
 
@@ -261,9 +261,7 @@ class MatrixObservationWrapper(ObservationWrapper):
 
 
     def observation(self, observation):
-
-        result = self.to_matrix(observation)
-        return result
+        return self.to_matrix(observation)
 
 
 class GridMemoryObservationWrapper(gym.Wrapper):

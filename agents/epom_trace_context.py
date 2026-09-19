@@ -30,7 +30,8 @@ from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
 
-from agents.epom_trace import EPOMTrace, EPOMTraceConfig
+from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
+from learning.grid_memory import MultipleGridMemory
 from pomapf_env.wrappers import MatrixObservationWrapper
 
 
@@ -78,7 +79,7 @@ def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
     }
 
 
-class EPOMTraceContextConfig(EPOMTraceConfig, extra=Extra.forbid):
+class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
     name: Literal["EPOM-TraceContext"] = "EPOM-TraceContext"
     path_to_weights: str
     checkpoint_kind: Literal[
@@ -91,11 +92,15 @@ class EPOMTraceContextConfig(EPOMTraceConfig, extra=Extra.forbid):
     entropy_threshold_override: Optional[float] = None
 
 
-class EPOMTraceContext(EPOMTrace):
+class EPOMTraceContext(PolicyBackbone):
     """Frozen EPOM-L, the Direct rule, and a contextual learned residual."""
 
     def __init__(self, algo_cfg: EPOMTraceContextConfig):
         super().__init__(algo_cfg)
+        self.grid_memory_radius = int(
+            self.cfg.full_config["environment"]["grid_memory_obs_radius"]
+        )
+        self.grid_memory = MultipleGridMemory()
         verifier = getattr(self.ppo, "verify_frozen_actor_backbone", None)
         if not callable(verifier):
             raise RuntimeError(
@@ -188,6 +193,7 @@ class EPOMTraceContext(EPOMTrace):
 
     def after_reset(self):
         super().after_reset()
+        self.grid_memory.clear()
         self._context_diagnostic_steps = []
 
     def _add_exact_free_mask(self, observations, positions):
@@ -258,7 +264,6 @@ class EPOMTraceContext(EPOMTrace):
                     "Inference free mask is not exactly [1,11,11]: "
                     f"{observation['tau_free_mask'].shape}"
                 )
-        self._last_augmented_observations = deepcopy(observations)
 
         with torch.no_grad():
             obs_torch = TensorDict(
@@ -315,8 +320,10 @@ class EPOMTraceContext(EPOMTrace):
             "model": model_provenance,
         }
 
-    def last_switch_context(self):
-        return None
+    def after_step(self, dones):
+        super().after_step(dones)
+        if all(dones):
+            self.grid_memory.clear()
 
     def get_name(self):
         return f"EPOM-TraceContext({self.checkpoint_path.name})"

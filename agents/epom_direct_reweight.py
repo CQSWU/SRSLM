@@ -15,13 +15,10 @@ from typing import Literal
 import numpy as np
 import torch
 from pydantic import Extra
-from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
-from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
 
 from agents.epom import EPOM, EPOMConfig
 from pomapf_env.stigmergic import AcoState
-from pomapf_env.wrappers import MatrixObservationWrapper
 
 #: PRIMAL3 eq. 29 / expert_guidance.find_definitive_pc
 PRIMAL3_ENTROPY_THRESHOLD = 0.46371241
@@ -167,23 +164,7 @@ class EPOMDirectReweight(EPOM):
         else:
             self.aco.observe_for_inference(observations, positions=positions)
 
-        self.grid_memory.update(observations)
-        self.grid_memory.modify_observation(observations, self.grid_memory_radius)
-        matrix = MatrixObservationWrapper.to_matrix(observations)
-        obs_torch = TensorDict({
-            key: torch.from_numpy(
-                np.stack([obs[key] for obs in matrix])
-            ).to(self.device).float()
-            for key in matrix[0]
-        })
-        model_input = (
-            prepare_and_normalize_obs(self.ppo, obs_torch)
-            if self._use_obs_normalization
-            else obs_torch
-        )
-        with torch.no_grad():
-            outputs = self.ppo(model_input, self.rnn_states)
-        self.rnn_states = outputs["new_rnn_states"]
+        outputs = self._forward_observations(observations)
 
         logits = outputs["action_logits"].float().cpu().numpy()
         probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))

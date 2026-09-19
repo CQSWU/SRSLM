@@ -262,25 +262,15 @@ def _make_pogema_base(grid_config):
 
 
 
-def _make_sample_factory_pogema(grid_config):
-
-    env = _make_pogema_base(grid_config)
-
-    env = MetricsForwardingWrapper(env)
-
-    env = IsMultiAgentWrapper(env)
-
-    return env
-
-
-
 def make_pomapf(grid_config, with_animations=False, auto_reset=True):
 
     grid_config = deepcopy(grid_config)
 
     grid_config.auto_reset = False
 
-    env = _make_sample_factory_pogema(grid_config)
+    env = _make_pogema_base(grid_config)
+
+    env = IsMultiAgentWrapper(MetricsForwardingWrapper(env))
 
     if with_animations:
 

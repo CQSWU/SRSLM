@@ -22,7 +22,7 @@ def test_new_name_is_the_only_current_method_and_cli_namespace():
     assert runner.canonical_algorithm_name("CAAR") is None
     parameters = inspect.signature(runner.build_algorithm).parameters
     assert "arpe_candidate_manifest" in parameters
-    assert "arpe_weights_path" in parameters
+    assert "arpe_weights_path" not in parameters
     assert "caar_candidate_manifest" not in parameters
     with patch("sys.argv", ["run_experiments.py", "--algorithms", "ARPE",
                            "--arpe-candidate-manifest", "configs/arpe_final_candidate.json"]):
@@ -30,6 +30,9 @@ def test_new_name_is_the_only_current_method_and_cli_namespace():
     assert args.arpe_candidate_manifest == "configs/arpe_final_candidate.json"
     with pytest.raises(ValueError, match="Unsupported"):
         runner.build_algorithm("CAAR", ROOT, 0)
+    with patch("sys.argv", ["run_experiments.py", "--arpe-weights-path", "ignored"]):
+        with pytest.raises(SystemExit):
+            runner.parse_args()
 
 
 def test_selected_declaration_contains_portable_weight_paths():
