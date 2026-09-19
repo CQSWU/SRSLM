@@ -18,17 +18,14 @@ else:
 INF = 1_000_000_000
 FAILURE_CACHE_PROBABILITY = 0.5
 _FAILURE_CACHE_SEED_SALT = 0xFA11CA
+_MOVES = tuple(tuple(move) for move in GridConfig().MOVES)
+_ACTION_BY_DELTA = {move: index for index, move in enumerate(_MOVES)}
 
 
 class AORePlanBase:
     """Dynamic C++ replanner with explicit proposal feedback."""
 
     def __init__(self, max_steps: int = INF, seed=None):
-        grid_config = GridConfig()
-        self.actions = {
-            tuple(grid_config.MOVES[index]): index
-            for index in range(len(grid_config.MOVES))
-        }
         self.planner = None
         self.max_steps = int(max_steps)
         self.rnd = np.random.default_rng(seed)
@@ -104,7 +101,7 @@ class AORePlanBase:
                 path[1][0] - path[0][0],
                 path[1][1] - path[0][1],
             )
-            actions.append(self.actions[delta])
+            actions.append(_ACTION_BY_DELTA[delta])
         return actions
 
     @staticmethod
@@ -129,12 +126,11 @@ class AORePlanBase:
                 self.planner[index].cancel_desired()
 
 
-def _local_cell_is_free(observation, action, moves=None):
+def _local_cell_is_free(observation, action, moves=_MOVES):
     """Return whether a movement target is free in the current local view."""
 
     if action in (None, 0):
         return False
-    moves = moves or GridConfig().MOVES
     try:
         obstacles = np.asarray(observation["obstacles"])
         agents = np.asarray(observation["agents"])
@@ -153,7 +149,7 @@ def _local_cell_is_free(observation, action, moves=None):
         return False
 
 
-def original_random_or_stay(observation, rnd, moves=None):
+def original_random_or_stay(observation, rnd, moves=_MOVES):
     """Mirror the original RePlan no-path fallback: 50% wait, 50% random.
 
     This reproduces ``NoPathSoRandomOrStayWrapper`` from the upstream RePlan
@@ -164,7 +160,6 @@ def original_random_or_stay(observation, rnd, moves=None):
     between the two planners.
     """
 
-    moves = moves or GridConfig().MOVES
     if rnd.random() <= 0.5:
         return 0
 
@@ -191,11 +186,6 @@ class StaticAStarCheck:
     def __init__(self, max_steps: int = INF):
         self.max_steps = int(max_steps)
         self._planners = None
-        grid_config = GridConfig()
-        self.actions = {
-            tuple(grid_config.MOVES[index]): index
-            for index in range(len(grid_config.MOVES))
-        }
 
     def observe(self, observations):
         count = len(observations)
@@ -233,7 +223,7 @@ class StaticAStarCheck:
             path[1][0] - path[0][0],
             path[1][1] - path[0][1],
         )
-        return self.actions[delta]
+        return _ACTION_BY_DELTA[delta]
 
 
 class AORePlanWrapper:
@@ -263,11 +253,10 @@ class AORePlanWrapper:
         self.agent = agent
         self.rnd = agent.rnd
         self.static_astar = StaticAStarCheck(max_steps=max_steps)
-        self.moves = tuple(tuple(move) for move in GridConfig().MOVES)
+        self.moves = _MOVES
 
         self.previous_position = None
         self.last_target = None
-        self.last_planned_mask = None
         self.last_raw_dynamic_actions = None
         self.last_static_astar_invoked_mask = None
         self.last_no_path_fallback_mask = None
@@ -297,11 +286,6 @@ class AORePlanWrapper:
             return 0
         return int(raw_action)
 
-    def _use_static_astar_action(self, index, actions, action):
-        actions[index] = int(action)
-        self.last_planned_mask[index] = True
-        self.last_dynamic_override_mask[index] = True
-
     def _returns_to_previous_position(self, position, action, previous):
         """Return whether ``action`` moves back onto the previous position.
 
@@ -320,49 +304,11 @@ class AORePlanWrapper:
 
     def _reset_diagnostics(self, actions):
         count = len(actions)
-        self.last_planned_mask = [action is not None for action in actions]
         self.last_raw_dynamic_actions = list(actions)
         self.last_static_astar_invoked_mask = [False] * count
         self.last_no_path_fallback_mask = [False] * count
         self.last_reverse_mask = [False] * count
         self.last_dynamic_override_mask = [False] * count
-
-    def _resolve_dynamic_no_path(self, index, actions, observation):
-        """Apply the original RePlan fallback after BestMove fails.
-
-        No static A* runs here: goal unreachable with BestMove unavailable is the
-        one branch AORePlan keeps identical to the original planner.
-        ``last_no_path_fallback_mask`` marks that this fallback fired.
-        """
-
-        self.last_no_path_fallback_mask[index] = True
-        actions[index] = original_random_or_stay(
-            observation,
-            self.rnd,
-            moves=self.moves,
-        )
-        self.last_planned_mask[index] = True
-        self.last_dynamic_override_mask[index] = True
-
-    def _resolve_reverse(
-        self,
-        index,
-        actions,
-        observation,
-        position,
-        previous,
-    ):
-        static_action = self._static_astar_action(index, observation)
-        # If static A* returns the same reverse, the map geometry itself
-        # requires that move, so keep the dynamic candidate and its feedback.
-        # A guarded wait is never a reverse, so it is covered by the same
-        # predicate and replaces the dynamic proposal.
-        if not self._returns_to_previous_position(
-            position,
-            static_action,
-            previous,
-        ):
-            self._use_static_astar_action(index, actions, static_action)
 
     def act(self, observations, skip_agents=None):
         actions = list(self.agent.act(observations, skip_agents=skip_agents))
@@ -391,11 +337,16 @@ class AORePlanWrapper:
             # returns a complete primitive action, namely wait.
             if position == target:
                 actions[index] = 0
-                self.last_planned_mask[index] = True
                 continue
 
             if raw_action is None:
-                self._resolve_dynamic_no_path(index, actions, observation)
+                self.last_no_path_fallback_mask[index] = True
+                actions[index] = original_random_or_stay(
+                    observation,
+                    self.rnd,
+                    moves=self.moves,
+                )
+                self.last_dynamic_override_mask[index] = True
                 continue
 
             if raw_action == 0:
@@ -410,12 +361,13 @@ class AORePlanWrapper:
             if not reverse:
                 continue
 
-            self._resolve_reverse(
-                index,
-                actions,
-                observation,
+            static_action = self._static_astar_action(index, observation)
+            if not self._returns_to_previous_position(
                 position,
+                static_action,
                 previous,
-            )
+            ):
+                actions[index] = int(static_action)
+                self.last_dynamic_override_mask[index] = True
 
         return actions

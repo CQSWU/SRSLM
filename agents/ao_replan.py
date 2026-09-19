@@ -48,17 +48,16 @@ class AORePlan:
             else [False] * len(observations)
         )
         actions = self.agent.act(observations, skip_agents=skip)
-        self._commit_current_actions()
+        self._commit_current_actions(actions)
         self._reverse_counter.record(actions, observations)
         self._record_static_astar_metrics()
         return actions
 
-    def _commit_current_actions(self):
-        selected = list(self._ao_wrapper.last_planned_mask)
+    def _commit_current_actions(self, actions):
         base_mask = [
-            bool(executed) and not bool(overridden)
-            for executed, overridden in zip(
-                selected,
+            action is not None and not bool(overridden)
+            for action, overridden in zip(
+                actions,
                 self._ao_wrapper.last_dynamic_override_mask,
             )
         ]
@@ -90,28 +89,6 @@ class AORePlan:
                 f"received collision_system={collision_system!r}, audited "
                 f"{AUDITED_COLLISION_SYSTEMS}."
             )
-
-    def _latest(self, name):
-        if self._ao_wrapper is None:
-            return None
-        values = getattr(self._ao_wrapper, name)
-        return None if values is None else tuple(values)
-
-    @property
-    def raw_dynamic_actions(self):
-        return self._latest("last_raw_dynamic_actions")
-
-    @property
-    def no_path_fallback_mask(self):
-        return self._latest("last_no_path_fallback_mask")
-
-    @property
-    def reverse_mask(self):
-        return self._latest("last_reverse_mask")
-
-    @property
-    def last_planned_mask(self):
-        return self._latest("last_planned_mask")
 
     @property
     def reverse_action_rate(self):

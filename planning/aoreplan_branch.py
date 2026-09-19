@@ -74,7 +74,6 @@ class AORePlanBranch:
 
         actions = list(self._wrapper.act(observations, skip_agents=skip))
         fields = (
-            self._wrapper.last_planned_mask,
             self._wrapper.last_reverse_mask,
             self._wrapper.last_static_astar_invoked_mask,
         )
@@ -85,9 +84,9 @@ class AORePlanBranch:
 
         batch = AORePlanStep(
             actions=self._optional_int_tuple(actions),
-            planned_mask=tuple(bool(value) for value in fields[0]),
-            reverse_mask=tuple(bool(value) for value in fields[1]),
-            static_astar_invoked_mask=tuple(bool(value) for value in fields[2]),
+            planned_mask=tuple(action is not None for action in actions),
+            reverse_mask=tuple(bool(value) for value in fields[0]),
+            static_astar_invoked_mask=tuple(bool(value) for value in fields[1]),
         )
         self._pending = batch
         return batch

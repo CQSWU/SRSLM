@@ -128,7 +128,6 @@ def test_goal_returns_explicit_wait_not_no_path():
     wrapper = AORePlanWrapper(ActionSequence([None]))
     wrapper.static_astar = FixedStaticAStar(4)
     assert wrapper.act(observation(position=(5, 5), target=(5, 5))) == [0]
-    assert wrapper.last_planned_mask == [True]
     assert wrapper.last_no_path_fallback_mask == [False]
 
 
@@ -137,7 +136,6 @@ def test_standalone_metrics_use_new_names_and_denominators():
     algorithm.agent = ActionSequence([0])
     algorithm._base = SimpleNamespace(commit_proposals=lambda _mask: None)
     algorithm._ao_wrapper = SimpleNamespace(
-        last_planned_mask=[True],
         last_dynamic_override_mask=[True],
         last_raw_dynamic_actions=[1],
         last_static_astar_invoked_mask=[True],
