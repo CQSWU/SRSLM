@@ -4,6 +4,7 @@ import json
 from os.path import join
 from pathlib import Path
 from typing import Literal
+from collections.abc import Mapping
 
 import numpy as np
 import torch
@@ -22,7 +23,7 @@ from train import register_custom_components, validate_config
 class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["PolicyBackbone"] = "PolicyBackbone"
     path_to_weights: str
-    checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
+    checkpoint_kind: Literal["latest", "best"] = "latest"
 
 
 class PolicyBackbone:
@@ -39,16 +40,19 @@ class PolicyBackbone:
         config, self.config_sha256 = self._load_config_snapshot(
             self.config_path
         )
+        self.saved_config = config
         _, flat_config = validate_config(checkpoint_experiment_config(config["full_config"]))
 
         env = create_env(flat_config.env, cfg=flat_config, env_config={})
-        if "tau" not in env.observation_space.spaces:
-            raise RuntimeError(
-                f"{type(self).__name__} requires a checkpoint trained with "
-                f"the separate tau observation. Checkpoint path: {path}"
-            )
-        actor_critic = create_actor_critic(flat_config, env.observation_space, env.action_space)
-        env.close()
+        try:
+            if "tau" not in env.observation_space.spaces:
+                raise RuntimeError(
+                    f"{type(self).__name__} requires a checkpoint trained with "
+                    f"the separate tau observation. Checkpoint path: {path}"
+                )
+            actor_critic = create_actor_critic(flat_config, env.observation_space, env.action_space)
+        finally:
+            env.close()
 
         if device == "cpu":
             device = torch.device("cpu")
@@ -133,18 +137,7 @@ class PolicyBackbone:
             checkpoint_path = self._best_checkpoint_path(checkpoint_dir)
             label = "best"
         else:
-            try:
-                checkpoint_path = self._latest_checkpoint_path(checkpoint_dir)
-                label = "latest"
-            except FileNotFoundError as latest_error:
-                log.warning(
-                    "Failed to load latest checkpoint from %s, trying best "
-                    "checkpoint: %s",
-                    checkpoint_dir,
-                    latest_error,
-                )
-                checkpoint_path = self._best_checkpoint_path(checkpoint_dir)
-                label = "best"
+            raise ValueError(f"Choose an explicit checkpoint kind, got {checkpoint_kind!r}.")
         self.checkpoint_path = checkpoint_path
         checkpoint, self.checkpoint_sha256 = self._load_checkpoint_path(
             checkpoint_path,
@@ -157,14 +150,33 @@ class PolicyBackbone:
     def _load_model_state(actor_critic, checkpoint_state, path):
         """Reject architecture or forward-rule mismatches before loading tensors."""
 
+        if not isinstance(checkpoint_state, Mapping):
+            raise RuntimeError(f"Checkpoint model state must be a tensor mapping: {path}")
         current = actor_critic.state_dict()
         missing = sorted(current.keys() - checkpoint_state.keys())
         unexpected = sorted(checkpoint_state.keys() - current.keys())
+        invalid_tensors = [
+            key for key, value in checkpoint_state.items()
+            if not isinstance(value, torch.Tensor)
+        ]
+        if invalid_tensors:
+            raise RuntimeError(
+                f"Checkpoint has non-tensor model entries: {invalid_tensors}; {path}"
+            )
         shape_mismatches = [
             f"{key}: checkpoint={tuple(checkpoint_state[key].shape)}, "
             f"model={tuple(current[key].shape)}"
             for key in sorted(current.keys() & checkpoint_state.keys())
             if checkpoint_state[key].shape != current[key].shape
+        ]
+        dtype_mismatches = [
+            key for key in sorted(current.keys() & checkpoint_state.keys())
+            if checkpoint_state[key].dtype != current[key].dtype
+        ]
+        nonfinite_tensors = [
+            key for key, value in checkpoint_state.items()
+            if (value.is_floating_point() or value.is_complex())
+            and not torch.isfinite(value).all().item()
         ]
         # load_state_dict(strict=True) checks names and shapes, but would happily
         # overwrite a version marker with one for a different forward equation.
@@ -182,12 +194,15 @@ class PolicyBackbone:
                 checkpoint_state[key].detach().cpu(), current[key].detach().cpu()
             )
         ]
-        if missing or unexpected or shape_mismatches or semantic_mismatches:
+        if (missing or unexpected or shape_mismatches or dtype_mismatches
+                or nonfinite_tensors or semantic_mismatches):
             raise RuntimeError(
                 "Checkpoint architecture or forward-rule contract does not match "
                 "this policy; no tensors were loaded. "
                 f"Checkpoint path: {path}; missing={missing}, unexpected={unexpected}, "
                 f"shape_mismatches={shape_mismatches}, "
+                f"dtype_mismatches={dtype_mismatches}, "
+                f"nonfinite_tensors={nonfinite_tensors}, "
                 f"semantic_mismatches={semantic_mismatches}"
             )
         actor_critic.load_state_dict(checkpoint_state, strict=True)

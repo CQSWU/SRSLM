@@ -73,6 +73,23 @@ These audit records are recommended for publication but are not runtime gates.
 Replacing or retraining a checkpoint therefore does not require editing a hash
 allowlist in the source code.
 
+Result journals record a source fingerprint automatically. A journal from an
+older implementation cannot be resumed under changed source, even if its manual
+protocol label is reused. Start a new result directory after changing the
+implementation. Do not edit an evaluation's source tree while it is running.
+
+Only the retained entropy-gated ARPE equation is loadable. Inference overrides
+for removing the gate or changing its threshold, automatic best/latest fallback,
+the shuffled-trace branch, and the unused team-reward wrapper have been removed.
+The real-trace and zero-trace training recipes remain. A zero-trace result is a
+valid matched control only if it was trained using this same model and budget.
+The explicitly declared base checkpoint must match the one actually loaded;
+finding another checkpoint in the same directory does not make it equivalent.
+
+Run `python -m pytest -q` before deployment. The same regression suite runs on
+GitHub pushes and pull requests. This checks code contracts, not the validity of
+historical experimental results or any unprovided private checkpoint.
+
 The public release does not include external comparison adapters, third-party
 checkpoints, or private experiment bundles. Their licenses and reproduction
 requirements remain separate.

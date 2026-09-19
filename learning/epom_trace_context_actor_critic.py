@@ -4,7 +4,7 @@ The historical class name remains the parent of EPOMTraceMultiplierActorCritic.
 It provides checkpoint validation, frozen-backbone identity, training-mode
 control and shared diagnostics; it no longer constructs a standalone contextual
 residual model. The concrete paper architecture is defined in the multiplier
-module. Pure Direct-rule helpers remain available for isolated diagnostics.
+module. This support class cannot be selected as a second architecture.
 """
 
 from __future__ import annotations

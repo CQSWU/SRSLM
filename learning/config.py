@@ -43,6 +43,14 @@ def checkpoint_experiment_config(config):
     settings = normalized.get('experiment_settings', {})
     for key in OBSOLETE_SAVED_SETTINGS:
         settings.pop(key, None)
+    if settings.get('encoder_custom') != 'epom_trace_context':
+        # These were inert serialized defaults in EPOM/Switcher checkpoints.
+        # Never migrate a Trace checkpoint into a different architecture/gate.
+        if settings.get('trace_context_architecture') == 'context':
+            settings.pop('trace_context_architecture')
+        normalized.get('environment', {}).pop(
+            'trace_context_team_reward_coefficient', None
+        )
     if settings.get('encoder_custom') in {
         'pogema_residual', 'epom_finetune', 'epom_trace_context',
     }:
@@ -223,17 +231,9 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
     trace_rule_scale: float = Field(1.0, ge=0.0)
     trace_gate_threshold: float = Field(0.46371241)
 
-    # "context" is inert metadata in saved non-Trace checkpoints; it cannot
-    # instantiate a trace model. The only retained trainable branch is below.
-    trace_context_architecture: Literal[
-        'context',
-        'paper_entropy_fusion',
-    ] = 'context'
-
-    trace_context_learned_gate: Literal[
-        'entropy',
-        'all',
-    ] = 'entropy'
+    # There is only one supported ARPE architecture and training gate.
+    trace_context_architecture: Literal['paper_entropy_fusion'] = 'paper_entropy_fusion'
+    trace_context_learned_gate: Literal['entropy'] = 'entropy'
 
     hidden_size: int = 512
 
@@ -318,7 +318,7 @@ class Environment(BaseModel, extra=Extra.forbid):
     # decay = 1 - tau_rho, so tau_rho=0.1 means a retention factor of 0.9 and a
     # memory of roughly 22 steps.  Papers that write P_t = rho*P_{t-1} + O_t
     # use rho for RETENTION; writing that rho here would invert the memory.
-    trace_variant: str = Field('real')
+    trace_variant: Literal['real', 'zero'] = 'real'
     tau_raw: bool = Field(False)
 
     tau_radius: Optional[int] = Field(None, ge=1)
@@ -338,7 +338,8 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     switcher_team_reward_coefficient: float = 1.0
 
-    trace_context_team_reward_coefficient: float = 1.0
+    # Kept in the saved recipe for provenance; current ARPE uses no team reward.
+    trace_context_team_reward_coefficient: Literal[0.0] = 0.0
 
     switcher_feature_schema: str = "srslm_switcher_state_v3"
 
@@ -506,12 +507,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     "EPOM trace-context training supports trace_variant='real' "
                     "or the capacity-matched 'zero' control."
-                )
-            if not np.isfinite(
-                environment.trace_context_team_reward_coefficient
-            ):
-                raise ValueError(
-                    'trace_context_team_reward_coefficient must be finite.'
                 )
             if grid.obs_radius != 5:
                 raise ValueError(

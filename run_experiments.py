@@ -1908,6 +1908,20 @@ def _canonical_json_sha256(value):
     ).hexdigest()
 
 
+def evaluation_source_sha256(root=None):
+    """Bind resumed results to the implementation, not just a run label."""
+    root = Path(root) if root is not None else Path(__file__).resolve().parent
+    files = [root / name for name in ("run_experiments.py", "train.py")]
+    for package in ("agents", "learning", "planning", "pomapf_env", "maps"):
+        directory = root / package
+        files.extend(path for path in directory.glob("*")
+                     if path.suffix in {".py", ".cpp", ".yaml"})
+    return _canonical_json_sha256({
+        path.relative_to(root).as_posix(): _sha256_file(path)
+        for path in sorted(files) if path.is_file()
+    })
+
+
 def build_tasks(
     algorithms,
     maps,
@@ -2020,8 +2034,9 @@ def _initialize_result_journal(path, contract, total):
 
     record = {
         "record_type": "header",
-        "schema": "experiment_result_journal_v1",
+        "schema": "experiment_result_journal_v2",
         "contract_sha256": contract,
+        "source_sha256": evaluation_source_sha256(),
         "expected_tasks": int(total),
     }
 
@@ -2045,6 +2060,7 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
     path = Path(path)
 
     raw = path.read_bytes()
+    repair_needed = False
 
     if raw and not raw.endswith(b"\n"):
         last_newline = raw.rfind(b"\n")
@@ -2053,17 +2069,7 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
             raise ValueError("Result journal has a truncated final record")
 
         raw = raw[: last_newline + 1]
-
-        temporary = path.with_name(f".{path.name}.{os.getpid()}.repair")
-
-        with temporary.open("wb") as stream:
-            stream.write(raw)
-
-            stream.flush()
-
-            os.fsync(stream.fileno())
-
-        os.replace(temporary, path)
+        repair_needed = True
 
     lines = raw.splitlines()
 
@@ -2078,11 +2084,15 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
 
     if header != {
         "record_type": "header",
-        "schema": "experiment_result_journal_v1",
+        "schema": "experiment_result_journal_v2",
         "contract_sha256": contract,
+        "source_sha256": evaluation_source_sha256(),
         "expected_tasks": len(tasks),
     }:
-        raise ValueError("Result journal contract/header differs from this run")
+        raise ValueError(
+            "Result journal contract/header differs from this run. "
+            "Do not merge results from an old implementation; use a new journal."
+        )
 
     expected_keys = {_journal_task_key(task) for task in tasks}
 
@@ -2127,6 +2137,15 @@ def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
 
         ordered.append(result)
 
+    # Never rewrite even a damaged tail until identity and all retained rows
+    # have passed validation. Invalid historical journals remain evidence.
+    if repair_needed:
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.repair")
+        with temporary.open("wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
     return ordered
 
 
@@ -2141,6 +2160,7 @@ def run_experiments(
 
     results = []
 
+    source_sha256 = evaluation_source_sha256()
     total = len(tasks)
 
     start_time = time.time()
@@ -2209,6 +2229,13 @@ def run_experiments(
 
         for index, future in enumerate(as_completed(futures), start=len(results) + 1):
             result = future.result()
+
+            if evaluation_source_sha256() != source_sha256:
+                raise RuntimeError(
+                    "Evaluation source changed during this run. Results from "
+                    "different implementations must not share a journal."
+                )
+            result["evaluation_source_sha256"] = source_sha256
 
             elapsed = elapsed_offset + time.time() - start_time
 
@@ -2642,6 +2669,7 @@ def main():
     metadata = {
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "runtime_provenance": runtime_provenance(),
+        "evaluation_source_sha256": evaluation_source_sha256(),
         "congestion_metric": {
             "version": _MoveFailureTracker.METRIC_VERSION,
             "conflict_definition": (

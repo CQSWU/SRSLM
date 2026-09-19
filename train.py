@@ -40,7 +40,6 @@ from pomapf_env.wrappers import (
     GridMemoryObservationWrapper,
     MatrixObservationWrapper,
     TauObservationWrapper,
-    TraceContextTeamRewardWrapper,
 )
 
 
@@ -171,14 +170,9 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
             tau_radius=environment_config.tau_radius,
             trace_variant=getattr(environment_config, "trace_variant", "real"),
             raw_tau=bool(getattr(environment_config, "tau_raw", False)),
-            variant_seed=getattr(cfg, "seed", None),
             include_free_mask=is_trace_context,
         )
         if is_trace_context:
-            env = TraceContextTeamRewardWrapper(
-                env,
-                coefficient=(environment_config.trace_context_team_reward_coefficient),
-            )
             def index(name):
                 value = (env_config.get(name, 0) if isinstance(env_config, dict)
                          else getattr(env_config, name, 0))

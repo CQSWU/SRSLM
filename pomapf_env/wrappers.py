@@ -338,11 +338,11 @@ class TauObservationWrapper(gym.Wrapper):
     """Add a signed local mean-centered traffic observation."""
 
     def __init__(self, env, rho=0.1, tau_radius=None, trace_variant="real",
-                 raw_tau=False, variant_seed=None, include_free_mask=False):
+                 raw_tau=False, include_free_mask=False):
         super().__init__(env)
         from pomapf_env.trace_variant import TraceVariant
 
-        self.variant = TraceVariant(trace_variant, seed=variant_seed)
+        self.variant = TraceVariant(trace_variant)
         self.raw_tau = bool(raw_tau)
         self.include_free_mask = bool(include_free_mask)
         obs_space = self.env.observation_space
@@ -401,12 +401,7 @@ class TauObservationWrapper(gym.Wrapper):
         return observations, rewards, terminated, truncated, infos
 
     def _observe(self, observations, reset):
-        """Deposit at the true positions, then read at the variant's positions.
-
-        The trace itself is always written from the real occupancy, so all
-        variants share an identical global trace; only where each agent reads
-        it differs.
-        """
+        """Read the real local trace, or zero it for the matched control."""
         true_positions = self._global_positions()
         if reset:
             self.aco.reset_episode(
@@ -422,18 +417,9 @@ class TauObservationWrapper(gym.Wrapper):
                 raw_tau=self.raw_tau,
                 radius=self.tau_radius,
             )
-        read_positions = true_positions
-        if self.variant.wants_alternate_positions():
-            read_positions = self.variant.alternate_positions(true_positions)
-            self.aco.add_tau_observation(
-                observations,
-                positions=read_positions,
-                raw_tau=self.raw_tau,
-                radius=self.tau_radius,
-            )
         self.variant.apply(observations)
         if self.include_free_mask:
-            for observation, (x, y) in zip(observations, read_positions):
+            for observation, (x, y) in zip(observations, true_positions):
                 free_mask = self.aco.extract_local_free_mask(
                     int(x),
                     int(y),
@@ -465,40 +451,3 @@ class TauObservationWrapper(gym.Wrapper):
                 return current.grid
             current = getattr(current, "env", None)
         raise RuntimeError("Tau observation could not locate the Pogema grid.")
-
-
-class TraceContextTeamRewardWrapper(gym.Wrapper):
-    """Add a cooperative team signal without recursively modifying its mean.
-
-    For a coefficient ``c``, every agent receives its own inner-environment
-    reward plus ``c`` times the mean of the unmodified reward vector returned
-    by that inner environment for the current step.
-    """
-
-    def __init__(self, env, coefficient=1.0):
-        super().__init__(env)
-        self.coefficient = float(coefficient)
-        if not np.isfinite(self.coefficient):
-            raise ValueError("Team reward coefficient must be finite.")
-        self.num_agents = self.env.num_agents
-        self.is_multiagent = self.env.is_multiagent
-
-    def step(self, actions):
-        observations, rewards, terminated, truncated, infos = self.env.step(
-            actions
-        )
-        if self.coefficient == 0.0:
-            return observations, rewards, terminated, truncated, infos
-
-        original = np.asarray(rewards, dtype=np.float32)
-        if original.size == 0:
-            return observations, rewards, terminated, truncated, infos
-        increment = self.coefficient * float(original.mean())
-
-        if isinstance(rewards, np.ndarray):
-            adjusted = rewards + increment
-        elif isinstance(rewards, tuple):
-            adjusted = tuple(float(value) + increment for value in rewards)
-        else:
-            adjusted = [float(value) + increment for value in rewards]
-        return observations, adjusted, terminated, truncated, infos

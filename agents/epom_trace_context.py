@@ -18,14 +18,13 @@ it deliberately does not live in this inference-only module.
 
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
 import torch
-from pydantic import Extra
+from pydantic import Extra, root_validator
 from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.model_utils import get_rnn_size
@@ -41,19 +40,15 @@ TRACE_RADIUS = 5
 TRACE_SIZE = 2 * TRACE_RADIUS + 1
 
 
-def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
-    """Read and validate the observation contract saved with a checkpoint."""
+def _validate_r5_trace_contract(full_config: dict) -> dict[str, object]:
+    """Validate the same config snapshot used to construct the loaded model."""
 
     try:
-        payload = json.loads(Path(config_path).read_text(encoding="utf-8"))
-        full_config = payload["full_config"]
         environment = full_config["environment"]
-        architecture = full_config.get("experiment_settings", {}).get(
-            "trace_context_architecture", "context"
-        )
-    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        architecture = full_config["experiment_settings"]["trace_context_architecture"]
+    except (KeyError, TypeError) as exc:
         raise RuntimeError(
-            f"Cannot read trace contract from checkpoint config {config_path}"
+            "Checkpoint config is missing the explicit trace observation contract."
         ) from exc
 
     radius = environment.get("tau_radius")
@@ -64,15 +59,15 @@ def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
             "EPOM-TraceContext inference is fixed to the paper's 11x11 trace "
             f"crop (tau_radius=5), but checkpoint config has {radius!r}."
         )
-    expected_raw_tau = architecture not in {
-        "paper_entropy_multiplier",
-        "paper_entropy_fusion",
-    }
-    if raw_tau is not expected_raw_tau:
+    if architecture != "paper_entropy_fusion":
+        raise RuntimeError(
+            f"Only the retained paper_entropy_fusion architecture is supported, got {architecture!r}."
+        )
+    if raw_tau is not False:
         raise RuntimeError(
             "EPOM-TraceContext checkpoint has an invalid trace representation: "
             f"architecture={architecture!r} requires "
-            f"tau_raw={expected_raw_tau!r}, got {raw_tau!r}."
+            f"tau_raw=False, got {raw_tau!r}."
         )
     if trace_variant not in {"real", "zero"}:
         raise RuntimeError(
@@ -82,7 +77,7 @@ def _read_r5_trace_contract(config_path: Path) -> dict[str, object]:
     return {
         "tau_radius": TRACE_RADIUS,
         "tau_size": TRACE_SIZE,
-        "tau_raw": expected_raw_tau,
+        "tau_raw": False,
         "trace_context_architecture": architecture,
         "trace_variant": trace_variant,
     }
@@ -92,16 +87,22 @@ class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
     name: Literal["EPOM-TraceContext"] = "EPOM-TraceContext"
     path_to_weights: str
     checkpoint_kind: Literal[
-        "auto", "latest", "best", "milestone"
+        "latest", "best", "milestone"
     ] = "latest"
     milestone_checkpoint: Optional[str] = None
-    # Evaluation-only ablation. ``checkpoint`` preserves the learned run's
-    # entropy gate; ``all`` applies the same learned correction at every step.
-    learned_gate_override: Literal["checkpoint", "all"] = "checkpoint"
-    entropy_threshold_override: Optional[float] = None
     # Historical standalone ARPE reports sampled like Direct; the frozen
     # SRSLM branch used Torch, sharing its stream with Switcher.
     action_sampling: Literal["torch", "direct_numpy"] = "torch"
+
+    @root_validator
+    def explicit_checkpoint_selection(cls, values):
+        milestone = values.get("milestone_checkpoint")
+        if values.get("checkpoint_kind") == "milestone":
+            if not isinstance(milestone, str) or not milestone.strip():
+                raise ValueError("checkpoint_kind='milestone' requires milestone_checkpoint")
+        elif milestone is not None:
+            raise ValueError("milestone_checkpoint requires checkpoint_kind='milestone'")
+        return values
 
 
 class EPOMTraceContext(PolicyBackbone):
@@ -123,31 +124,10 @@ class EPOMTraceContext(PolicyBackbone):
         # checkpoint.  Compare it now with the digest captured immediately
         # after the external EPOM-L checkpoint was loaded by the model.
         self._actor_backbone_verification = verifier()
-        # ``config_path`` is the immutable config stored next to this run.  The
-        # assertion therefore verifies the actual checkpoint family rather
-        # than trusting a command-line radius.
-        self._trace_contract = _read_r5_trace_contract(self.config_path)
+        self._trace_contract = _validate_r5_trace_contract(self.saved_config["full_config"])
         self._trace_variant = TraceVariant(
-            self._trace_contract["trace_variant"], seed=int(algo_cfg.seed)
+            self._trace_contract["trace_variant"]
         )
-        gate_override = getattr(
-            self.ppo, "set_inference_learned_gate_override", None
-        )
-        if not callable(gate_override):
-            raise RuntimeError(
-                "EPOM-TraceContext actor-critic does not expose the required "
-                "inference gate-override hook."
-            )
-        gate_override(algo_cfg.learned_gate_override)
-        threshold_override = getattr(
-            self.ppo, "set_inference_entropy_threshold_override", None
-        )
-        if not callable(threshold_override):
-            raise RuntimeError(
-                "EPOM-TraceContext actor-critic does not expose the required "
-                "inference entropy-threshold hook."
-            )
-        threshold_override(algo_cfg.entropy_threshold_override)
         if int(self.tau_radius) != TRACE_RADIUS:
             raise RuntimeError(
                 "Runtime tau_radius disagrees with checkpoint config: "
@@ -173,25 +153,16 @@ class EPOMTraceContext(PolicyBackbone):
             self.loaded_checkpoint_kind = checkpoint_kind
             return checkpoint
 
-        configured = self.algo_cfg.milestone_checkpoint
-        if not configured:
-            raise ValueError(
-                "checkpoint_kind='milestone' requires milestone_checkpoint"
-            )
-        candidate = Path(configured).expanduser()
+        candidate = Path(self.algo_cfg.milestone_checkpoint).expanduser()
         if not candidate.is_absolute():
             project_root = Path(__file__).resolve().parents[1]
-            weights_dir = Path(checkpoint_dir).resolve().parent
-            possibilities = (
-                project_root / candidate,
-                weights_dir / candidate,
-                Path(checkpoint_dir).resolve() / candidate,
-            )
-            candidate = next(
-                (path for path in possibilities if path.is_file()),
-                possibilities[0],
-            )
+            candidate = project_root / candidate
         candidate = candidate.resolve()
+        if candidate.parent != Path(checkpoint_dir).resolve():
+            raise ValueError(
+                "Milestone checkpoint must belong to the declared run and policy "
+                f"directory {Path(checkpoint_dir).resolve()}: {candidate}"
+            )
         if not candidate.is_file():
             raise FileNotFoundError(
                 f"Missing requested milestone checkpoint: {candidate}"
@@ -329,10 +300,7 @@ class EPOMTraceContext(PolicyBackbone):
         }
 
     def get_model_provenance(self):
-        model_provenance = {}
-        provider = getattr(self.ppo, "checkpoint_provenance", None)
-        if callable(provider):
-            model_provenance = deepcopy(provider())
+        model_provenance = deepcopy(self.ppo.checkpoint_provenance())
         return {
             "method": "EPOM-TraceContext",
             "weights_path": str(Path(self.algo_cfg.path_to_weights).resolve()),

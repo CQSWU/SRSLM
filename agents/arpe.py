@@ -80,6 +80,15 @@ class ArpeCandidateArtifact:
                 "ARPE candidate declaration is missing: "
                 f"{sorted(missing)}"
             )
+        for field, expected in (
+            ("kind", ARPE_CANDIDATE_KIND),
+            ("schema", ARPE_CANDIDATE_SCHEMA),
+            ("frozen", True),
+        ):
+            if field in mapping and mapping[field] != expected:
+                raise ValueError(
+                    f"ARPE candidate {field} must be {expected!r}, got {mapping[field]!r}."
+                )
 
         root = Path(project_root).resolve()
         weights_relative, weights_path = _artifact_path(
@@ -184,9 +193,31 @@ class ARPE:
             if verified_file_hashes is not None
             else artifact.inspect_files()
         )
+        self._verify_loaded_artifacts()
         self.ppo.eval()
         for parameter in self.ppo.parameters():
             parameter.requires_grad_(False)
+
+    def _verify_loaded_artifacts(self, file_hashes: Mapping[str, str] | None = None) -> None:
+        """The declaration must describe what was loaded, not merely existing files."""
+        declared = self._verified_file_hashes if file_hashes is None else file_hashes
+        model = self.ppo.checkpoint_provenance()
+        actual = {
+            str(self.artifact.config_path): self.policy.config_sha256,
+            str(self.artifact.checkpoint_path): self.policy.checkpoint_sha256,
+            str(self.artifact.base_config_path): model["base_config_sha256"],
+            str(self.artifact.base_checkpoint_path): model["base_checkpoint_sha256"],
+        }
+        mismatches = {
+            path: {"declared": declared.get(path), "loaded": digest}
+            for path, digest in actual.items()
+            if declared.get(path) != digest
+        }
+        if mismatches:
+            raise RuntimeError(
+                "ARPE loaded artifacts differ from its declaration; refusing to "
+                f"report misleading provenance: {mismatches}"
+            )
 
     @classmethod
     def load(
@@ -220,7 +251,9 @@ class ARPE:
 
     def verify_frozen(self, *, rehash_files: bool = False) -> dict[str, object]:
         if rehash_files:
-            self._verified_file_hashes = self.artifact.inspect_files()
+            hashes = self.artifact.inspect_files()
+            self._verify_loaded_artifacts(hashes)
+            self._verified_file_hashes = hashes
         trainable = [
             name
             for name, parameter in self.ppo.named_parameters()

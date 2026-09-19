@@ -213,51 +213,15 @@ def test_entropy_closed_rows_have_no_actor_gradient_but_open_rows_adjust_all_act
     assert delta[0, 4] != 0
 
 
-def test_inference_gate_overrides_do_not_change_residual_equation(full_model):
-    model, _, _ = full_model
+def test_inference_cannot_silently_change_the_trained_gate():
+    assert not hasattr(EPOMTraceMultiplierActorCritic, "set_inference_learned_gate_override")
+    assert not hasattr(EPOMTraceMultiplierActorCritic, "set_inference_entropy_threshold_override")
     base = torch.tensor([[20.0, 0.4, 0.3, 0.2, 0.1]])
-    raw = torch.tensor([[0.4, -0.2, 0.1, 0.3, -0.1]])
     pressure, legal, ranks = _routing(1)
-    try:
-        model.set_inference_learned_gate_override("checkpoint")
-        closed, _, gate, _ = model.apply_effective_paper_correction(base, raw, pressure, legal, ranks)
-        torch.testing.assert_close(closed, base)
-        torch.testing.assert_close(gate, torch.zeros(1, 1))
-        model.set_inference_learned_gate_override("all")
-        opened, delta, gate, _ = model.apply_effective_paper_correction(base, raw, pressure, legal, ranks)
-        bounded = 0.5 * torch.tanh(raw)
-        expected_delta = bounded - bounded.mean(dim=-1, keepdim=True)
-        expected = base + expected_delta
-        expected[:, 2] += 1.0
-        torch.testing.assert_close(opened, expected)
-        torch.testing.assert_close(delta, expected_delta)
-        torch.testing.assert_close(gate, torch.ones(1, 1))
-        with pytest.raises(ValueError, match="checkpoint.*all"):
-            model.set_inference_learned_gate_override("invalid")
-    finally:
-        model.set_inference_learned_gate_override("checkpoint")
-
-
-def test_inference_entropy_threshold_override_changes_only_gate(full_model):
-    model, _, _ = full_model
-    base = torch.tensor([[2.0, 0.5, 0.0, -0.5, -1.0]])
-    raw = torch.tensor([[0.4, -0.2, 0.1, 0.3, -0.1]])
-    pressure, legal, ranks = _routing(1)
-    entropy = model._base_entropy(base).item()
-    try:
-        model.set_inference_entropy_threshold_override(entropy - 0.01)
-        opened, _, gate, _ = model.apply_effective_paper_correction(base, raw, pressure, legal, ranks)
-        bounded = 0.5 * torch.tanh(raw)
-        expected = base + bounded - bounded.mean(dim=-1, keepdim=True)
-        expected[:, 2] += 1.0
-        torch.testing.assert_close(opened, expected)
-        torch.testing.assert_close(gate, torch.ones(1, 1))
-        model.set_inference_entropy_threshold_override(entropy + 0.01)
-        closed, _, gate, _ = model.apply_effective_paper_correction(base, raw, pressure, legal, ranks)
-        torch.testing.assert_close(closed, base)
-        torch.testing.assert_close(gate, torch.zeros(1, 1))
-    finally:
-        model.set_inference_entropy_threshold_override(None)
+    with pytest.raises(TypeError, match="entropy_threshold"):
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, torch.ones_like(base), pressure, legal, ranks, entropy_threshold=0.0
+        )
 
 
 def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_model):

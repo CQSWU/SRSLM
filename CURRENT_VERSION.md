@@ -79,6 +79,13 @@ now uses the corrected architecture, but that control still requires a new run.
 
 ## Public/private boundary
 
+The cleanup following the checkpoint correction removes obsolete inference
+gate overrides, auto-selection fallback, shuffled trace, and team-reward code.
+The selected forward equation and checkpoint tensor names are unchanged.
+Base-artifact identity is checked against the files actually loaded. Journal
+resume is source-bound; old result files are never automatically relabelled as
+corrected evaluations. GitHub CI runs the regression suite on every code change.
+
 The public runner exposes RePlan, AORePlan, AORePlan-SoftNoCheck, EPOM-L,
 Direct, ARPE, SRSLM-NoWait, SRSLM-OnlyWait, and SRSLM. External comparison
 adapters and separately licensed sources/checkpoints are deliberately not
