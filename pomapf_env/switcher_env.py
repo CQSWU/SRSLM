@@ -1,4 +1,4 @@
-"""Shared runtime methods for the hash-pinned Switcher environments."""
+"""Shared runtime methods for the Switcher environments."""
 
 from __future__ import annotations
 

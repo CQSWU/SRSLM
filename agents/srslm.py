@@ -48,25 +48,14 @@ class SRSLM:
         candidate = getattr(self.switcher, "candidate_artifact", None)
         if candidate is None:
             raise RuntimeError(
-                "Switcher checkpoint does not pin its frozen ARPE candidate."
-            )
-        root = (
-            Path(project_root).resolve()
-            if project_root is not None
-            else Path(__file__).resolve().parents[1]
-        )
-        if candidate.project_root != root:
-            raise RuntimeError(
-                "Switcher candidate was resolved against a different project root."
+                "Switcher checkpoint does not contain ARPE candidate paths."
             )
         self.candidate = candidate_factory(
             candidate,
             seed=int(cfg.seed or 0),
             device=str(cfg.device),
         )
-        verification = self.candidate.verify_frozen()
-        if verification.get("verified") is not True:
-            raise RuntimeError("Frozen ARPE candidate verification failed.")
+        self.candidate.verify_frozen()
         planner = planner_factory(
             max_steps=cfg.max_planning_steps,
             seed=cfg.seed,

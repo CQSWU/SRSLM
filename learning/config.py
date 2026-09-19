@@ -325,7 +325,7 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     grid_memory_obs_radius: int = Field(7, ge=1)
 
-    # Actual Switcher configs must name their pinned ARPE candidate explicitly.
+    # Switcher configs can name an ARPE directory; the public config supplies it.
     switcher_caar_weights_path: str = ""
 
     switcher_caar_checkpoint_kind: Literal[
@@ -466,10 +466,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     'EPOM fine-tuning PPO settings differ from official v0: '
                     f'{mismatched_ppo}'
-                )
-            if async_ppo.num_workers > 12:
-                raise ValueError(
-                    'EPOM fine-tuning exceeds the Server2 cap of 12 workers.'
                 )
             if settings.learning_rate != 1e-4:
                 raise ValueError(

@@ -60,10 +60,12 @@ uv run python run_experiments.py \
 
 ## Checkpoints and retraining
 
-The selected artifact identities and hashes are listed in
-[CURRENT_VERSION.md](CURRENT_VERSION.md). Weights are not downloaded by the
-source checkout. Put them at the declared relative paths and verify every hash
-before evaluation.
+Weights are distributed separately from the source checkout. Copy the provided
+`weights/` directory into the project root. The loaders now use ordinary paths:
+they check that the requested files exist and that their tensors fit the model,
+but do not require a particular SHA256 value or machine-specific location.
+The paper hashes remain in [CURRENT_VERSION.md](CURRENT_VERSION.md) only as
+optional provenance.
 
 The retained training recipes are:
 
@@ -73,11 +75,23 @@ learning/train_arpe.yaml
 learning/train_switcher.yaml
 ```
 
-These files are reproducible recipes, not claims that a fresh run will recreate
-historical checkpoint bytes. Use a new output directory and a new artifact
-declaration for every retraining run. Train EPOM-L and ARPE with `train.py`.
-Train the final Switcher with `train_switcher.py`, which verifies the pinned
-candidate-policy hashes and routing contract before starting Sample Factory.
+Train EPOM-L and ARPE with `train.py`, and train the final Switcher with
+`train_switcher.py`. The supplied recipes are not locked to a machine-specific
+path or a checkpoint hash; architecture-incompatible settings still fail with
+a direct error message.
+
+With the released `weights/` directory in place, learned methods need no hash
+manifest arguments:
+
+```bash
+uv run python run_experiments.py \
+  --algorithms EPOM-Lifelong-FT,Direct,ARPE,SRSLM \
+  --map-types wc3 --map wc3=wc3-128x64-TimbermawHold \
+  --agents 16 --seeds 0 --workers 1 \
+  --obs-radius 5 --max-steps 128 \
+  --on-target restart --collision-system block_both \
+  --output-dir results --output learned_smoke.json
+```
 
 ## Evaluation protocol
 
@@ -98,9 +112,8 @@ maps/test.yaml
 resized MovingAI WC3 maps; no secondary list or registry is required.
 
 Run `block_both` and `soft` separately with the same selected block-trained
-weights. Keep each output directory immutable and require unique, finite,
-error-free rows together with source, map, configuration, and checkpoint hashes
-before using a result in the paper. The older 32-map/960-row bundles remain
+weights. The evaluator records source and checkpoint hashes for provenance, but
+does not block a run when users replace a checkpoint. The older 32-map/960-row bundles remain
 historical evidence and must not be relabelled as the 36-map result.
 
 Default AORePlan keeps its conservative local occupancy check under both
@@ -115,8 +128,8 @@ uv run python -m pytest tests
 ```
 
 The focused regression suite covers AORePlan cache release, accumulated static
-memory, collision handling, trace reset across episodes, ARPE/Switcher artifact
-contracts, and the restricted public method registry.
+memory, collision handling, trace reset across episodes, portable checkpoint
+loading, and the public method registry.
 
 ## License
 

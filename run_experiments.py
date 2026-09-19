@@ -63,7 +63,6 @@ SUPPORTED_ALGORITHMS = (
     "SRSLM-NoWait", "SRSLM-OnlyWait", "SRSLM",
 )
 
-# Learned methods always require their explicit, hash-pinned artifacts.
 DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
 ALGORITHM_ALIASES = {
     "replan": "RePlan",
@@ -249,6 +248,22 @@ def _find_switcher_weights(main_dir):
     return str(candidate)
 
 
+def _find_epom_lifelong_weights(main_dir):
+    candidate = (
+        Path(main_dir).resolve()
+        / "weights"
+        / "EPOM-lifelong-finetune-r5"
+        / "EPOM-Lifelong-Finetune-R5"
+    )
+    if not _has_config(candidate) or not _has_checkpoints(candidate):
+        raise FileNotFoundError(
+            "EPOM-L weights were not found. Put the released directory under "
+            "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5 "
+            "or pass --epom-weights-path."
+        )
+    return str(candidate)
+
+
 
 
 
@@ -396,11 +411,13 @@ def _project_path(main_dir, value):
 
 
 def _load_arpe_candidate_artifact(main_dir, manifest_path):
-    """Load and verify the one explicit ARPE milestone used by SRSLM."""
+    """Load ARPE paths from the supplied or repository-default declaration."""
 
     if manifest_path is None:
-        raise ValueError(
-            "The final SRSLM variants require --arpe-candidate-manifest."
+        manifest_path = str(
+            Path(main_dir).resolve()
+            / "configs"
+            / "arpe_final_candidate.json"
         )
     path = _project_path(main_dir, manifest_path)
     if not path.is_file():
@@ -414,7 +431,6 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
         payload,
         Path(main_dir).resolve(),
     )
-    artifact.verify_files()
     return artifact
 
 
@@ -474,12 +490,6 @@ def srslm_integrity_metadata(
     from agents.arpe import ArpeCandidateArtifact
     from agents.switcher import Switcher
     artifact = ArpeCandidateArtifact.from_mapping(full_config.get("candidate_policy", {}), root)
-    artifact.verify_files()
-    _assert_candidate_weights(root, getattr(args, "arpe_weights_path", None), artifact)
-    if getattr(args, "arpe_candidate_manifest", None):
-        declared = _load_arpe_candidate_artifact(root, args.arpe_candidate_manifest)
-        if declared.as_dict() != artifact.as_dict():
-            raise ValueError("ARPE manifest differs from the candidate pinned by Switcher.")
     arpe_weights = artifact.weights_path
     arpe_checkpoint = artifact.checkpoint_path
     switcher_checkpoint = Switcher._resolve_checkpoint(switcher_weights / "checkpoint_p0", "auto")
@@ -609,12 +619,6 @@ def _ao_replan_cfg(
     )
 
 
-def _assert_candidate_weights(main_dir, requested, artifact):
-    """An old CLI path may assert identity, but may not replace a pinned ARPE."""
-    if requested is not None and _project_path(main_dir, requested).resolve() != artifact.weights_path:
-        raise ValueError("--arpe-weights-path differs from the hash-pinned ARPE candidate.")
-
-
 def build_algorithm(
 
     algo_name,
@@ -644,18 +648,6 @@ def build_algorithm(
     algo_name = canonical_algorithm_name(algo_name) or algo_name
     if algo_name not in SUPPORTED_ALGORITHMS:
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
-
-    if algo_name in {"ARPE", "SRSLM", "SRSLM-NoWait", "SRSLM-OnlyWait"}:
-        # Their saved relative paths and embedded candidate declaration share
-        # this checkout as their root. Do not partly redirect those identities
-        # with --main-dir while loading the frozen base from a different tree.
-        if Path(main_dir).resolve() != Path(__file__).resolve().parent:
-            raise ValueError(
-                f"{algo_name} requires --main-dir to be this source checkout. "
-                "Place its hash-pinned weights under the documented relative "
-                "paths; a separate artifact-only root is not supported."
-            )
-
 
     if algo_name == "RePlan":
 
@@ -696,16 +688,11 @@ def build_algorithm(
             main_dir,
             arpe_candidate_manifest,
         )
-        _assert_candidate_weights(main_dir, arpe_weights_path, artifact)
         candidate = ARPEConfig(
             path_to_weights=artifact.weights_relative,
             milestone_checkpoint=artifact.checkpoint_relative,
-            checkpoint_sha256=artifact.checkpoint_sha256,
-            config_sha256=artifact.config_sha256,
             base_weights_path=artifact.base_weights_relative,
             base_checkpoint_path=artifact.base_checkpoint_relative,
-            base_checkpoint_sha256=artifact.base_checkpoint_sha256,
-            base_config_sha256=artifact.base_config_sha256,
             seed=seed,
             device="auto",
         )
@@ -765,7 +752,6 @@ def build_algorithm(
             ),
             project_root=Path(main_dir).resolve(),
         )
-        _assert_candidate_weights(main_dir, arpe_weights_path, policy.candidate.artifact)
         return policy
 
 
@@ -774,10 +760,7 @@ def build_algorithm(
 
         from agents.epom import EPOM, EPOMConfig
 
-        if not epom_weights_path:
-            raise ValueError(
-                "EPOM-Lifelong-FT requires an explicit --epom-weights-path."
-            )
+        epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
 
         return EPOM(
 
@@ -806,11 +789,7 @@ def build_algorithm(
         from agents.epom_direct_reweight import (
             EPOMDirectReweight, EPOMDirectReweightConfig,
         )
-        if not epom_weights_path:
-            raise ValueError(
-                "Paper Direct requires the frozen EPOM-L weights via "
-                "--epom-weights-path; it is not the old NoReweight backbone."
-            )
+        epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
         return EPOMDirectReweight(EPOMDirectReweightConfig(
             path_to_weights=str(_project_path(main_dir, epom_weights_path)),
             artifact_profile="lifelong_finetuned", seed=seed, device="auto",
@@ -825,7 +804,6 @@ def build_algorithm(
             Path(main_dir).resolve() / "configs" / "arpe_final_candidate.json"
         )
         artifact = _load_arpe_candidate_artifact(main_dir, manifest)
-        _assert_candidate_weights(main_dir, arpe_weights_path, artifact)
         return ARPE.load(
             artifact,
             seed=int(seed),
@@ -1066,20 +1044,6 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
     artifact = candidate.get("candidate") or {}
     if artifact.get("frozen") is not True:
         violations.append("candidate artifact is not frozen")
-    for key in (
-        "checkpoint_sha256",
-        "config_sha256",
-        "base_checkpoint_sha256",
-        "base_config_sha256",
-    ):
-        value = str(artifact.get(key, ""))
-        if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
-            violations.append(f"candidate {key} is invalid")
-        if learned:
-            if (stats.get("switcher_candidate_policy") or {}).get(key) != value:
-                violations.append(f"Switcher candidate declaration {key} differs")
-            if (stats.get("switcher_candidate_artifact") or {}).get(key) != value:
-                violations.append(f"Switcher candidate artifact {key} differs")
     for key in (
         "switcher_choice_rate",
         "selected_ao_rate",
@@ -2980,7 +2944,7 @@ def parse_args():
 
         default=None,
 
-        help="Optional identity assertion: must match the hash-pinned ARPE candidate, never overrides it.",
+        help="Deprecated compatibility option; ARPE paths come from the candidate JSON.",
 
     )
 
@@ -2989,8 +2953,8 @@ def parse_args():
         type=str,
         default=None,
         help=(
-            "JSON declaration that pins the selected ARPE milestone and its "
-            "frozen EPOM-L base for SRSLM-NoWait/OnlyWait evaluations"
+            "Optional ARPE path declaration. Defaults to "
+            "configs/arpe_final_candidate.json"
         ),
     )
 

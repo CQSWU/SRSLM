@@ -65,8 +65,10 @@ def test_direct_uses_epom_l_and_only_the_selected_top2_rule():
     assert cfg.artifact_profile == 'lifelong_finetuned'
     assert Path(cfg.path_to_weights).is_absolute()
     assert cfg.reweight_bonus == 1.0
-    with pytest.raises(ValueError, match='EPOM-L'):
-        runner.build_algorithm('Direct', '.', 42)
+    with patch('agents.epom_direct_reweight.EPOMDirectReweight') as auto_policy:
+        runner.build_algorithm('Direct', Path(__file__).resolve().parents[1], 42)
+    auto_cfg = auto_policy.call_args.args[0]
+    assert auto_cfg.path_to_weights.endswith('EPOM-Lifelong-Finetune-R5')
 
 
 def test_retired_direct_cli_variants_are_rejected():
@@ -79,9 +81,9 @@ def test_retired_direct_cli_variants_are_rejected():
 
 def _artifact():
     return SimpleNamespace(weights_relative='weights/caar', checkpoint_relative='weights/caar/checkpoint_p0/model.pth',
-        checkpoint_sha256='a' * 64, config_sha256='b' * 64,
         base_weights_relative='weights/base', base_checkpoint_relative='weights/base/checkpoint_p0/base.pth',
-        base_checkpoint_sha256='c' * 64, base_config_sha256='d' * 64)
+        weights_path=Path('weights/caar').resolve(),
+        checkpoint_path=Path('weights/caar/checkpoint_p0/model.pth').resolve())
 
 
 def test_arpe_loads_exact_frozen_candidate():
@@ -91,14 +93,6 @@ def test_arpe_loads_exact_frozen_candidate():
         runner.build_algorithm('ARPE', '.', 42, arpe_candidate_manifest='manifest.json')
     assert load.call_args.args[0] is artifact
     assert load.call_args.kwargs['seed'] == 42
-
-
-@pytest.mark.parametrize('algorithm', ['ARPE', 'SRSLM', 'SRSLM-NoWait', 'SRSLM-OnlyWait'])
-def test_pinned_policies_reject_split_artifact_root_before_loading(algorithm, tmp_path):
-    with patch.object(runner, '_load_arpe_candidate_artifact') as load:
-        with pytest.raises(ValueError, match='source checkout'):
-            runner.build_algorithm(algorithm, tmp_path, 0)
-    load.assert_not_called()
 
 
 def test_wait_ablations_use_identical_candidate_and_distinct_switcher_contracts():
@@ -152,17 +146,12 @@ def test_search_soft_bypass_is_explicit_and_not_available_in_block_both():
     assert wrapper.last_static_astar_invoked_mask == [True]
 
 
-def test_public_manifest_is_path_relative_and_hash_pinned():
+def test_public_manifest_uses_portable_paths_without_required_hashes():
     root = Path(__file__).resolve().parents[1]
     data = json.loads((root / 'configs/arpe_final_candidate.json').read_text())
     from agents.arpe import ArpeCandidateArtifact
     artifact = ArpeCandidateArtifact.from_mapping(data, root)
-    assert artifact.checkpoint_sha256 == '1da454620520a9095a1140cccd8c1829c0fe74063b6f0e405c2c176b0890c9f6'
-    assert artifact.base_checkpoint_sha256 == 'f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2'
-
-
-def test_optional_arpe_path_is_an_assertion_not_an_override(tmp_path):
-    artifact = SimpleNamespace(weights_path=(tmp_path / 'weights/pinned').resolve())
-    runner._assert_candidate_weights(tmp_path, 'weights/pinned', artifact)
-    with pytest.raises(ValueError, match='hash-pinned'):
-        runner._assert_candidate_weights(tmp_path, 'weights/other', artifact)
+    assert artifact.weights_relative == data['weights_path']
+    assert artifact.checkpoint_relative == data['checkpoint_path']
+    for key in ('checkpoint_sha256', 'base_checkpoint_sha256'):
+        assert key not in data

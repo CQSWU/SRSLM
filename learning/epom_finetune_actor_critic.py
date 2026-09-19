@@ -18,9 +18,6 @@ from sample_factory.model.actor_critic import ActorCriticSharedWeights
 from agents.epom import (
     EPOM,
     OFFICIAL_EPOM_CHECKPOINT,
-    OFFICIAL_EPOM_CHECKPOINT_SHA256,
-    OFFICIAL_EPOM_CHECKPOINT_SIZE,
-    OFFICIAL_EPOM_CONFIG_SHA256,
 )
 
 
@@ -68,17 +65,6 @@ class EPOMFineTuneActorCritic(ActorCriticSharedWeights):
             raise FileNotFoundError(
                 f"Official EPOM artifacts are incomplete under {weights_dir}."
             )
-        if self._sha256(config_path) != OFFICIAL_EPOM_CONFIG_SHA256:
-            raise RuntimeError("EPOM fine-tune base cfg.json is not official EPOM v0.")
-        if checkpoint_path.stat().st_size != OFFICIAL_EPOM_CHECKPOINT_SIZE:
-            raise RuntimeError(
-                "EPOM fine-tune base checkpoint has an unexpected size."
-            )
-        if self._sha256(checkpoint_path) != OFFICIAL_EPOM_CHECKPOINT_SHA256:
-            raise RuntimeError(
-                "EPOM fine-tune base checkpoint is not official EPOM v0."
-            )
-
         official_config = json.loads(config_path.read_text(encoding="utf-8"))[
             "full_config"
         ]
@@ -126,7 +112,7 @@ class EPOMFineTuneActorCritic(ActorCriticSharedWeights):
         # Sample Factory learner, which starts with a fresh optimizer and zero
         # target-domain progress.
         self.official_epom_weights_dir = weights_dir
-        self.official_epom_checkpoint_sha256 = OFFICIAL_EPOM_CHECKPOINT_SHA256
+        self.official_epom_checkpoint_sha256 = self._sha256(checkpoint_path)
         self.official_epom_source_train_step = int(checkpoint["train_step"])
         self.official_epom_source_env_steps = int(checkpoint["env_steps"])
         self.official_epom_model_tensor_count = len(checkpoint["model"])

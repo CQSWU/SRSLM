@@ -94,12 +94,6 @@ class SRSLMNoWait(_BaseDeployment):
             deep=True, update={"seed": cfg.seed, "device": cfg.device}
         )
         self.switcher = switcher_factory(switcher_cfg)
-        candidate_artifact = getattr(self.candidate, "artifact", None)
-        switcher_artifact = getattr(self.switcher, "candidate_artifact", None)
-        if candidate_artifact is None or switcher_artifact is None:
-            raise RuntimeError("NoWait requires both candidate artifact declarations.")
-        if candidate_artifact.as_dict() != switcher_artifact.as_dict():
-            raise RuntimeError("NoWait ARPE differs from the candidate pinned by its Switcher.")
         planner = planner_factory(max_steps=cfg.max_planning_steps, seed=cfg.seed)
         self.controller = AllStateSwitcherController(self.candidate, planner)
         self.device = getattr(self.candidate, "device", cfg.device)

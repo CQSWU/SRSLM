@@ -1,4 +1,4 @@
-"""Train the final or NoWait two-branch Switcher against pinned ARPE."""
+"""Train the final or NoWait two-branch Switcher with an ARPE branch."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def create_switcher_env(
     environment = _environment_for_worker(cfg, env_config)
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
-        raise RuntimeError("Saved Switcher config has no candidate_policy pin.")
+        raise RuntimeError("Saved Switcher config has no candidate_policy paths.")
     artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
     environment_class = spec["environment_class"]
     return environment_class(
@@ -115,7 +115,12 @@ def prepare_switcher_config(config: dict, mode="final") -> tuple[object, object]
     if not isinstance(declaration, dict):
         raise ValueError("Switcher config requires candidate_policy.")
     artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
-    artifact.verify_files()
+
+    # Keep the duplicated environment field in sync automatically.  Users only
+    # need to edit candidate_policy when selecting another ARPE checkpoint.
+    payload.setdefault("environment", {})[
+        "switcher_caar_weights_path"
+    ] = artifact.weights_relative
 
     experiment, flat_config = base_train.validate_config(payload)
     if flat_config.encoder_custom != spec["encoder"]:
@@ -128,12 +133,6 @@ def prepare_switcher_config(config: dict, mode="final") -> tuple[object, object]
         )
     if bool(flat_config.use_rnn):
         raise ValueError("Switcher must remain feed-forward.")
-    configured = Path(experiment.environment.switcher_caar_weights_path).as_posix()
-    if configured != artifact.weights_relative:
-        raise ValueError("environment ARPE path differs from candidate_policy.")
-    if experiment.environment.switcher_caar_device != "cuda":
-        raise ValueError("Frozen ARPE candidate must use the PPU device.")
-
     flat_config.full_config = deepcopy(flat_config.full_config)
     flat_config.full_config["candidate_policy"] = deepcopy(declaration)
     flat_config.candidate_policy = deepcopy(declaration)

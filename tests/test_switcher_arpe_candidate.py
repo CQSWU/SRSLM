@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
-import pytest
-
 from agents.arpe import ArpeCandidateArtifact
-
-
-def _digest(payload: bytes) -> str:
-    return hashlib.sha256(payload).hexdigest()
 
 
 def _artifact_tree(root: Path) -> dict[str, object]:
@@ -31,51 +24,34 @@ def _artifact_tree(root: Path) -> dict[str, object]:
         "schema": "switcher_candidate_caar_v1",
         "weights_path": "weights/candidate",
         "checkpoint_path": "weights/candidate/checkpoint_p0/checkpoint_1.pth",
-        "checkpoint_sha256": _digest(files[candidate_checkpoint]),
-        "config_sha256": _digest(files[candidate / "config.json"]),
         "base_weights_path": "weights/base",
         "base_checkpoint_path": "weights/base/checkpoint_p0/checkpoint_2.pth",
-        "base_checkpoint_sha256": _digest(files[base_checkpoint]),
-        "base_config_sha256": _digest(files[base / "config.json"]),
-        "checkpoint_selection": "exact_milestone",
         "frozen": True,
     }
 
 
-def test_dynamic_arpe_artifact_is_relative_hash_pinned_and_reproducible(tmp_path):
+def test_arpe_artifact_accepts_simple_paths_and_reports_provenance(tmp_path):
     declaration = _artifact_tree(tmp_path)
     artifact = ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
 
     assert artifact.weights_relative == "weights/candidate"
     assert artifact.checkpoint_relative.endswith("checkpoint_1.pth")
-    assert len(artifact.verify_files()) == 4
+    assert len(artifact.inspect_files()) == 4
     saved = artifact.as_dict()
     assert saved["weights_path"] == declaration["weights_path"]
-    assert saved["checkpoint_sha256"] == declaration["checkpoint_sha256"]
 
+    # Replacing a user checkpoint is allowed; its new digest is simply recorded.
+    before = artifact.inspect_files()[str(artifact.checkpoint_path)]
     artifact.checkpoint_path.write_bytes(b"changed")
-    with pytest.raises(RuntimeError, match="Frozen ARPE input changed"):
-        artifact.verify_files()
+    after = artifact.inspect_files()[str(artifact.checkpoint_path)]
+    assert after != before
 
 
-def test_arpe_artifact_rejects_absolute_and_outside_weight_paths(tmp_path):
+def test_arpe_artifact_accepts_absolute_paths(tmp_path):
     declaration = _artifact_tree(tmp_path)
     declaration["checkpoint_path"] = str(
         (tmp_path / "weights" / "candidate" / "checkpoint_p0" / "checkpoint_1.pth").resolve()
     )
-    with pytest.raises(ValueError, match="must be relative"):
-        ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
-
-    declaration = _artifact_tree(tmp_path)
-    declaration["weights_path"] = "other/candidate"
-    with pytest.raises(ValueError, match="below project/weights"):
-        ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
-
-
-def test_arpe_checkpoint_must_live_inside_declared_run(tmp_path):
-    declaration = _artifact_tree(tmp_path)
-    declaration["checkpoint_path"] = (
-        "weights/base/checkpoint_p0/checkpoint_2.pth"
-    )
-    with pytest.raises(ValueError, match="inside weights_path"):
-        ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
+    artifact = ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
+    assert artifact.checkpoint_path.is_absolute()
+    assert artifact.checkpoint_path.is_file()

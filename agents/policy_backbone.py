@@ -179,14 +179,47 @@ class PolicyBackbone:
 
     @staticmethod
     def _load_model_state(actor_critic, checkpoint_state, path):
-        try:
-            actor_critic.load_state_dict(checkpoint_state)
-        except RuntimeError as exc:
+        current = actor_critic.state_dict()
+        legacy_critic_prefixes = (
+            "critic_trace_encoder.",
+            "critic_fusion_head.",
+            "trace_value_head.",
+        )
+        legacy_metadata = {
+            "fixed_entropy_threshold",
+            "paper_entropy_gate_version",
+            "independent_critic_version",
+            "allaction_residual_version",
+        }
+        compatible = {}
+        incompatible = []
+        for key, value in checkpoint_state.items():
+            if key in current and current[key].shape == value.shape:
+                compatible[key] = value
+            elif key in legacy_metadata or key.startswith(legacy_critic_prefixes):
+                # Older paper checkpoints used a larger training-only critic.
+                # Its actor tensors are identical, and inference never reads
+                # these critic tensors, so they can be skipped safely.
+                continue
+            else:
+                incompatible.append(key)
+        if incompatible:
             raise RuntimeError(
                 "Checkpoint architecture does not match this policy. The shared policy "
                 "backbone requires the original three-channel observation encoder. "
-                f"Checkpoint path: {path}"
-            ) from exc
+                f"Checkpoint path: {path}; incompatible keys: {incompatible}"
+            )
+        loaded = actor_critic.load_state_dict(compatible, strict=False)
+        required_missing = [
+            key
+            for key in loaded.missing_keys
+            if not key.startswith("trace_value_head.")
+        ]
+        if required_missing or loaded.unexpected_keys:
+            raise RuntimeError(
+                "Checkpoint is missing policy tensors required for inference: "
+                f"missing={required_missing}, unexpected={loaded.unexpected_keys}"
+            )
 
     def set_grid_config(self, grid_config):
         if self.uses_tau:

@@ -48,6 +48,30 @@ class PolicyBackboneArtifactSnapshotTests(unittest.TestCase):
             self.assertEqual(config["full_config"]["seed"], 7)
             self.assertEqual(digest, hashlib.sha256(payload).hexdigest())
 
+    def test_old_training_only_critic_tensors_do_not_block_inference(self):
+        model = torch.nn.Module()
+        model.actor = torch.nn.Linear(2, 2)
+        model.trace_value_head = torch.nn.Linear(4, 1)
+        old_actor_weight = torch.full_like(model.actor.weight, 3.0)
+        old_actor_bias = torch.full_like(model.actor.bias, 2.0)
+        current_critic_weight = model.trace_value_head.weight.detach().clone()
+        checkpoint = {
+            "actor.weight": old_actor_weight,
+            "actor.bias": old_actor_bias,
+            "trace_value_head.weight": torch.zeros(1, 256),
+            "trace_value_head.bias": torch.zeros(1),
+            "critic_trace_encoder.0.weight": torch.zeros(1),
+            "fixed_entropy_threshold": torch.tensor(0.5),
+        }
+
+        PolicyBackbone._load_model_state(model, checkpoint, "old-paper-checkpoint")
+
+        self.assertTrue(torch.equal(model.actor.weight, old_actor_weight))
+        self.assertTrue(torch.equal(model.actor.bias, old_actor_bias))
+        self.assertTrue(
+            torch.equal(model.trace_value_head.weight, current_critic_weight)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

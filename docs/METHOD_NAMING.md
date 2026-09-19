@@ -8,8 +8,8 @@ Use `--algorithms ARPE`, `--arpe-candidate-manifest`, and
 `--arpe-weights-path` with the current evaluator. The implementation is
 `agents/arpe.py`, exposing `ARPE`, `ARPEConfig`, and
 `ArpeCandidateArtifact`. The selected declarations are
-`configs/arpe_final_candidate.json`. Its checkpoint paths and four artifact
-SHA256 digests are unchanged.
+`configs/arpe_final_candidate.json`. The declaration contains portable paths;
+hash values are recorded after loading only as optional provenance.
 
 ## Names that deliberately remain in saved formats
 
@@ -33,4 +33,4 @@ model. The retired tau actor is also rejected.
 
 There is no old CAAR runtime/CLI alias in the current source. Use a frozen
 archive to rerun an old source version, or the current ARPE entrypoints with
-the same hash-pinned weights to reproduce the selected policy under its new name.
+the same released weights to reproduce the selected policy under its new name.

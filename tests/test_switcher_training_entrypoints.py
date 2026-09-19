@@ -1,4 +1,4 @@
-"""The public registry must route Switcher training only to pinned environments."""
+"""The public registry routes Switcher training through its dedicated entry."""
 from copy import deepcopy
 from functools import partial
 import json
@@ -118,7 +118,7 @@ def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
         factory('POMAPF-v0', cfg=cfg)
     missing = SimpleNamespace(full_config=deepcopy(cfg.full_config))
     missing.full_config.pop('candidate_policy')
-    with pytest.raises(RuntimeError, match='no candidate_policy pin'):
+    with pytest.raises(RuntimeError, match='no candidate_policy paths'):
         factory(spec['environment'], cfg=missing)
 
     env = factory(spec['environment'], cfg=cfg, env_config={'worker_index': 0})

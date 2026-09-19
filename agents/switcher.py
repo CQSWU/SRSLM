@@ -65,7 +65,6 @@ class Switcher:
                 declaration,
                 project_root,
             )
-            candidate_artifact.verify_files()
         from learning.config import checkpoint_experiment_config
         _, flat_config = validate_config(checkpoint_experiment_config(full_config))
         if flat_config.encoder_custom != self.expected_encoder_custom:

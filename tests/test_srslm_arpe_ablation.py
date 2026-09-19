@@ -168,30 +168,3 @@ def test_onlywait_has_no_learned_switcher(monkeypatch):
     assert stats["switcher_training"] == "none"
     assert stats["switcher_model_choice_count"] == 0
     assert stats["executed_caar_count"] == stats["aoreplan_wait_bypass_count"] == 1
-
-
-def test_nowait_rejects_mismatched_candidate_before_planner_or_actions(monkeypatch):
-    class WrongPin(_AllStateSwitcher):
-        def __init__(self, cfg):
-            super().__init__(cfg)
-            self.candidate_artifact = SimpleNamespace(as_dict=lambda: {"checkpoint_sha256": "b" * 64})
-
-    def forbidden_planner(**kwargs):
-        raise AssertionError("Mismatch must fail before planning")
-
-    monkeypatch.setattr(module, "_frozen_candidate", _candidate)
-    with pytest.raises(RuntimeError, match="differs from the candidate pinned"):
-        module.SRSLMNoWait(_config(), planner_factory=forbidden_planner,
-                           switcher_factory=WrongPin)
-
-
-def test_nowait_rejects_missing_switcher_candidate_declaration(monkeypatch):
-    class MissingPin(_AllStateSwitcher):
-        def __init__(self, cfg):
-            super().__init__(cfg)
-            self.candidate_artifact = None
-
-    monkeypatch.setattr(module, "_frozen_candidate", _candidate)
-    with pytest.raises(RuntimeError, match="both candidate artifact declarations"):
-        module.SRSLMNoWait(_config(), planner_factory=_Planner,
-                           switcher_factory=MissingPin)

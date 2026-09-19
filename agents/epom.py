@@ -216,7 +216,7 @@ def _training_protocol(full_config):
 
 
 class EPOM:
-    """EPOM inference adapter with explicit, hash-audited artifact profiles."""
+    """EPOM inference adapter for official or lifelong weight directories."""
 
     def __init__(self, cfg: EPOMConfig):
         self.algo_cfg = cfg
@@ -231,11 +231,6 @@ class EPOM:
         except (KeyError, TypeError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Invalid EPOM cfg.json: {config_path}") from exc
         if cfg.artifact_profile == "official_v0":
-            if config_sha256 != OFFICIAL_EPOM_CONFIG_SHA256:
-                raise RuntimeError(
-                    "EPOM cfg.json is not the official v0 artifact: "
-                    f"sha256={config_sha256}"
-                )
             _validate_official_config(full_config)
         elif cfg.artifact_profile == "lifelong_finetuned":
             _validate_lifelong_finetuned_config(full_config)
@@ -307,22 +302,6 @@ class EPOM:
             )
         checkpoint_size = checkpoint_path.stat().st_size
         checkpoint_sha256 = _sha256(checkpoint_path)
-        if (
-            cfg.artifact_profile == "official_v0"
-            and checkpoint_size != OFFICIAL_EPOM_CHECKPOINT_SIZE
-        ):
-            raise RuntimeError(
-                "EPOM checkpoint size does not match the official v0 artifact: "
-                f"{checkpoint_size} != {OFFICIAL_EPOM_CHECKPOINT_SIZE}"
-            )
-        if (
-            cfg.artifact_profile == "official_v0"
-            and checkpoint_sha256 != OFFICIAL_EPOM_CHECKPOINT_SHA256
-        ):
-            raise RuntimeError(
-                "EPOM checkpoint is not the official v0 artifact: "
-                f"sha256={checkpoint_sha256}"
-            )
         checkpoint = torch.load(
             str(checkpoint_path),
             map_location=self.device,

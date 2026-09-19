@@ -1,8 +1,10 @@
 # Reproducibility
 
 This note covers the public method registry. Checkpoints and complete experiment
-evidence are distributed separately from Git. Selected identities are listed in
-[`CURRENT_VERSION.md`](../CURRENT_VERSION.md).
+evidence are distributed separately from Git. The loaders accept ordinary
+relative or absolute weight paths and do not enforce paper checkpoint hashes.
+Selected paper identities are listed in [`CURRENT_VERSION.md`](../CURRENT_VERSION.md)
+only for provenance.
 
 ## Fixed method behavior
 
@@ -42,7 +44,7 @@ historical evidence.
 
 ## Result audit
 
-Before using a result, require:
+For a paper-quality audit, record:
 
 1. the exact map/population/seed grid and execution rule;
 2. unique, finite, error-free rows;
@@ -51,10 +53,9 @@ Before using a result, require:
    state;
 5. the run's original journal and validation record when available.
 
-A completion marker alone is not validation. Current source or newly written
-documentation cannot retroactively fill a missing historical source snapshot.
-Keep each completed output directory immutable and report evidence gaps rather
-than reconstructing provenance as if it were original.
+These audit records are recommended for publication but are not runtime gates.
+Replacing or retraining a checkpoint therefore does not require editing a hash
+allowlist in the source code.
 
 The public release does not include external comparison adapters, third-party
 checkpoints, or private experiment bundles. Their licenses and reproduction

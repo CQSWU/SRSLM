@@ -59,7 +59,7 @@ def _config():
     )
 
 
-def test_srslm_accepts_the_arpe_artifact_pinned_by_switcher():
+def test_srslm_loads_the_arpe_paths_saved_with_switcher():
     algorithm = SRSLM(
         _config(),
         candidate_factory=_FakeCandidate,
@@ -71,8 +71,8 @@ def test_srslm_accepts_the_arpe_artifact_pinned_by_switcher():
     assert algorithm.candidate.device == torch.device("cpu")
 
 
-def test_srslm_rejects_a_switcher_without_a_pinned_candidate():
-    with pytest.raises(RuntimeError, match="does not pin"):
+def test_srslm_rejects_a_switcher_without_candidate_paths():
+    with pytest.raises(RuntimeError, match="does not contain"):
         SRSLM(
             _config(),
             candidate_factory=_FakeCandidate,

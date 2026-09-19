@@ -49,10 +49,9 @@ class AllStateArpeSwitcher(Switcher):
         full_config = deepcopy(config["full_config"])
         declaration = full_config.pop("candidate_policy", None)
         if not isinstance(declaration, dict):
-            raise RuntimeError("Switcher checkpoint has no frozen candidate_policy pin.")
+            raise RuntimeError("Switcher checkpoint has no candidate_policy paths.")
         project_root = Path(__file__).resolve().parents[1]
         artifact = ArpeCandidateArtifact.from_mapping(declaration, project_root)
-        artifact.verify_files()
         from learning.config import checkpoint_experiment_config
         _, flat_config = validate_config(checkpoint_experiment_config(full_config))
         if flat_config.encoder_custom != self.expected_encoder_custom:
