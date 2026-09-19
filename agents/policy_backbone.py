@@ -155,47 +155,42 @@ class PolicyBackbone:
 
     @staticmethod
     def _load_model_state(actor_critic, checkpoint_state, path):
+        """Reject architecture or forward-rule mismatches before loading tensors."""
+
         current = actor_critic.state_dict()
-        legacy_critic_prefixes = (
-            "critic_trace_encoder.",
-            "critic_fusion_head.",
-            "trace_value_head.",
-        )
-        legacy_metadata = {
+        missing = sorted(current.keys() - checkpoint_state.keys())
+        unexpected = sorted(checkpoint_state.keys() - current.keys())
+        shape_mismatches = [
+            f"{key}: checkpoint={tuple(checkpoint_state[key].shape)}, "
+            f"model={tuple(current[key].shape)}"
+            for key in sorted(current.keys() & checkpoint_state.keys())
+            if checkpoint_state[key].shape != current[key].shape
+        ]
+        # load_state_dict(strict=True) checks names and shapes, but would happily
+        # overwrite a version marker with one for a different forward equation.
+        semantic_buffers = {
             "fixed_entropy_threshold",
             "paper_entropy_gate_version",
             "independent_critic_version",
             "allaction_residual_version",
         }
-        compatible = {}
-        incompatible = []
-        for key, value in checkpoint_state.items():
-            if key in current and current[key].shape == value.shape:
-                compatible[key] = value
-            elif key in legacy_metadata or key.startswith(legacy_critic_prefixes):
-                # Older paper checkpoints used a larger training-only critic.
-                # Its actor tensors are identical, and inference never reads
-                # these critic tensors, so they can be skipped safely.
-                continue
-            else:
-                incompatible.append(key)
-        if incompatible:
-            raise RuntimeError(
-                "Checkpoint architecture does not match this policy. The shared policy "
-                "backbone requires the original three-channel observation encoder. "
-                f"Checkpoint path: {path}; incompatible keys: {incompatible}"
-            )
-        loaded = actor_critic.load_state_dict(compatible, strict=False)
-        required_missing = [
+        semantic_mismatches = [
             key
-            for key in loaded.missing_keys
-            if not key.startswith("trace_value_head.")
-        ]
-        if required_missing or loaded.unexpected_keys:
-            raise RuntimeError(
-                "Checkpoint is missing policy tensors required for inference: "
-                f"missing={required_missing}, unexpected={loaded.unexpected_keys}"
+            for key in sorted(semantic_buffers & current.keys() & checkpoint_state.keys())
+            if checkpoint_state[key].dtype != current[key].dtype
+            or not torch.equal(
+                checkpoint_state[key].detach().cpu(), current[key].detach().cpu()
             )
+        ]
+        if missing or unexpected or shape_mismatches or semantic_mismatches:
+            raise RuntimeError(
+                "Checkpoint architecture or forward-rule contract does not match "
+                "this policy; no tensors were loaded. "
+                f"Checkpoint path: {path}; missing={missing}, unexpected={unexpected}, "
+                f"shape_mismatches={shape_mismatches}, "
+                f"semantic_mismatches={semantic_mismatches}"
+            )
+        actor_critic.load_state_dict(checkpoint_state, strict=True)
 
     def set_grid_config(self, grid_config):
         self.aco.configure_from_grid_config(grid_config, clear=True)

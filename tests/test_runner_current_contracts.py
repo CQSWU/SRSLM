@@ -93,6 +93,7 @@ def test_arpe_loads_exact_frozen_candidate():
         runner.build_algorithm('ARPE', '.', 42, arpe_candidate_manifest='manifest.json')
     assert load.call_args.args[0] is artifact
     assert load.call_args.kwargs['seed'] == 42
+    assert load.call_args.kwargs['action_sampling'] == 'direct_numpy'
 
 
 def test_wait_ablations_use_identical_candidate_and_distinct_switcher_contracts():

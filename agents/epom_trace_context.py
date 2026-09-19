@@ -1,6 +1,6 @@
 """Inference adapter for the paper ARPE correction on frozen EPOM-L.
 
-The model predicts five corrections and subtracts them from the base logits,
+The model adds the Direct bonus and five bounded, centred learned residuals,
 with the checkpoint's entropy gate. This adapter rebuilds EPOM grid memory
 and the mean-centred 11x11 shared-trace crop, resets episode state, and records
 diagnostics. The free-cell mask is used to construct the trace observation,
@@ -33,6 +33,7 @@ from sample_factory.model.model_utils import get_rnn_size
 from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
 from learning.grid_memory import MultipleGridMemory
 from pomapf_env.trace_variant import TraceVariant
+from pomapf_env.trace_routing import TIE_KEY, bonus_rng, draw_tie_ranks
 from pomapf_env.wrappers import MatrixObservationWrapper
 
 
@@ -98,6 +99,9 @@ class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
     # entropy gate; ``all`` applies the same learned correction at every step.
     learned_gate_override: Literal["checkpoint", "all"] = "checkpoint"
     entropy_threshold_override: Optional[float] = None
+    # Historical standalone ARPE reports sampled like Direct; the frozen
+    # SRSLM branch used Torch, sharing its stream with Switcher.
+    action_sampling: Literal["torch", "direct_numpy"] = "torch"
 
 
 class EPOMTraceContext(PolicyBackbone):
@@ -156,6 +160,8 @@ class EPOMTraceContext(PolicyBackbone):
                 f"trace_radius={actor_radius!r}"
             )
         self._context_diagnostic_steps: list[dict[str, float]] = []
+        self._numpy_rng = np.random.default_rng(algo_cfg.seed)
+        self._bonus_rng = bonus_rng(algo_cfg.seed)
 
     # ARPE.__init__ dispatches to this method, so milestone selection happens
     # before the checkpoint is deserialised and cannot be changed afterwards.
@@ -206,6 +212,8 @@ class EPOMTraceContext(PolicyBackbone):
         super().after_reset()
         self.grid_memory.clear()
         self._context_diagnostic_steps = []
+        self._numpy_rng = np.random.default_rng(self.algo_cfg.seed)
+        self._bonus_rng = bonus_rng(self.algo_cfg.seed)
 
     def _add_exact_free_mask(self, observations, positions):
         """Add the exact 11x11 free-cell mask used during training.
@@ -261,7 +269,9 @@ class EPOMTraceContext(PolicyBackbone):
         )
         self._trace_variant.apply(observations)
         self._add_exact_free_mask(observations, positions)
-        for observation in observations:
+        ranks = draw_tie_ranks(self._bonus_rng, num_agents)
+        for observation, rank in zip(observations, ranks):
+            observation[TIE_KEY] = rank
             if observation["tau"].shape != (1, TRACE_SIZE, TRACE_SIZE):
                 raise RuntimeError(
                     "Inference trace is not exactly [1,11,11]: "
@@ -298,7 +308,12 @@ class EPOMTraceContext(PolicyBackbone):
                     {key: float(value) for key, value in diagnostics.items()}
                 )
 
-        return policy_outputs["actions"].detach().cpu().numpy()
+        if self.algo_cfg.action_sampling == "torch":
+            return policy_outputs["actions"].detach().cpu().numpy()
+        logits = policy_outputs["action_logits"].float().cpu().numpy()
+        probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
+        probabilities /= probabilities.sum(axis=1, keepdims=True)
+        return np.asarray([self._numpy_rng.choice(5, p=row) for row in probabilities])
 
     def get_action_correction_stats(self):
         if not self._context_diagnostic_steps:
@@ -329,6 +344,8 @@ class EPOMTraceContext(PolicyBackbone):
             "config_path": str(self.config_path),
             "config_sha256": self.config_sha256,
             "trace_contract": deepcopy(self._trace_contract),
+            "action_sampling": self.algo_cfg.action_sampling,
+            "tie_breaking": "two_stored_rank_vectors_replayed_with_observation",
             "model": model_provenance,
         }
 

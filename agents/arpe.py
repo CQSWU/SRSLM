@@ -25,7 +25,7 @@ ARPE_CANDIDATE_KIND = "epom_trace_context_caar_milestone"
 ARPE_CANDIDATE_LABEL = "ARPE"
 ARPE_CANDIDATE_SCHEMA = "switcher_candidate_caar_v1"
 ARPE_TRACE_ARCHITECTURE = (
-    "paper_entropy_conv_direct_correction_centered_P_h_z_v3"
+    "trace_allaction_centered_tanh_residual200_failcredit_v1"
 )
 
 
@@ -195,6 +195,7 @@ class ARPE:
         *,
         seed: int,
         device: str,
+        action_sampling: Literal["torch", "direct_numpy"] = "torch",
     ) -> "ARPE":
         verified = artifact.inspect_files()
         policy = EPOMTraceContext(
@@ -204,6 +205,7 @@ class ARPE:
                 milestone_checkpoint=str(artifact.checkpoint_path),
                 seed=int(seed),
                 device=str(device),
+                action_sampling=action_sampling,
             )
         )
         return cls(policy, artifact, verified_file_hashes=verified)

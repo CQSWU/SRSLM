@@ -213,9 +213,9 @@ class planner:
             path.append(next_node)
             path.append(self.start)
             path.reverse()
-        # This intentionally matches planner.cpp: get_path stores the chosen
-        # endpoint, whereas get_next_node stores the first primitive step.
-        self.desired_position = endpoint
+        # Execution feedback describes one primitive step, not the final goal.
+        # Match planner.cpp, which backtracks before recording this position.
+        self.desired_position = path[1] if path else endpoint
         return path
 
     def get_next_node(

@@ -18,11 +18,19 @@ def test_python_planner_returns_cpp_compatible_path_and_next_node():
 
     assert local_planner.get_path(False) == [START, FIRST_STEP, GOAL]
 
-    # Replan because get_path, like the C++ binding, records GOAL as its
-    # pending desired position rather than the primitive first step.
+    assert local_planner.desired_position == FIRST_STEP
     local_planner.cancel_desired()
     local_planner.plan_path(START, GOAL)
     assert local_planner.get_next_node(False) == (START, FIRST_STEP)
+
+
+def test_path_execution_feedback_caches_the_failed_first_step_not_goal():
+    local_planner = _new_planner()
+    local_planner.plan_path(START, GOAL)
+    local_planner.get_path(False)
+    local_planner.observe_position(START)
+    assert FIRST_STEP in local_planner.bad_actions
+    assert GOAL not in local_planner.bad_actions
 
 
 def test_relative_obstacles_and_dynamic_agents_block_the_same_cells_as_cpp():

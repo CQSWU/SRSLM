@@ -704,6 +704,7 @@ def build_algorithm(
             artifact,
             seed=int(seed),
             device="auto",
+            action_sampling="direct_numpy",
         )
 
     raise ValueError(f"Unsupported algorithm: {algo_name}")

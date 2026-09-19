@@ -13,6 +13,11 @@ else:
         cppimport.settings["release_mode"] = True
     importlib.import_module("cppimport.import_hook")
     from planning.planner import planner
+    if not hasattr(planner, "proposal_failed"):
+        raise ImportError(
+            "The installed planner extension predates randomized failure caching. "
+            "Rebuild planning/planner.cpp with cppimport before running AORePlan."
+        )
 
 
 INF = 1_000_000_000

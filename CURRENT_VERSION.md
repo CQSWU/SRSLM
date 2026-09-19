@@ -15,7 +15,11 @@ third-party repositories are outside the Git release.
   0.5. This admission rule is separate from both exhausted-cache release and
   the original random no-path fallback.
 - ARPE uses the selected `paper_entropy_fusion` trace branch on a frozen EPOM-L
-  base. Trace state is cleared at every episode boundary.
+  base. The selected checkpoint uses Direct's entropy-gated bonus plus five
+  learned residuals: `0.5*tanh(raw)`, then subtract their five-action mean.
+  The learned residual uses the same entropy gate. Actor and independent
+  critic have 605,638 trainable parameters in total. Trace state is cleared
+  at every episode boundary.
 - SRSLM uses ARPE immediately for an AORePlan wait; otherwise Switcher samples
   between the complete ARPE and AORePlan proposals.
 - NoWait and OnlyWait remain the two switching ablations. Retired historical
@@ -24,7 +28,7 @@ third-party repositories are outside the Git release.
 ## Selected artifact identities
 
 Weights are not committed. The following hashes identify the selected paper
-artifacts and must be verified before inference:
+artifacts. Loading checks the network and forward-rule version, not a hash allowlist:
 
 - EPOM-L base checkpoint:
   `f70a305ee68546be95e0a93d7f61c9aec435a50da20624a3b382af2276ad79d2`
@@ -54,7 +58,24 @@ episodes per method and execution rule:
   block-trained learned weights.
 
 Older exact960 result names identify the original 32-map experiments. They
-remain valid historical evidence but are not the current 36-map aggregate.
+are historical evidence, not the current 36-map aggregate. Always retain each
+run's original source and checkpoint provenance.
+
+## 2026-09-19 checkpoint compatibility correction
+
+The selected ARPE checkpoint declares `allaction_residual_version=2`. A previous
+public runtime incorrectly interpreted its raw head output as an unbounded
+subtractive correction and omitted Direct. The model and strict checkpoint
+loader now enforce the trained Direct-plus-bounded-residual computation and
+restore the independent trace critic. Stored tie rankings keep Direct routing
+identical during rollout and PPO replay. Mismatched old checkpoints are rejected
+instead of silently skipping their critic and version tensors.
+
+Evaluations made with the mismatched runtime must not be described as results
+of the selected trained policy. This also invalidates the attempted zero-trace
+control trained with that different architecture; its artifacts are retained
+for diagnosis, not a capacity-matched comparison. The zero-trace configuration
+now uses the corrected architecture, but that control still requires a new run.
 
 ## Public/private boundary
 

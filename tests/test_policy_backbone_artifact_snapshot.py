@@ -48,7 +48,7 @@ class PolicyBackboneArtifactSnapshotTests(unittest.TestCase):
             self.assertEqual(config["full_config"]["seed"], 7)
             self.assertEqual(digest, hashlib.sha256(payload).hexdigest())
 
-    def test_old_training_only_critic_tensors_do_not_block_inference(self):
+    def test_incompatible_critic_tensors_cannot_be_silently_dropped(self):
         model = torch.nn.Module()
         model.actor = torch.nn.Linear(2, 2)
         model.trace_value_head = torch.nn.Linear(4, 1)
@@ -64,10 +64,11 @@ class PolicyBackboneArtifactSnapshotTests(unittest.TestCase):
             "fixed_entropy_threshold": torch.tensor(0.5),
         }
 
-        PolicyBackbone._load_model_state(model, checkpoint, "old-paper-checkpoint")
+        with self.assertRaisesRegex(RuntimeError, "Checkpoint architecture"):
+            PolicyBackbone._load_model_state(model, checkpoint, "old-paper-checkpoint")
 
-        self.assertTrue(torch.equal(model.actor.weight, old_actor_weight))
-        self.assertTrue(torch.equal(model.actor.bias, old_actor_bias))
+        self.assertFalse(torch.equal(model.actor.weight, old_actor_weight))
+        self.assertFalse(torch.equal(model.actor.bias, old_actor_bias))
         self.assertTrue(
             torch.equal(model.trace_value_head.weight, current_critic_weight)
         )

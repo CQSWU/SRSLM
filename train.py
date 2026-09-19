@@ -33,6 +33,8 @@ import learning.encoder  # noqa: F401 -- registers the Sample Factory model fact
 
 
 from pomapf_env.env import make_pomapf
+from pomapf_env.trace_routing import BonusRoutingObservation
+from pomapf_env.trace_training import FailedMoveCredit
 
 from pomapf_env.wrappers import (
     GridMemoryObservationWrapper,
@@ -177,6 +179,15 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
                 env,
                 coefficient=(environment_config.trace_context_team_reward_coefficient),
             )
+            def index(name):
+                value = (env_config.get(name, 0) if isinstance(env_config, dict)
+                         else getattr(env_config, name, 0))
+                return int(value or 0)
+            routing_seed = (int(getattr(cfg, "seed", 0) or 0)
+                            + 100003 * index("worker_index")
+                            + 1009 * index("vector_index"))
+            env = BonusRoutingObservation(env, routing_seed=routing_seed)
+            env = FailedMoveCredit(env)
 
     return env
 

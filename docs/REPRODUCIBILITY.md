@@ -25,6 +25,22 @@ its trace branch and independent critic while keeping EPOM-L frozen. Trace,
 grid memory, recurrent state, and planner state are cleared through their
 method-specific episode reset paths.
 
+The selected ARPE checkpoint computes `z + g*Direct + g*residual`, where
+`residual = 0.5*tanh(raw) - mean(0.5*tanh(raw))` across the five actions.
+Direct adds one to the lower-pressure direction among the two highest-logit
+legal moves, when at least two moves are legal. The residual can affect all
+five actions and is not action-masked. Actor and critic have separate trace
+encoders and fusion layers. Checkpoint version buffers and every model tensor
+must match; a same-shaped actor head alone does not establish compatibility.
+Standalone ARPE evaluation retains the historical Direct-style NumPy sampler;
+the SRSLM learning branch retains PyTorch sampling as used during Switcher
+training. Both paths record their sampler and reset its state per episode.
+The ARPE training recipe also retains the individual failed-move credit:
+an attempted move that does not change position receives an extra -0.0098
+on top of the base -0.0002 failed-move penalty. Explicit wait is not charged
+this extra penalty. No team reward is added. This shaping affects training
+rewards only; it does not change evaluation throughput or collision rules.
+
 SRSLM first obtains complete AORePlan and ARPE proposals. An AORePlan wait uses
 ARPE without invoking Switcher. Every other state is sent to the two-action
 Switcher. Training and inference call the same routing implementation.

@@ -93,6 +93,7 @@ def test_zero_trace_control_preserves_shape_and_free_mask(environment_factory):
     observations, _ = env.reset()
     assert trace.variant.variant == 'zero'
     for observation in observations:
+        assert observation['bonus_tie_ranks'].shape == (2, 5)
         assert observation['tau'].shape == (1, 11, 11)
         assert not np.any(observation['tau'])
         assert observation['tau_free_mask'].shape == (1, 11, 11)

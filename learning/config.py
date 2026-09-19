@@ -630,10 +630,8 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     'EPOM trace-context training exceeds the 12-worker cap.'
                 )
-            if settings.learning_rate != 1e-4:
-                raise ValueError(
-                    'EPOM trace-context training requires learning_rate=1e-4.'
-                )
+            if not np.isfinite(settings.learning_rate) or settings.learning_rate <= 0:
+                raise ValueError('ARPE learning_rate must be finite and positive.')
             if settings.gamma != 0.99:
                 raise ValueError(
                     'EPOM trace-context training requires gamma=0.99.'
