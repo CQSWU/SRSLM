@@ -16,12 +16,12 @@ third-party repositories stay outside Git.
 | `agents/epom_trace_context.py` | ARPE inference, shared trace and episode reset |
 | `learning/epom_trace_multiplier_actor_critic.py` | Selected learned trace actor and critic |
 | `agents/arpe.py` | Portable ARPE candidate loader |
-| `agents/switcher_core.py` | Shared wait-aware routing and Switcher features |
+| `agents/switcher_core.py` | Wait/reverse overrides and Switcher features |
 | `agents/switcher.py` | Switcher checkpoint loader and inference |
 | `learning/switcher_actor_critic.py` | Two-action Switcher actor-critic |
 | `pomapf_env/switcher_arpe_env.py` | Switcher training environment |
 | `agents/srslm.py` | Full SRSLM composition |
-| `agents/srslm_arpe_ablation.py` | NoWait and OnlyWait ablations |
+| `agents/srslm_arpe_ablation.py` | Switching ablation wrappers |
 | `configs/arpe_final_candidate.json` | Default ARPE/base weight paths |
 | `maps/train.yaml` | Complete training map registry |
 | `maps/test.yaml` | Complete 36-map test registry, including four resized WC3 maps |
@@ -30,8 +30,9 @@ third-party repositories stay outside Git.
 | `train.py` | EPOM-L and ARPE training entry point |
 | `train_switcher.py` | Unified final/NoWait Switcher training entry point |
 | `learning/train_epom.yaml` | EPOM-L training recipe |
-| `learning/train_arpe.yaml` | Selected ARPE training recipe |
-| `learning/train_switcher.yaml` | Final Switcher training recipe |
+| `learning/train_arpe_final.yaml` | Current native ARPE training example; final inference is configured separately |
+| `learning/train_arpe.yaml` | Matched legacy entropy-training control recipe |
+| `learning/train_switcher.yaml` | Switcher training example; original curriculum is retained in the run archive |
 | `scripts/train_epom.sh` | EPOM-L launcher |
 | `scripts/train_arpe.sh` | ARPE launcher |
 | `scripts/train_switcher.sh` | Final Switcher launcher |

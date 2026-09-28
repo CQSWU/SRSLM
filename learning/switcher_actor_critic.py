@@ -116,9 +116,11 @@ class SwitcherActorCritic(ActorCriticSharedWeights):
 
     def forward_head(self, normalized_obs_dict):
         encoded = self.encoder(normalized_obs_dict)
-        switch_allowed = (
-            normalized_obs_dict["aoreplan_action"][:, :1] < 0.5
-        ).float()
+        # Old checkpoints/rollouts omit this execution-only metadata.
+        switch_allowed = normalized_obs_dict.get("switch_allowed")
+        if switch_allowed is None:
+            switch_allowed = normalized_obs_dict["aoreplan_action"][:, :1] < 0.5
+        switch_allowed = switch_allowed.float()
         return torch.cat([encoded, switch_allowed], dim=-1)
 
     def forward_core(self, head_output, rnn_states):

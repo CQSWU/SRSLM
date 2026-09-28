@@ -12,6 +12,8 @@ from agents.switcher import Switcher, SwitcherConfig
 from agents.arpe import (
     ARPE_CANDIDATE_LABEL,
     ARPE,
+    ARPEConfig,
+    ArpeCandidateArtifact,
 )
 from agents.switcher_core import SwitcherController
 from agents.utils_agents import AlgoBase
@@ -19,12 +21,15 @@ from planning.aoreplan_branch import AORePlanBranch
 
 
 SRSLM_MODE = "aoreplan_wait_bypass_switcher_v3"
+FINAL_SRSLM_MODE = "aoreplan_wait_or_final_reverse_bypass_switcher_v4"
 
 
 class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["SRSLM"] = "SRSLM"
     switcher: SwitcherConfig = SwitcherConfig()
     max_planning_steps: int = Field(10_000, gt=0)
+    candidate: ARPEConfig | None = None
+    final_reverse_guard_enabled: bool = False
 
 
 class SRSLM:
@@ -38,6 +43,7 @@ class SRSLM:
         candidate_factory: Callable = ARPE.load,
         planner_factory: Callable = AORePlanBranch,
         switcher_factory: Callable = Switcher,
+        controller_factory: Callable = SwitcherController,
     ):
         self.cfg = cfg
         switcher_cfg = cfg.switcher.copy(
@@ -46,6 +52,10 @@ class SRSLM:
         )
         self.switcher = switcher_factory(switcher_cfg)
         candidate = getattr(self.switcher, "candidate_artifact", None)
+        if cfg.candidate is not None:
+            candidate = ArpeCandidateArtifact.from_config(
+                cfg.candidate, project_root or Path(__file__).resolve().parents[1],
+            )
         if candidate is None:
             raise RuntimeError(
                 "Switcher checkpoint does not contain ARPE candidate paths."
@@ -60,9 +70,10 @@ class SRSLM:
             max_steps=cfg.max_planning_steps,
             seed=cfg.seed,
         )
-        self.controller = SwitcherController(
+        self.controller = controller_factory(
             self.candidate,
             planner,
+            final_reverse_guard_enabled=cfg.final_reverse_guard_enabled,
         )
         self.device = getattr(self.candidate, "device", cfg.device)
 
@@ -102,7 +113,7 @@ class SRSLM:
 
     def get_switch_stats(self):
         result = {
-            "hybrid_mode": SRSLM_MODE,
+            "hybrid_mode": FINAL_SRSLM_MODE if self.cfg.final_reverse_guard_enabled else SRSLM_MODE,
             "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
             "switcher_training": "PPO",
             "value_predictor_loaded": False,

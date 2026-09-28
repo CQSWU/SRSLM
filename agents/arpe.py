@@ -17,6 +17,7 @@ from pydantic import Extra
 
 from agents.epom_trace_context import EPOMTraceContext, EPOMTraceContextConfig
 from agents.utils_agents import AlgoBase
+from learning.inference_correction import InferenceCorrection
 
 
 # Serialized identifiers stay exact for the selected historical checkpoints.
@@ -61,6 +62,7 @@ class ArpeCandidateArtifact:
     base_weights_path: Path
     base_config_path: Path
     base_checkpoint_path: Path
+    inference: InferenceCorrection | None = None
 
     @classmethod
     def from_mapping(
@@ -106,6 +108,8 @@ class ArpeCandidateArtifact:
             base_weights_path=base_weights_path,
             base_config_path=(base_weights_path / "config.json").resolve(),
             base_checkpoint_path=base_checkpoint_path,
+            inference=(InferenceCorrection(**mapping["inference"])
+                       if mapping.get("inference") is not None else None),
         )
 
     @classmethod
@@ -132,7 +136,7 @@ class ArpeCandidateArtifact:
         return inspected
 
     def as_dict(self) -> dict[str, object]:
-        return {
+        result = {
             "kind": ARPE_CANDIDATE_KIND,
             "label": ARPE_CANDIDATE_LABEL,
             "schema": ARPE_CANDIDATE_SCHEMA,
@@ -144,6 +148,9 @@ class ArpeCandidateArtifact:
             "base_checkpoint_path": self.base_checkpoint_relative,
             "frozen": True,
         }
+        if self.inference is not None:
+            result["inference"] = self.inference.as_dict()
+        return result
 
 
 class ARPEConfig(AlgoBase, extra=Extra.forbid):
@@ -154,6 +161,7 @@ class ARPEConfig(AlgoBase, extra=Extra.forbid):
     milestone_checkpoint: str
     base_weights_path: str
     base_checkpoint_path: str
+    inference: dict | None = None
 
     def as_mapping(self) -> dict[str, object]:
         return {
@@ -164,6 +172,7 @@ class ARPEConfig(AlgoBase, extra=Extra.forbid):
             "base_weights_path": self.base_weights_path,
             "base_checkpoint_path": self.base_checkpoint_path,
             "frozen": True,
+            "inference": deepcopy(self.inference),
         }
 
 
@@ -187,6 +196,8 @@ class ARPE:
         self.ppo.eval()
         for parameter in self.ppo.parameters():
             parameter.requires_grad_(False)
+        if artifact.inference is not None:
+            self.ppo.inference_correction = artifact.inference
 
     @classmethod
     def load(
@@ -195,9 +206,11 @@ class ARPE:
         *,
         seed: int,
         device: str,
-        action_sampling: Literal["torch", "direct_numpy"] = "torch",
+        action_sampling: Literal["torch", "direct_numpy"] | None = None,
     ) -> "ARPE":
         verified = artifact.inspect_files()
+        if action_sampling is None:
+            action_sampling = artifact.inference.action_sampling if artifact.inference else "torch"
         policy = EPOMTraceContext(
             EPOMTraceContextConfig(
                 path_to_weights=str(artifact.weights_path),
@@ -206,6 +219,8 @@ class ARPE:
                 seed=int(seed),
                 device=str(device),
                 action_sampling=action_sampling,
+                base_weights_path=str(artifact.base_weights_path),
+                base_checkpoint_path=str(artifact.base_checkpoint_path),
             )
         )
         return cls(policy, artifact, verified_file_hashes=verified)

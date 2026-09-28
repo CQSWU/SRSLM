@@ -13,6 +13,26 @@ from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 import numpy as np
+from pogema import GridConfig
+
+
+def final_reverse_mask(observations, actions, previous_positions, previous_targets):
+    """Detect final AO proposals returning to the last observed position."""
+    if previous_positions is None:
+        return tuple(False for _ in actions)
+    if len(previous_positions) != len(actions):
+        raise RuntimeError("Agent count changed without an environment reset.")
+    moves = GridConfig().MOVES
+    result = []
+    for obs, action, previous, old_target in zip(
+        observations, actions, previous_positions, previous_targets,
+    ):
+        position = tuple(int(v) for v in obs["xy"])
+        target = tuple(int(v) for v in obs["target_xy"])
+        delta = moves[int(action)]
+        result.append(bool(action != 0 and target == old_target and
+                           (position[0] + delta[0], position[1] + delta[1]) == previous))
+    return tuple(result)
 
 
 #: execution models this project has audited end to end
@@ -22,6 +42,7 @@ AO_BRANCH = 1
 NUM_BRANCHES = 2
 NUM_PRIMITIVE_ACTIONS = 5
 SWITCHER_DECISION_SCOPE = "aoreplan_nonwait_only"
+FINAL_SWITCHER_DECISION_SCOPE = "aoreplan_nonwait_and_final_nonreverse_only"
 ALL_STATE_SWITCHER_DECISION_SCOPE = "all_states"
 SWITCHER_FEATURE_SCHEMA = "srslm_switcher_state_v3"
 SWITCHER_CROP_SIZE = 11
@@ -148,9 +169,12 @@ class SwitcherController:
         "Switcher choices must match the number of non-wait AORePlan actions."
     )
 
-    def __init__(self, arpe, aoreplan):
+    def __init__(self, arpe, aoreplan, *, final_reverse_guard_enabled=False):
         self.arpe = arpe
         self.aoreplan = aoreplan
+        self.final_reverse_guard_enabled = bool(final_reverse_guard_enabled and self.wait_detection_enabled)
+        if self.final_reverse_guard_enabled and self.learned_switcher_called:
+            self.decision_scope = FINAL_SWITCHER_DECISION_SCOPE
         self.env = None
         self._pending: PreparedSwitcherStep | None = None
         self.after_reset()
@@ -185,6 +209,10 @@ class SwitcherController:
         self.static_astar_query_count = 0
         self.aoreplan_commit_count = 0
         self._last_executed_ao: list[bool | None] | None = None
+        self.previous_positions = None
+        self.previous_targets = None
+        self.pending_final_reverse = None
+        self.final_reverse_proposal_count = 0
 
     @staticmethod
     def _coerce_arpe_actions(actions, count: int) -> tuple[int, ...]:
@@ -241,6 +269,15 @@ class SwitcherController:
             self.aoreplan.commit([False] * count)
             raise
         switch_allowed = self._switch_allowed_mask(aoreplan_actions)
+        if self.final_reverse_guard_enabled:
+            reverse = final_reverse_mask(raw_observations, aoreplan_actions,
+                                         self.previous_positions, self.previous_targets)
+            self.previous_positions = tuple(tuple(int(v) for v in o["xy"]) for o in raw_observations)
+            self.previous_targets = tuple(tuple(int(v) for v in o["target_xy"]) for o in raw_observations)
+            self.pending_final_reverse = reverse
+            switch_allowed = tuple(allowed and not r for allowed, r in zip(switch_allowed, reverse))
+            # Execution metadata is not an extra learned-network feature.
+            switcher_state["switch_allowed"] = np.asarray(switch_allowed, dtype=np.float32).reshape(count, 1)
         self._pending = PreparedSwitcherStep(
             observations=raw_observations,
             arpe_actions=arpe_actions,
@@ -326,6 +363,8 @@ class SwitcherController:
         self.selected_ao_count += int(selected_ao_count)
         self.executed_ao_count += int(executed_ao.sum())
         self.wait_bypass_count += int(wait_bypass.sum())
+        self.final_reverse_proposal_count += sum(self.pending_final_reverse or ())
+        self.pending_final_reverse = None
         self.branch_action_agreement_count += sum(
             left == right
             for left, right in zip(
@@ -372,7 +411,8 @@ class SwitcherController:
             selected,
             switcher_choice_count=eligible_count,
             selected_ao_count=int((requested == AO_BRANCH).sum()),
-            wait_bypass_mask=np.logical_not(switch_allowed),
+            wait_bypass_mask=np.logical_and(self.wait_detection_enabled,
+                                            np.asarray(pending.aoreplan_actions) == 0),
         )
 
     def after_step(self, dones: Sequence[bool]) -> None:
@@ -395,6 +435,9 @@ class SwitcherController:
             "selector_kind": self.selector_kind,
             "switcher_decision_scope": self.decision_scope,
             "wait_detection_enabled": self.wait_detection_enabled,
+            "final_reverse_guard_enabled": self.final_reverse_guard_enabled,
+            "final_aoreplan_reverse_proposal_count": self.final_reverse_proposal_count,
+            "final_reverse_arpe_bypass_count": self.final_reverse_proposal_count,
             "learned_switcher_called": self.learned_switcher_called,
             "joint_conflict_prediction_enabled": False,
             "environment_step_count": self.environment_step_count,
@@ -461,7 +504,7 @@ class OnlyWaitController(SwitcherController):
             selected,
             switcher_choice_count=0,
             selected_ao_count=0,
-            wait_bypass_mask=np.logical_not(switch_allowed),
+            wait_bypass_mask=np.asarray(pending.aoreplan_actions) == 0,
         )
 
 

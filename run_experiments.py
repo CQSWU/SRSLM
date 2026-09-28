@@ -57,6 +57,8 @@ SUPPORTED_ALGORITHMS = (
     "EPOM-Lifelong-FT",
     "Direct",
     "ARPE",
+    "SRSLM-NoRule",
+    "SRSLM-OnlyRule",
     "SRSLM-NoWait",
     "SRSLM-OnlyWait",
     "SRSLM",
@@ -73,6 +75,8 @@ ALGORITHM_ALIASES = {
     "epom_lifelong_ft": "EPOM-Lifelong-FT",
     "direct": "Direct",
     "arpe": "ARPE",
+    "srslm-norule": "SRSLM-NoRule",
+    "srslm-onlyrule": "SRSLM-OnlyRule",
     "srslm-nowait": "SRSLM-NoWait",
     "srslm-onlywait": "SRSLM-OnlyWait",
     "srslm": "SRSLM",
@@ -167,12 +171,12 @@ def epom_lifelong_result_manifest(results, algorithms):
 
 
 def srslm_contract_metadata(algorithms, collision_system="block_both"):
-    """Describe the fixed AORePlan-wait bypass and learned Switcher."""
+    """Describe the final wait-or-reverse bypass and learned Switcher."""
     if "SRSLM" not in algorithms:
         return None
     return {
         "strategy_kind": "hybrid_switching",
-        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
+        "hybrid_mode": "aoreplan_wait_or_final_reverse_bypass_switcher_v4",
         "branch_algorithms": ["ARPE", "AORePlan"],
         "hybrid_components": {
             "learning_branch": "ARPE",
@@ -183,7 +187,8 @@ def srslm_contract_metadata(algorithms, collision_system="block_both"):
         "guide_algorithm": "AORePlan",
         "deployment": {
             "wait_rule": "aoreplan_wait_directly_uses_caar",
-            "switcher_scope": "aoreplan_nonwait_only",
+            "final_reverse_rule": "final_aoreplan_reverse_directly_uses_arpe",
+            "switcher_scope": "aoreplan_nonwait_and_final_nonreverse_only",
             "switcher_output": "two_branch_categorical_logits",
             "selection": "softmax_sampling",
             "joint_conflict_prediction_enabled": False,
@@ -227,19 +232,20 @@ def _find_switcher_weights(main_dir):
 
 
 def _find_epom_lifelong_weights(main_dir):
-    candidate = (
-        Path(main_dir).resolve()
-        / "weights"
-        / "EPOM-lifelong-finetune-r5"
-        / "EPOM-Lifelong-Finetune-R5"
+    root = Path(main_dir).resolve() / "weights"
+    candidates = (
+        root / "EPOM-L",
+        root / "EPOM-lifelong-finetune-r5" / "EPOM-Lifelong-Finetune-R5",
     )
-    if not _has_config(candidate) or not _has_checkpoints(candidate):
-        raise FileNotFoundError(
-            "EPOM-L weights were not found. Put the released directory under "
-            "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5 "
-            "or pass --epom-weights-path."
-        )
-    return str(candidate)
+    for candidate in candidates:
+        if _has_config(candidate) and _has_checkpoints(candidate):
+            return str(candidate)
+    raise FileNotFoundError(
+        "EPOM-L weights were not found. Put the released directory under "
+        "weights/EPOM-L or pass --epom-weights-path. "
+        "The historical weights/EPOM-lifelong-finetune-r5/"
+        "EPOM-Lifelong-Finetune-R5 layout is also supported."
+    )
 
 
 def _sha256_file(path):
@@ -408,6 +414,8 @@ _EPISODE_FRESH_ALGORITHMS = frozenset(
         "ARPE",
         "Direct",
         "SRSLM",
+        "SRSLM-NoRule",
+        "SRSLM-OnlyRule",
         "SRSLM-NoWait",
         "SRSLM-OnlyWait",
     )
@@ -452,18 +460,15 @@ def srslm_integrity_metadata(
         root,
         args.switcher_weights_path or _find_switcher_weights(root),
     )
-    # Hash the candidate actually bound by the Switcher, not an independently
-    # discovered latest ARPE that the deployed policy never loads.
+    # The frozen Switcher retains its training-candidate declaration. The
+    # explicit deployment manifest identifies the inference candidate instead.
     serialized = json.loads(
         (switcher_weights / "config.json").read_text(encoding="utf-8")
     )
     full_config = serialized.get("full_config", serialized)
-    from agents.arpe import ArpeCandidateArtifact
     from agents.switcher import Switcher
 
-    artifact = ArpeCandidateArtifact.from_mapping(
-        full_config.get("candidate_policy", {}), root
-    )
+    artifact = _load_arpe_candidate_artifact(root, getattr(args, "arpe_candidate_manifest", None))
     arpe_weights = artifact.weights_path
     arpe_checkpoint = artifact.checkpoint_path
     switcher_checkpoint = Switcher._resolve_checkpoint(
@@ -484,6 +489,7 @@ def srslm_integrity_metadata(
         / "learning/epom_trace_context_actor_critic.py",
         "learning/epom_trace_multiplier_actor_critic.py": code_root
         / "learning/epom_trace_multiplier_actor_critic.py",
+        "learning/inference_correction.py": code_root / "learning/inference_correction.py",
         "agents/srslm.py": code_root / "agents/srslm.py",
         "agents/switcher.py": code_root / "agents/switcher.py",
         "agents/switcher_core.py": code_root / "agents/switcher_core.py",
@@ -510,7 +516,9 @@ def srslm_integrity_metadata(
     ).hexdigest()
     return {
         "strategy_kind": "hybrid_switching",
-        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
+        "hybrid_mode": "aoreplan_wait_or_final_reverse_bypass_switcher_v4",
+        "switcher_training_candidate": full_config.get("candidate_policy"),
+        "inference_candidate": artifact.as_dict(),
         "arpe_weights_path": str(arpe_weights),
         "switcher_weights_path": str(switcher_weights),
         "caar_checkpoint_sha256": hashes["caar_checkpoint"],
@@ -604,6 +612,7 @@ def build_algorithm(
             milestone_checkpoint=artifact.checkpoint_relative,
             base_weights_path=artifact.base_weights_relative,
             base_checkpoint_path=artifact.base_checkpoint_relative,
+            inference=artifact.inference.as_dict() if getattr(artifact, "inference", None) else None,
             seed=seed,
             device="auto",
         )
@@ -639,12 +648,32 @@ def build_algorithm(
             project_root=Path(main_dir).resolve(),
         )
 
-    if algo_name == "SRSLM":
+    if algo_name in ("SRSLM", "SRSLM-NoRule", "SRSLM-OnlyRule"):
         from agents.srslm import SRSLM, SRSLMConfig
         from agents.switcher import SwitcherConfig
+        from agents.arpe import ARPEConfig
+        from agents.srslm_arpe_ablation import (
+            SRSLMNoRule, SRSLMNoRuleConfig, SRSLMOnlyRule, SRSLMOnlyRuleConfig,
+        )
 
-        policy = SRSLM(
-            SRSLMConfig(
+        artifact = _load_arpe_candidate_artifact(main_dir, arpe_candidate_manifest)
+        candidate = ARPEConfig(
+            path_to_weights=str(artifact.weights_path),
+            milestone_checkpoint=str(artifact.checkpoint_path),
+            base_weights_path=str(artifact.base_weights_path),
+            base_checkpoint_path=str(artifact.base_checkpoint_path),
+            inference=artifact.inference.as_dict() if artifact.inference else None,
+        )
+
+        if algo_name == "SRSLM-OnlyRule":
+            return SRSLMOnlyRule(SRSLMOnlyRuleConfig(candidate=candidate, seed=seed),
+                                 project_root=Path(main_dir).resolve())
+        policy_class, config_class = ((SRSLMNoRule, SRSLMNoRuleConfig)
+                                     if algo_name == "SRSLM-NoRule" else (SRSLM, SRSLMConfig))
+        policy = policy_class(
+            config_class(
+                candidate=candidate,
+                final_reverse_guard_enabled=algo_name == "SRSLM",
                 switcher=SwitcherConfig(
                     path_to_weights=str(
                         _project_path(
@@ -747,7 +776,10 @@ def validate_srslm_stats(stats):
     executed_ao = int(stats["executed_ao_count"])
     executed_arpe = int(stats["executed_caar_count"])
     violations = []
-    if stats["hybrid_mode"] != "aoreplan_wait_bypass_switcher_v3":
+    final_guard = bool(stats.get("final_reverse_guard_enabled", False))
+    expected_mode = ("aoreplan_wait_or_final_reverse_bypass_switcher_v4" if final_guard
+                     else "aoreplan_wait_bypass_switcher_v3")
+    if stats["hybrid_mode"] != expected_mode:
         violations.append("hybrid mode differs from the fixed SRSLM policy")
     # Historical evidence retains CAAR; only its display identity changed.
     if stats["switch_pair"] not in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]):
@@ -760,12 +792,17 @@ def validate_srslm_stats(stats):
         violations.append("Switcher state schema differs")
     if stats["selector_kind"] != "ppo_two_branch_categorical":
         violations.append("Switcher is not a two-branch categorical policy")
-    if stats["switcher_decision_scope"] != "aoreplan_nonwait_only":
+    expected_scope = ("aoreplan_nonwait_and_final_nonreverse_only" if final_guard
+                      else "aoreplan_nonwait_only")
+    if stats["switcher_decision_scope"] != expected_scope:
         violations.append("Switcher received states outside AORePlan moves")
     if stats["joint_conflict_prediction_enabled"] is not False:
         violations.append("retired joint-conflict prediction is active")
-    if choices + bypasses != total:
-        violations.append("Switcher choices and AORePlan-wait bypasses do not sum")
+    reverse_bypasses = int(stats.get("final_reverse_arpe_bypass_count", 0))
+    if reverse_bypasses < 0 or (not final_guard and reverse_bypasses):
+        violations.append("Final-reverse bypass count disagrees with the routing rule")
+    if choices + bypasses + reverse_bypasses != total:
+        violations.append("Switcher choices and rule bypasses do not sum")
     if executed_ao + executed_arpe != total:
         violations.append("executed branch counts do not sum")
     if selected_ao != executed_ao or selected_ao > choices:
@@ -803,6 +840,27 @@ def validate_srslm_stats(stats):
 
 def validate_final_srslm_ablation_stats(algorithm, stats):
     """Validate the two retained ablations that share one ARPE candidate."""
+
+    if algorithm in {"SRSLM-NoRule", "SRSLM-OnlyRule"}:
+        total = int(stats["total_action_count"])
+        choices = int(stats["switcher_choice_count"])
+        arpe = int(stats["executed_caar_count"])
+        ao = int(stats["executed_ao_count"])
+        waits = int(stats["aoreplan_wait_bypass_count"])
+        reverses = int(stats["final_reverse_arpe_bypass_count"])
+        if total <= 0 or min(choices, arpe, ao, waits, reverses) < 0 or arpe + ao != total:
+            raise RuntimeError("Rule-ablation branch counts are inconsistent.")
+        if algorithm == "SRSLM-NoRule":
+            if (choices != total or waits or reverses or stats["wait_detection_enabled"]
+                    or stats["final_reverse_guard_enabled"]
+                    or stats["switcher_model_choice_count"] != choices
+                    or stats.get("switcher_weight_source_algorithm") != "SRSLM"):
+                raise RuntimeError("NoRule must use the final Switcher on every state.")
+        elif (choices or stats["switcher_model_choice_count"] or arpe != waits + reverses
+              or not stats["wait_detection_enabled"] or not stats["final_reverse_guard_enabled"]
+              or stats["learned_switcher_called"]):
+            raise RuntimeError("OnlyRule must use both rules without a learned Switcher.")
+        return
 
     from agents.switcher_arpe import ARPE_SWITCHER_LOADER_SCHEMA
     from agents.arpe import ARPE_CANDIDATE_SCHEMA
@@ -1502,6 +1560,8 @@ def run_single_experiment(task):
         if algo_name == "SRSLM":
             validate_srslm_stats(hybrid_stats)
         elif algo_name in (
+            "SRSLM-NoRule",
+            "SRSLM-OnlyRule",
             "SRSLM-NoWait",
             "SRSLM-OnlyWait",
         ):
@@ -1897,17 +1957,6 @@ def load_map_list_snapshot(path, registry_path=None):
     )
 
 
-def _canonical_json_sha256(value):
-
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
-
-
 def build_tasks(
     algorithms,
     maps,
@@ -2242,23 +2291,6 @@ def run_experiments(
             else:
                 on_target = result.get("on_target", "restart")
 
-                gate_str = ""
-
-                if result.get("learning_ratio") is not None:
-                    switch_label = "caar"
-
-                    gate_str += f" {switch_label}={result['learning_ratio']:.1%}"
-
-                if result.get("planner_ratio") is not None:
-                    gate_str += f" planner={result['planner_ratio']:.1%}"
-
-                for key, label in (
-                    ("caar_action_ratio", "caar_actions"),
-                    ("guided_agent_step_ratio", "guided"),
-                ):
-                    if result.get(key) is not None:
-                        gate_str += f" {label}={result[key]:.1%}"
-
                 diag_str = ""
 
                 if result.get("congestion_rate") is not None:
@@ -2274,7 +2306,7 @@ def run_experiments(
 
                     status = (
                         f"isr={(0.0 if isr is None else isr):.1%} "
-                        f"csr={(0.0 if csr is None else csr):.1%}{gate_str}{diag_str} "
+                        f"csr={(0.0 if csr is None else csr):.1%}{diag_str} "
                         f"run={format_duration(result['run_time_seconds'])}"
                     )
 
@@ -2283,7 +2315,7 @@ def run_experiments(
                         diag_str += f" rev={result['reverse_action_rate']:.1%}"
 
                     status = (
-                        f"throughput={result['avg_throughput']:.4f}{gate_str}{diag_str} "
+                        f"throughput={result['avg_throughput']:.4f}{diag_str} "
                         f"run={format_duration(result['run_time_seconds'])}"
                     )
 

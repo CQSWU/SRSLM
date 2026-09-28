@@ -4,6 +4,7 @@ import json
 from os.path import join
 from pathlib import Path
 from typing import Literal
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -23,6 +24,8 @@ class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["PolicyBackbone"] = "PolicyBackbone"
     path_to_weights: str
     checkpoint_kind: Literal["latest", "best"] = "latest"
+    base_weights_path: str | None = None
+    base_checkpoint_path: str | None = None
 
 
 class PolicyBackbone:
@@ -40,7 +43,12 @@ class PolicyBackbone:
             self.config_path
         )
         self.saved_config = config
-        _, flat_config = validate_config(checkpoint_experiment_config(config["full_config"]))
+        runtime_config = deepcopy(config["full_config"])
+        if algo_cfg.base_weights_path is not None:
+            runtime_config["experiment_settings"]["epom_base_weights_path"] = algo_cfg.base_weights_path
+        _, flat_config = validate_config(checkpoint_experiment_config(runtime_config))
+        # Paths are deployment inputs, not rewritten checkpoint configuration.
+        flat_config.base_checkpoint_path = algo_cfg.base_checkpoint_path
 
         env = create_env(flat_config.env, cfg=flat_config, env_config={})
         try:

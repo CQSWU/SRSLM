@@ -2,6 +2,8 @@
 
 import pytest
 import torch
+from types import SimpleNamespace
+from unittest.mock import Mock
 from pydantic import ValidationError
 
 from agents.epom_trace_context import (
@@ -92,3 +94,26 @@ def test_historical_action_sampling_is_explicit_and_unchanged():
     assert EPOMTraceContextConfig(
         path_to_weights="unused", action_sampling="direct_numpy"
     ).action_sampling == "direct_numpy"
+
+
+@pytest.mark.parametrize("verification_error", [False, True])
+def test_constructor_verifies_loaded_backbone_once_without_unused_cache(monkeypatch, verification_error):
+    verifier = Mock(side_effect=RuntimeError("backbone differs") if verification_error else None)
+    config = _trace_config()
+    config["environment"]["grid_memory_obs_radius"] = 5
+
+    def fake_backbone_init(self, algo_cfg):
+        self.cfg = SimpleNamespace(full_config=config)
+        self.saved_config = {"full_config": config}
+        self.tau_radius = 5
+        self.ppo = SimpleNamespace(trace_radius=5, verify_frozen_actor_backbone=verifier)
+
+    monkeypatch.setattr(PolicyBackbone, "__init__", fake_backbone_init)
+    cfg = EPOMTraceContextConfig(path_to_weights="unused", seed=42)
+    if verification_error:
+        with pytest.raises(RuntimeError, match="backbone differs"):
+            EPOMTraceContext(cfg)
+    else:
+        policy = EPOMTraceContext(cfg)
+        assert not hasattr(policy, "_actor_backbone_verification")
+    verifier.assert_called_once_with()

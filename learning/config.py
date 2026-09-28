@@ -227,13 +227,15 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     epom_base_weights_path: str = 'weights/EPOM/EPOM'
 
-    # Direct baseline and ARPE entropy threshold.
+    # Direct bonus: one for ARPE, zero for the no-Direct training control.
     trace_rule_scale: float = Field(1.0, ge=0.0)
     trace_gate_threshold: float = Field(0.46371241)
 
-    # There is only one supported ARPE architecture and training gate.
+    # Checkpoints record their training gate; deployment overrides are separate.
     trace_context_architecture: Literal['paper_entropy_fusion'] = 'paper_entropy_fusion'
-    trace_context_learned_gate: Literal['entropy'] = 'entropy'
+    trace_context_learned_gate: Literal['entropy', 'always'] = 'entropy'
+    # Zero only learned actor/critic inputs; enabled Direct still reads real trace.
+    trace_encoder_input: Literal['real', 'zero'] = 'real'
 
     hidden_size: int = 512
 
@@ -244,6 +246,8 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
     policy_init_gain: float = 1.0
 
     switcher_initial_ao_probability: float = Field(0.1, gt=0.0, lt=1.0)
+    # Saved training metadata; it does not alter frozen Switcher features.
+    switcher_actor_disagreement_only: bool = False
 
     actor_critic_share_weights: bool = True
 
@@ -533,8 +537,8 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 )
             if settings.trace_gate_threshold != 0.46371241:
                 raise ValueError('Paper ARPE fixes trace_gate_threshold=0.46371241.')
-            if settings.trace_rule_scale != 1.0:
-                raise ValueError('Paper ARPE fixes trace_rule_scale=1.0.')
+            if settings.trace_rule_scale not in (0.0, 1.0):
+                raise ValueError('trace_rule_scale is 1.0 for ARPE or 0.0 for the no-Direct control.')
             expected_map_name = 'maps/train.yaml'
             if str(grid.map_name).replace('\\', '/') != expected_map_name:
                 raise ValueError(

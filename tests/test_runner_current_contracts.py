@@ -18,7 +18,8 @@ from planning.ao_replan_algo import AORePlanWrapper
 def test_public_names_are_explicit_and_retired_names_are_rejected():
     assert runner.SUPPORTED_ALGORITHMS == (
         'RePlan', 'AORePlan', 'AORePlan-SoftNoCheck', 'EPOM-Lifelong-FT',
-        'Direct', 'ARPE', 'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
+        'Direct', 'ARPE', 'SRSLM-NoRule', 'SRSLM-OnlyRule',
+        'SRSLM-NoWait', 'SRSLM-OnlyWait', 'SRSLM',
     )
     assert set(runner.ALGORITHM_ALIASES.values()) == set(runner.SUPPORTED_ALGORITHMS)
     for name in ('DCC', 'DHC', 'Follower', 'NoReweight', 'SRSLM-NoWaitDetect', 'SRSLM-WaitDetectOnly', 'v8b'):
@@ -160,3 +161,28 @@ def test_public_manifest_uses_portable_paths_without_required_hashes():
     assert artifact.checkpoint_relative == data['checkpoint_path']
     for key in ('checkpoint_sha256', 'base_checkpoint_sha256'):
         assert key not in data
+
+
+@pytest.mark.parametrize("on_target", ["restart", "nothing"])
+def test_progress_output_omits_retired_labels_without_changing_results(monkeypatch, capsys, on_target):
+    from concurrent.futures import ThreadPoolExecutor
+
+    row = {
+        "algorithm": "ARPE", "map_name": "test-map", "num_agents": 100,
+        "seed": 0, "error": None, "on_target": on_target,
+        "avg_throughput": 1.2, "run_time_seconds": 0.4,
+        "ISR": 1.0, "CSR": 0.5, "ep_length": 512,
+        "congestion_rate": 0.2, "reverse_action_rate": 0.1,
+        "learning_ratio": 0.4, "planner_ratio": 0.6,
+        "caar_action_ratio": 0.4, "guided_agent_step_ratio": 0.2,
+    }
+    monkeypatch.setattr(runner, "ProcessPoolExecutor", ThreadPoolExecutor)
+    monkeypatch.setattr(runner, "run_single_experiment", lambda _task: dict(row))
+    results, _elapsed = runner.run_experiments([{}], workers=1)
+    output = capsys.readouterr().out
+    for label in ("caar=", "planner=", "caar_actions=", "guided="):
+        assert label not in output
+    assert "congestion=20.0%" in output
+    assert ("throughput=1.2000" if on_target == "restart" else "isr=100.0% csr=50.0%") in output
+    for key, value in row.items():
+        assert results[0][key] == value

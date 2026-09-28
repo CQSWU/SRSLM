@@ -1,36 +1,22 @@
-# ARPE naming and checkpoint compatibility
+# Method names and saved formats
 
-The current paper method is **ARPE (Action Reweight with Policy Entropy)**.
-This is the new name of the selected entropy-gated method previously called
-CAAR, not a new network or a newly trained checkpoint.
+ARPE means **Action Reweight with Policy Entropy**. Use `--algorithms ARPE`
+with the evaluator. `configs/arpe_final_candidate.json` supplies the current
+relative checkpoint paths and inference settings; another compatible
+declaration can be supplied through `--arpe-candidate-manifest`.
 
-Use `--algorithms ARPE` with the current evaluator. Set weight paths through
-`--arpe-candidate-manifest` when needed. The implementation is
-`agents/arpe.py`, exposing `ARPE`, `ARPEConfig`, and
-`ArpeCandidateArtifact`. The selected declarations are
-`configs/arpe_final_candidate.json`. The declaration contains portable paths;
-hash values are recorded after loading only as optional provenance.
+The current method includes both a selected checkpoint and its inference
+configuration. Changing the entropy threshold, residual multiplier or fixed
+Direct bonus changes the evaluated policy even if the checkpoint is unchanged.
+See [CURRENT_VERSION.md](../CURRENT_VERSION.md) for the exact retained version.
 
-## Names that deliberately remain in saved formats
+Original checkpoint/config/result files keep their original names and hashes.
+The Switcher still uses serialized `caar_action`, `switcher_caar_*` and candidate
+schema fields. These are saved-format identifiers, not additional methods.
+Removing them would prevent loading the retained weights. Legacy experiment
+sources belong to the separate historical archive, not the current default path.
 
-Existing checkpoints, their original JSON configs, completed results, and
-frozen source archives are immutable. They retain CAAR in historical filenames
-and method labels. New source must not be attributed to those old runs.
-In particular, the released long-horizon data still records the original
-`CAAR` label; its original-source verifier reads that evidence unchanged.
-
-The selected Switcher also retains the serialized `caar_action` input,
-`switcher_caar_*` settings, candidate kind/schema strings, and routing-counter
-keys used in the saved artifact contracts. These are format identifiers, not
-the current method name. Changing them would break checkpoint or historical
-audit compatibility. They do not change branch order, logits, action sampling,
-rewards, or the wait rule.
-
-The old NoReweight method and its encoder are no longer executable. A narrow
-checkpoint-config sanitizer still drops inert historical fields while loading
-the selected frozen artifacts; it cannot register or construct the retired
-model. The retired tau actor is also rejected.
-
-There is no old CAAR runtime/CLI alias in the current source. Use a frozen
-archive to rerun an old source version, or the current ARPE entrypoints with
-the same released weights to reproduce the selected policy under its new name.
+Current switching comparisons are Full, NoRule and OnlyRule. NoRule uses the
+same full Switcher with both overrides disabled. OnlyRule applies the wait and
+reverse overrides without a Switcher. Older independently trained NoWait
+results must not be relabeled as this matched NoRule experiment.

@@ -1,9 +1,14 @@
 {
   "kind": "epom_trace_context_caar_milestone",
   "schema": "switcher_candidate_caar_v1",
-  "weights_path": "weights/trace_residual_shaped200/TraceBonusSync200Entropy-20M-S0",
-  "checkpoint_path": "weights/trace_residual_shaped200/TraceBonusSync200Entropy-20M-S0/checkpoint_p0/best_000057500_235520000_avg_throughput_1.640.pth",
-  "base_weights_path": "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5",
-  "base_checkpoint_path": "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5/checkpoint_p0/checkpoint_000024418_100016128.pth",
+  "weights_path": "weights/ARPE-Final-1B",
+  "checkpoint_path": "weights/ARPE-Final-1B/checkpoint_p0/checkpoint_000244175_1000140800.pth",
+  "base_weights_path": "weights/EPOM-L",
+  "base_checkpoint_path": "weights/EPOM-L/checkpoint_p0/checkpoint_000024418_100016128.pth",
+  "inference": {
+    "entropy_threshold": 0.01,
+    "residual_scale": 12.0,
+    "action_sampling": "direct_numpy"
+  },
   "frozen": true
 }

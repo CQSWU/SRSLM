@@ -27,18 +27,22 @@ uv run python run_experiments.py \
   --map-types wc3 --map wc3=wc3-128x64-TimbermawHold
 ```
 
-For EPOM-L, Direct, ARPE, and SRSLM, place the released `weights/` directory
-in the project root before running the evaluator.
+For learned methods, place the separately supplied `weights/` directory in
+the project root. Current settings are listed in
+[CURRENT_VERSION.md](CURRENT_VERSION.md).
 Custom compatible weights are supported; recorded hashes do not restrict loading.
 
 ## Training
+
+Configurable entry points; exact saved training configurations and curriculum
+drivers are retained with the experiment backup:
 
 ```bash
 # EPOM-L
 uv run python train.py --config_path learning/train_epom.yaml
 
 # ARPE
-uv run python train.py --config_path learning/train_arpe.yaml
+uv run python train.py --config_path learning/train_arpe_final.yaml
 
 # Switcher
 uv run python train_switcher.py --config_path learning/train_switcher.yaml

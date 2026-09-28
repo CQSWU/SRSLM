@@ -190,7 +190,9 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
             config_path = directory / "cfg.json"
         if not config_path.is_file():
             raise FileNotFoundError(f"No EPOM-L config under {directory}.")
-        checkpoint_path = self._latest_checkpoint(directory)
+        declared_checkpoint = getattr(self.cfg, "base_checkpoint_path", None)
+        checkpoint_path = (Path(declared_checkpoint).resolve() if declared_checkpoint
+                           else self._latest_checkpoint(directory))
 
         serialized = json.loads(config_path.read_text(encoding="utf-8"))
         base_full = serialized.get("full_config", serialized)

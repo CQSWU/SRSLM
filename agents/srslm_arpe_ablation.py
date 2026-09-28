@@ -1,10 +1,11 @@
-"""Final SRSLM wait ablations using one selected ARPE and NoWait checkpoint."""
+"""Current rule ablations and explicitly retained historical wait ablations."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Callable, Literal
 
+import numpy as np
 from pydantic import Extra, Field
 
 from agents.switcher_arpe import AllStateArpeSwitcher, AllStateArpeSwitcherConfig
@@ -20,6 +21,8 @@ from agents.switcher_core import (
 )
 from agents.utils_agents import AlgoBase
 from planning.aoreplan_branch import AORePlanBranch
+from agents.srslm import SRSLM, SRSLMConfig
+from agents.switcher import Switcher
 
 
 NO_WAIT_MODE = "all_state_switcher_caar"
@@ -131,6 +134,7 @@ class SRSLMOnlyWait(_BaseDeployment):
         project_root: Path | None = None,
         candidate_factory: Callable = ARPE.load,
         planner_factory: Callable = AORePlanBranch,
+        controller_factory: Callable = OnlyWaitController,
     ):
         self.cfg = cfg
         root = (
@@ -140,7 +144,7 @@ class SRSLMOnlyWait(_BaseDeployment):
         )
         self.candidate = _frozen_candidate(cfg, root, candidate_factory)
         planner = planner_factory(max_steps=cfg.max_planning_steps, seed=cfg.seed)
-        self.controller = OnlyWaitController(self.candidate, planner)
+        self.controller = controller_factory(self.candidate, planner)
         self.device = getattr(self.candidate, "device", cfg.device)
 
     def after_reset(self):
@@ -166,7 +170,63 @@ class SRSLMOnlyWait(_BaseDeployment):
         return result
 
 
+class _NoRuleSwitcher(Switcher):
+    """Use the same final checkpoint, with its execution mask disabled."""
+
+    allow_aoreplan_wait = True
+
+
+class NoRuleController(AllStateSwitcherController):
+    def prepare_actions(self, *args, **kwargs):
+        prepared = super().prepare_actions(*args, **kwargs)
+        prepared.switcher_state["switch_allowed"] = np.ones((len(prepared.arpe_actions), 1), np.float32)
+        return prepared
+
+
+class OnlyRuleController(OnlyWaitController):
+    selector_kind = "deterministic_wait_or_reverse_only"
+
+    def __init__(self, arpe, planner):
+        super().__init__(arpe, planner, final_reverse_guard_enabled=True)
+
+
+class SRSLMNoRuleConfig(SRSLMConfig):
+    name: Literal["SRSLM-NoRule"] = "SRSLM-NoRule"
+    final_reverse_guard_enabled: Literal[False] = False
+
+
+class SRSLMOnlyRuleConfig(SRSLMOnlyWaitConfig):
+    name: Literal["SRSLM-OnlyRule"] = "SRSLM-OnlyRule"
+
+
+class SRSLMNoRule(SRSLM):
+    """Disable both rules, without retraining or replacing the final Switcher."""
+
+    def __init__(self, cfg, **kwargs):
+        super().__init__(cfg, switcher_factory=_NoRuleSwitcher,
+                         controller_factory=NoRuleController, **kwargs)
+
+    def get_switch_stats(self):
+        result = super().get_switch_stats()
+        result.update(hybrid_mode="all_state_final_switcher", ablation_name="SRSLM-NoRule",
+                      switcher_weight_source_algorithm="SRSLM")
+        return result
+
+
+class SRSLMOnlyRule(SRSLMOnlyWait):
+    """Apply wait and final-reverse rules, otherwise use AORePlan; no network."""
+
+    def __init__(self, cfg, **kwargs):
+        super().__init__(cfg, controller_factory=OnlyRuleController, **kwargs)
+
+    def get_switch_stats(self):
+        result = super().get_switch_stats()
+        result.update(hybrid_mode="aoreplan_wait_or_final_reverse_only", ablation_name="SRSLM-OnlyRule")
+        return result
+
+
 __all__ = [
+    "SRSLMNoRule", "SRSLMNoRuleConfig", "SRSLMOnlyRule", "SRSLMOnlyRuleConfig",
     "NO_WAIT_MODE",
     "ONLY_WAIT_MODE",
     "SRSLMNoWait",

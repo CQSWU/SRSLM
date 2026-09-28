@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 .pytest_cache/
+.ruff_cache/
 .pytest_tmp*/
 
 # Local environments and build products

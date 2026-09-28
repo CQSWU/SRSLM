@@ -132,6 +132,50 @@ def test_fusion_input_is_trace32_h512_z5_and_detaches_frozen_epom():
     assert logits.grad is None
 
 
+def test_zero_encoder_input_keeps_real_pressure_for_direct(full_model):
+    model, batch, _ = full_model
+    model.eval()
+    original_mode = model.trace_encoder_input
+    captured = []
+    handles = [
+        encoder.register_forward_pre_hook(
+            lambda module, args: captured.append(args[0].detach().clone())
+        )
+        for encoder in (model.actor_trace_encoder, model.critic_trace_encoder)
+    ]
+    original_shapes = {k: tuple(v.shape) for k, v in model.state_dict().items()}
+    observations = TensorDict({k: v.clone() for k, v in batch.items()})
+    observations['tau'] = torch.arange(121).float().reshape(1, 1, 11, 11).repeat(
+        len(observations['tau']), 1, 1, 1
+    )
+    try:
+        model.trace_encoder_input = 'zero'
+        with torch.no_grad():
+            head = model.forward_head(observations)
+        assert len(captured) == 2
+        assert all(torch.count_nonzero(x).item() == 0 for x in captured)
+        pressure = head[:, -model.head_extra_size:][:, :5]
+        expected = model.centered_trace_candidates(observations['tau'])
+        torch.testing.assert_close(pressure, expected)
+        assert torch.count_nonzero(pressure).item() > 0
+        assert original_shapes == {k: tuple(v.shape) for k, v in model.state_dict().items()}
+        assert sum(p.numel() for p in model.trainable_parameters()) == 605_638
+        base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1]]).repeat(len(pressure), 1)
+        legal = torch.ones_like(base)
+        ranks = torch.arange(5).repeat(len(pressure), 2, 1).float()
+        final, delta, gate, _ = model.apply_paper_entropy_correction_rule(
+            base, torch.zeros_like(base), pressure, legal, ranks
+        )
+        route = select_top2_low_pressure(base, expected, legal, ranks)
+        torch.testing.assert_close(final, base + gate * route)
+        torch.testing.assert_close((final-base).sum(-1), torch.ones(len(pressure)))
+        torch.testing.assert_close(delta, torch.zeros_like(delta))
+    finally:
+        model.trace_encoder_input = original_mode
+        for handle in handles:
+            handle.remove()
+
+
 def test_residual_uses_tanh_then_five_action_mean_not_raw_subtraction():
     raw = torch.tensor([[20.62, -30.0, 0.0, 2.0, -1.0], [4.0] * 5])
     bounded = 0.5 * torch.tanh(raw)
@@ -142,6 +186,62 @@ def test_residual_uses_tanh_then_five_action_mean_not_raw_subtraction():
     torch.testing.assert_close(actual.mean(dim=-1), torch.zeros(2), atol=1e-7, rtol=0)
     assert actual.abs().max().item() <= 0.8 + 1e-7
     assert not torch.allclose(actual, -raw)
+
+
+def test_no_direct_rule_ignores_pressure_and_keeps_entropy_gated_learning():
+    base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
+    raw = torch.tensor([[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True)
+    pressure, legal, ranks = _routing(2)
+    final, delta, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+        base, raw, pressure, legal, ranks, direct_bonus=0.0
+    )
+    expected = base + gate * bounded_centered_residual(raw)
+    torch.testing.assert_close(final, expected)
+    changed = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+        base, raw, -100 * pressure, 1 - legal, ranks.flip(-1), direct_bonus=0.0
+    )[0]
+    torch.testing.assert_close(changed, final)
+    initial = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+        base, torch.zeros_like(base), pressure, legal, ranks, direct_bonus=0.0
+    )[0]
+    torch.testing.assert_close(initial, base, rtol=0, atol=0)
+    F.cross_entropy(final, torch.tensor([1, 2]), reduction="sum").backward()
+    assert torch.count_nonzero(raw.grad[0]).item() == 5
+    torch.testing.assert_close(raw.grad[1], torch.zeros(5))
+    torch.testing.assert_close(delta, final - base)
+
+
+def test_zero_no_direct_full_forward_is_invariant_to_trace(full_model):
+    model, batch, cfg = full_model
+    model.eval()
+    old_mode, old_scale = model.trace_encoder_input, model.rule_scale
+    old_head = model.trace_multiplier_head[-1].weight.detach().clone()
+    try:
+        model.trace_encoder_input, model.rule_scale = 'zero', 0.0
+        first = TensorDict({k: v.clone() for k, v in batch.items()})
+        second = TensorDict({k: v.clone() for k, v in batch.items()})
+        first['tau'] = torch.randn_like(first['tau'])
+        second['tau'] = 100 * torch.randn_like(second['tau'])
+        states = torch.zeros(len(batch['obs']), cfg.hidden_size)
+        with torch.no_grad():
+            model.trace_multiplier_head[-1].weight.normal_(0.0, 0.01)
+            out_a = model(first, states.clone())
+            out_b = model(second, states.clone())
+        torch.testing.assert_close(out_a['action_logits'], out_b['action_logits'], rtol=0, atol=0)
+        torch.testing.assert_close(out_a['values'], out_b['values'], rtol=0, atol=0)
+        assert torch.count_nonzero(model.last_rule_delta).item() == 0
+        assert torch.count_nonzero(model.last_bonus_route).item() == 0
+        torch.testing.assert_close(model.last_direct_logits, model.last_base_logits)
+        torch.testing.assert_close(model.last_final_logits, model.last_base_logits + model.last_learned_delta)
+        assert sum(p.numel() for p in model.trainable_parameters()) == 605_638
+        provenance = model.checkpoint_provenance()
+        assert provenance['direct_bonus'] == 0.0
+        assert provenance['direct_trace_input'] == 'disabled'
+        assert provenance['initial_policy'] == 'exact_base_policy'
+    finally:
+        model.trace_encoder_input, model.rule_scale = old_mode, old_scale
+        with torch.no_grad():
+            model.trace_multiplier_head[-1].weight.copy_(old_head)
 
 
 def test_direct_rewards_low_pressure_of_top_two_legal_moves_only():

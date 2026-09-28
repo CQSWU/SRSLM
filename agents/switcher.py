@@ -80,6 +80,7 @@ class Switcher:
 
         observation_space = gym.spaces.Dict(
             {
+                "switch_allowed": gym.spaces.Box(0.0, 1.0, shape=(1,), dtype=np.float32),
                 "obs": gym.spaces.Box(
                     low=0.0,
                     high=1.0,
@@ -218,6 +219,13 @@ class Switcher:
             if not np.all(np.isfinite(array)):
                 raise ValueError(f"Switcher field {key!r} is non-finite.")
             arrays[key] = array
+        arrays["switch_allowed"] = np.asarray(
+            state.get("switch_allowed", arrays["aoreplan_action"][:, :1] < 0.5),
+            dtype=np.float32,
+        )
+        if (arrays["switch_allowed"].shape != (count, 1)
+                or not np.all(np.isin(arrays["switch_allowed"], (0.0, 1.0)))):
+            raise ValueError("Switcher switch_allowed must be a binary [N,1] mask.")
         if not count:
             raise ValueError("Switcher received an empty batch.")
         if (

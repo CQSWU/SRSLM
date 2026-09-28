@@ -123,7 +123,7 @@ class EPOMTraceContext(PolicyBackbone):
         # ``super().__init__`` has already loaded the complete learned
         # checkpoint.  Compare it now with the digest captured immediately
         # after the external EPOM-L checkpoint was loaded by the model.
-        self._actor_backbone_verification = verifier()
+        verifier()
         self._trace_contract = _validate_r5_trace_contract(self.saved_config["full_config"])
         self._trace_variant = TraceVariant(
             self._trace_contract["trace_variant"]
