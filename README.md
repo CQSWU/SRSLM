@@ -5,6 +5,12 @@ with Shared Trace for Lifelong Partially Observable Multi-Agent Pathfinding**.
 SRSLM combines the search-based AORePlan policy with the learned ARPE policy
 and uses a Switcher to select between their actions.
 
+| RePlan | AORePlan |
+| :---: | :---: |
+| <img src="docs/assets/replan.svg" alt="RePlan animation" width="420"> | <img src="docs/assets/aoreplan.svg" alt="AORePlan animation" width="420"> |
+
+An illustrative two-agent example.
+
 ## Installation
 
 Python 3.10 or 3.11 and a C++ compiler are required.
