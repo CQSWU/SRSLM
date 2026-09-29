@@ -171,12 +171,12 @@ def epom_lifelong_result_manifest(results, algorithms):
 
 
 def srslm_contract_metadata(algorithms, collision_system="block_both"):
-    """Describe the final wait-or-reverse bypass and learned Switcher."""
+    """Describe the wait-only bypass and learned Switcher."""
     if "SRSLM" not in algorithms:
         return None
     return {
         "strategy_kind": "hybrid_switching",
-        "hybrid_mode": "aoreplan_wait_or_final_reverse_bypass_switcher_v4",
+        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
         "branch_algorithms": ["ARPE", "AORePlan"],
         "hybrid_components": {
             "learning_branch": "ARPE",
@@ -187,8 +187,7 @@ def srslm_contract_metadata(algorithms, collision_system="block_both"):
         "guide_algorithm": "AORePlan",
         "deployment": {
             "wait_rule": "aoreplan_wait_directly_uses_caar",
-            "final_reverse_rule": "final_aoreplan_reverse_directly_uses_arpe",
-            "switcher_scope": "aoreplan_nonwait_and_final_nonreverse_only",
+            "switcher_scope": "aoreplan_nonwait_only",
             "switcher_output": "two_branch_categorical_logits",
             "selection": "softmax_sampling",
             "joint_conflict_prediction_enabled": False,
@@ -516,7 +515,7 @@ def srslm_integrity_metadata(
     ).hexdigest()
     return {
         "strategy_kind": "hybrid_switching",
-        "hybrid_mode": "aoreplan_wait_or_final_reverse_bypass_switcher_v4",
+        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
         "switcher_training_candidate": full_config.get("candidate_policy"),
         "inference_candidate": artifact.as_dict(),
         "arpe_weights_path": str(arpe_weights),
@@ -673,7 +672,6 @@ def build_algorithm(
         policy = policy_class(
             config_class(
                 candidate=candidate,
-                final_reverse_guard_enabled=algo_name == "SRSLM",
                 switcher=SwitcherConfig(
                     path_to_weights=str(
                         _project_path(
@@ -776,10 +774,7 @@ def validate_srslm_stats(stats):
     executed_ao = int(stats["executed_ao_count"])
     executed_arpe = int(stats["executed_caar_count"])
     violations = []
-    final_guard = bool(stats.get("final_reverse_guard_enabled", False))
-    expected_mode = ("aoreplan_wait_or_final_reverse_bypass_switcher_v4" if final_guard
-                     else "aoreplan_wait_bypass_switcher_v3")
-    if stats["hybrid_mode"] != expected_mode:
+    if stats["hybrid_mode"] != "aoreplan_wait_bypass_switcher_v3":
         violations.append("hybrid mode differs from the fixed SRSLM policy")
     # Historical evidence retains CAAR; only its display identity changed.
     if stats["switch_pair"] not in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]):
@@ -792,16 +787,11 @@ def validate_srslm_stats(stats):
         violations.append("Switcher state schema differs")
     if stats["selector_kind"] != "ppo_two_branch_categorical":
         violations.append("Switcher is not a two-branch categorical policy")
-    expected_scope = ("aoreplan_nonwait_and_final_nonreverse_only" if final_guard
-                      else "aoreplan_nonwait_only")
-    if stats["switcher_decision_scope"] != expected_scope:
+    if stats["switcher_decision_scope"] != "aoreplan_nonwait_only":
         violations.append("Switcher received states outside AORePlan moves")
     if stats["joint_conflict_prediction_enabled"] is not False:
         violations.append("retired joint-conflict prediction is active")
-    reverse_bypasses = int(stats.get("final_reverse_arpe_bypass_count", 0))
-    if reverse_bypasses < 0 or (not final_guard and reverse_bypasses):
-        violations.append("Final-reverse bypass count disagrees with the routing rule")
-    if choices + bypasses + reverse_bypasses != total:
+    if choices + bypasses != total:
         violations.append("Switcher choices and rule bypasses do not sum")
     if executed_ao + executed_arpe != total:
         violations.append("executed branch counts do not sum")
@@ -847,19 +837,17 @@ def validate_final_srslm_ablation_stats(algorithm, stats):
         arpe = int(stats["executed_caar_count"])
         ao = int(stats["executed_ao_count"])
         waits = int(stats["aoreplan_wait_bypass_count"])
-        reverses = int(stats["final_reverse_arpe_bypass_count"])
-        if total <= 0 or min(choices, arpe, ao, waits, reverses) < 0 or arpe + ao != total:
+        if total <= 0 or min(choices, arpe, ao, waits) < 0 or arpe + ao != total:
             raise RuntimeError("Rule-ablation branch counts are inconsistent.")
         if algorithm == "SRSLM-NoRule":
-            if (choices != total or waits or reverses or stats["wait_detection_enabled"]
-                    or stats["final_reverse_guard_enabled"]
+            if (choices != total or waits or stats["wait_detection_enabled"]
                     or stats["switcher_model_choice_count"] != choices
                     or stats.get("switcher_weight_source_algorithm") != "SRSLM"):
                 raise RuntimeError("NoRule must use the final Switcher on every state.")
-        elif (choices or stats["switcher_model_choice_count"] or arpe != waits + reverses
-              or not stats["wait_detection_enabled"] or not stats["final_reverse_guard_enabled"]
+        elif (choices or stats["switcher_model_choice_count"] or arpe != waits
+              or not stats["wait_detection_enabled"]
               or stats["learned_switcher_called"]):
-            raise RuntimeError("OnlyRule must use both rules without a learned Switcher.")
+            raise RuntimeError("OnlyRule must use only the wait rule without a learned Switcher.")
         return
 
     from agents.switcher_arpe import ARPE_SWITCHER_LOADER_SCHEMA

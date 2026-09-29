@@ -17,6 +17,6 @@ Removing them would prevent loading the retained weights. Legacy experiment
 sources belong to the separate historical archive, not the current default path.
 
 Current switching comparisons are Full, NoRule and OnlyRule. NoRule uses the
-same full Switcher with both overrides disabled. OnlyRule applies the wait and
-reverse overrides without a Switcher. Older independently trained NoWait
+same full Switcher with the wait override disabled. OnlyRule uses ARPE on wait
+and AORePlan on every move, without a Switcher. Older independently trained NoWait
 results must not be relabeled as this matched NoRule experiment.

@@ -1,7 +1,7 @@
 # Current implementation
 
-Updated 2026-09-28 against the completed experiment artifacts. These settings
-describe the data, not manuscript wording that may still be under revision.
+Updated 2026-09-29. Current SRSLM uses only the wait rule. Previously completed
+two-rule experiments are recorded separately below; their results are unchanged.
 
 ## Selected inference settings
 
@@ -13,9 +13,10 @@ describe the data, not manuscript wording that may still be under revision.
   otherwise use the base logits unchanged. The residual is `0.5*tanh(raw)`
   minus its five-action mean. Direct's fixed bonus is disabled in this final
   inference configuration.
-- Full SRSLM sends an AORePlan wait or a final reverse action to ARPE. Otherwise
-  the frozen Switcher selects between the two proposals. NoRule disables both
-  rules with the same full checkpoint; OnlyRule applies the rules without a
+- Full SRSLM uses ARPE directly when AORePlan proposes wait. Otherwise,
+  including a reverse move, the frozen Switcher selects between the proposals.
+  NoRule disables the wait rule with the same full checkpoint; OnlyRule uses
+  ARPE on wait and AORePlan on every move, without a
   learned Switcher. These are inference ablations, not independently trained
   variants.
 
@@ -25,6 +26,8 @@ settings. The Switcher was trained from scratch for 1B steps with alternating
 populations and the earlier 500M ARPE candidate, then evaluated with the above
 1B ARPE candidate. It was not retrained for that final candidate replacement.
 Saved training configurations are retained separately from inference settings.
+This wait-only code update does not retrain or replace any checkpoint. New
+Switcher training and inference share the same wait-only controller.
 
 ## Checkpoints
 
@@ -40,7 +43,10 @@ Hashes identify recorded artifacts; they are not runtime allowlists. Same-named
 older checkpoints are not interchangeable. Relative paths and inference
 settings are in `configs/arpe_final_candidate.json`.
 
-## Evaluation evidence
+## Historical evaluation evidence
+
+The SRSLM and OnlyRule results below used wait and reverse overrides before
+the wait-only update. They are not performance measurements of current SRSLM.
 
 The full grid is 36 maps in `maps/test.yaml`, populations 100/200/300/400/500/600,
 and seeds 0/42/123/2024/3407: 1,080 episodes per method and execution rule.

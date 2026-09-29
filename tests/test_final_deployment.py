@@ -14,7 +14,7 @@ import torch
 import yaml
 
 from agents.arpe import ARPE, ArpeCandidateArtifact
-from agents.switcher_core import SwitcherController, final_reverse_mask
+from agents.switcher_core import SwitcherController
 from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
     EPOMTraceMultiplierActorCritic, bounded_centered_residual, select_top2_low_pressure,
@@ -86,14 +86,6 @@ def _observations(position=(0, 0), target=(0, 5)):
              "xy": position, "target_xy": target}]
 
 
-def test_final_reverse_uses_final_action_and_unchanged_target():
-    old_positions, old_targets = ((0, 0),), ((0, 5),)
-    assert final_reverse_mask(_observations((0, 1)), [3], old_positions, old_targets) == (True,)
-    assert final_reverse_mask(_observations((0, 1), (1, 5)), [3], old_positions, old_targets) == (False,)
-    assert final_reverse_mask(_observations((0, 0)), [3], old_positions, old_targets) == (False,)
-    assert final_reverse_mask(_observations((0, 1)), [0], old_positions, old_targets) == (False,)
-
-
 class _Candidate:
     def act(self, *_args):
         return [1]
@@ -104,58 +96,80 @@ class _Candidate:
 
 class _Planner:
     action = 4
+    reverse = False
 
     def reset(self):
         pass
 
     def propose(self, _observations):
         return AORePlanStep(actions=(self.action,), planned_mask=(True,),
-                            reverse_mask=(False,), static_astar_invoked_mask=(False,))
+                            reverse_mask=(self.reverse,), static_astar_invoked_mask=(self.reverse,))
 
     def commit(self, selected):
         self.committed = tuple(selected)
 
 
-def test_two_rule_controller_preserves_disjoint_counts_and_reset():
+@pytest.mark.parametrize("branch,expected_action", [(0, 1), (1, 3)])
+def test_wait_only_controller_leaves_reverse_actions_to_switcher(branch, expected_action):
     planner = _Planner()
-    controller = SwitcherController(_Candidate(), planner, final_reverse_guard_enabled=True)
+    controller = SwitcherController(_Candidate(), planner)
     first = controller.prepare_actions(_observations())
     assert first.switch_allowed_mask == (True,)
     controller.resolve_actions([1])
     planner.action = 3
+    planner.reverse = True
     second = controller.prepare_actions(_observations((0, 1)))
-    assert second.switch_allowed_mask == (False,)
-    assert not second.switcher_state["switch_allowed"].any()
-    assert controller.resolve_actions([]).actions == (1,)
+    # This move returns to the previous position, even after a static A* query.
+    # It must still be selected by the network, not an extra reverse rule.
+    assert second.switch_allowed_mask == (True,)
+    assert not second.switcher_state["aoreplan_action"][:, 0].any()
+    assert controller.resolve_actions([branch]).actions == (expected_action,)
+    assert planner.committed == (branch == 1,)
     planner.action = 0
-    controller.prepare_actions(_observations((0, 1)))
-    controller.resolve_actions([])
+    third = controller.prepare_actions(_observations((0, 1)))
+    assert third.switch_allowed_mask == (False,)
+    assert third.switcher_state["aoreplan_action"][:, 0].all()
+    assert controller.resolve_actions([]).actions == (1,)
+    assert planner.committed == (False,)
     stats = controller.get_stats()
-    assert stats["switcher_choice_count"] == 1
+    assert stats["total_action_count"] == 3
+    assert stats["switcher_choice_count"] == 2
     assert stats["aoreplan_wait_bypass_count"] == 1
-    assert stats["final_reverse_arpe_bypass_count"] == 1
+    assert stats["switcher_decision_scope"] == "aoreplan_nonwait_only"
+    assert "final_reverse_arpe_bypass_count" not in stats
     controller.after_reset()
+    assert controller.get_stats()["total_action_count"] == 0
     planner.action = 3
     assert controller.prepare_actions(_observations((0, 1))).switch_allowed_mask == (True,)
 
 
 def test_current_rule_ablations_do_not_require_an_independent_switcher():
     from agents.srslm_arpe_ablation import NoRuleController, OnlyRuleController
-    for kind, expected in ((NoRuleController, (True,)), (OnlyRuleController, (False,))):
+    for kind in (NoRuleController, OnlyRuleController):
         planner = _Planner()
         controller = kind(_Candidate(), planner)
         controller.prepare_actions(_observations())
         controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
         planner.action = 3
         prepared = controller.prepare_actions(_observations((0, 1)))
-        assert prepared.switch_allowed_mask == expected
+        assert prepared.switch_allowed_mask == (True,)
         result = controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
-        assert result.actions == ((3,) if kind is NoRuleController else (1,))
-        assert controller.get_stats()["final_reverse_arpe_bypass_count"] == (0 if kind is NoRuleController else 1)
+        assert result.actions == (3,)
         planner.action = 0
         controller.prepare_actions(_observations((0, 1)))
-        controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
+        result = controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
+        assert result.actions == ((0,) if kind is NoRuleController else (1,))
         assert controller.get_stats()["aoreplan_wait_bypass_count"] == (0 if kind is NoRuleController else 1)
+
+
+def test_training_and_deployment_share_wait_only_controller():
+    import inspect
+    from agents.srslm import SRSLM, SRSLMConfig
+    from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
+
+    assert ArpeSwitcherEnv.controller_class is SwitcherController
+    assert inspect.signature(SRSLM).parameters["controller_factory"].default is SwitcherController
+    assert "final_reverse_guard_enabled" not in SRSLMConfig.__fields__
 
 
 def _reference_module(path, name):
@@ -166,7 +180,7 @@ def _reference_module(path, name):
     return module
 
 
-def test_as_run_adapter_and_reverse_masks_match_when_reference_is_supplied(monkeypatch):
+def test_as_run_arpe_adapter_matches_when_reference_is_supplied(monkeypatch):
     reference_dir = os.environ.get("SRSLM_REFERENCE_SOURCE")
     if not reference_dir:
         pytest.skip("Optional immutable as-run reference is not part of the public source")
@@ -174,7 +188,6 @@ def test_as_run_adapter_and_reverse_masks_match_when_reference_is_supplied(monke
     common = _reference_module(reference_dir / "deployment_adapter/common.py", "_srslm_reference_common")
     monkeypatch.setitem(sys.modules, "common", common)
     adapter = _reference_module(reference_dir / "deployment_adapter/gate_adapter.py", "_srslm_reference_adapter")
-    routing = _reference_module(reference_dir / "switcher_core.py", "_srslm_reference_routing")
     rng = np.random.default_rng(19)
     model = SimpleNamespace(_base_entropy=EPOMTraceMultiplierActorCritic._base_entropy)
     for _ in range(20):
@@ -183,12 +196,6 @@ def test_as_run_adapter_and_reverse_masks_match_when_reference_is_supplied(monke
         expected = adapter._boost_rule(model, logits, raw, None, None, None)
         actual = InferenceCorrection().apply(logits, bounded_centered_residual(raw), model._base_entropy(logits))
         assert all(torch.equal(left, right) for left, right in zip(actual, expected))
-        previous = tuple(map(tuple, rng.integers(-3, 4, size=(17, 2))))
-        targets = tuple(map(tuple, rng.integers(-3, 4, size=(17, 2))))
-        observations = [dict(xy=tuple(rng.integers(-3, 4, size=2)), target_xy=targets[i]) for i in range(17)]
-        actions = tuple(rng.integers(0, 5, size=17))
-        assert final_reverse_mask(observations, actions, previous, targets) == routing.final_reverse_mask(
-            observations, actions, previous, targets)
 
 
 def test_final_manifest_and_training_example_have_distinct_gates():
@@ -224,7 +231,7 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
         inference=artifact.inference.as_dict(),
     )
     policy = SRSLM(SRSLMConfig(
-        device="cpu", candidate=candidate_cfg, final_reverse_guard_enabled=True,
+        device="cpu", candidate=candidate_cfg,
         switcher=SwitcherConfig(path_to_weights=str(switcher_dir), device="cpu"),
     ), project_root=ROOT)
     model = policy.candidate.ppo

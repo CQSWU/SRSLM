@@ -21,7 +21,6 @@ from planning.aoreplan_branch import AORePlanBranch
 
 
 SRSLM_MODE = "aoreplan_wait_bypass_switcher_v3"
-FINAL_SRSLM_MODE = "aoreplan_wait_or_final_reverse_bypass_switcher_v4"
 
 
 class SRSLMConfig(AlgoBase, extra=Extra.forbid):
@@ -29,7 +28,6 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     switcher: SwitcherConfig = SwitcherConfig()
     max_planning_steps: int = Field(10_000, gt=0)
     candidate: ARPEConfig | None = None
-    final_reverse_guard_enabled: bool = False
 
 
 class SRSLM:
@@ -70,11 +68,7 @@ class SRSLM:
             max_steps=cfg.max_planning_steps,
             seed=cfg.seed,
         )
-        self.controller = controller_factory(
-            self.candidate,
-            planner,
-            final_reverse_guard_enabled=cfg.final_reverse_guard_enabled,
-        )
+        self.controller = controller_factory(self.candidate, planner)
         self.device = getattr(self.candidate, "device", cfg.device)
 
     def set_grid_config(self, grid_config):
@@ -113,7 +107,7 @@ class SRSLM:
 
     def get_switch_stats(self):
         result = {
-            "hybrid_mode": FINAL_SRSLM_MODE if self.cfg.final_reverse_guard_enabled else SRSLM_MODE,
+            "hybrid_mode": SRSLM_MODE,
             "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
             "switcher_training": "PPO",
             "value_predictor_loaded": False,

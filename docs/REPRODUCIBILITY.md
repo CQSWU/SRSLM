@@ -23,8 +23,9 @@ check. It is not the planner used by full SRSLM.
 
 Current ARPE inference disables Direct and applies a x12 learned residual
 only when base-policy entropy exceeds 0.01. Full SRSLM uses ARPE for AORePlan
-waits and final reverse actions, and the Switcher otherwise. NoRule turns off
-both overrides using the same checkpoint. OnlyRule has no Switcher. Original
+waits, and the Switcher for every non-wait proposal, including reverse moves.
+NoRule turns off the wait override using the same checkpoint. OnlyRule uses
+ARPE on wait and AORePlan on moves, without a Switcher. Original
 training configs must not be mistaken for these inference settings.
 
 Standalone ARPE and the current SRSLM learning branch retain the historical
@@ -47,7 +48,8 @@ behavior, not the later occupancy fix.
 
 Keep raw rows unchanged. Contracts record maps, source/configuration hashes,
 checkpoint identities and execution settings. Decision percentages use pooled
-counts; the full method's rule column includes wait and reverse overrides.
+counts. New SRSLM runs count only wait overrides. Older two-rule runs retain
+their original wait and reverse counts and must not be relabeled as wait-only.
 Long-episode analysis retains all eight 512-step throughput windows rather than
 only an overall mean. Old 960/1050 runs and incomplete historical records should
 not be silently substituted for full 1080 results.

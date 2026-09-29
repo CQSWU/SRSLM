@@ -45,6 +45,9 @@ def test_srslm_contract_records_actual_execution_rule(collision):
     contract = runner.srslm_contract_metadata(['SRSLM'], collision)
     assert contract['deployment']['simulator_collision_system'] == collision
     assert contract['deployment']['wait_rule'] == 'aoreplan_wait_directly_uses_caar'
+    assert contract['hybrid_mode'] == 'aoreplan_wait_bypass_switcher_v3'
+    assert contract['deployment']['switcher_scope'] == 'aoreplan_nonwait_only'
+    assert 'final_reverse_rule' not in contract['deployment']
     assert not contract['deployment']['joint_conflict_prediction_enabled']
     assert runner.srslm_contract_metadata(['RePlan'], collision) is None
 

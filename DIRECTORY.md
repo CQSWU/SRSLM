@@ -16,7 +16,7 @@ third-party repositories stay outside Git.
 | `agents/epom_trace_context.py` | ARPE inference, shared trace and episode reset |
 | `learning/epom_trace_multiplier_actor_critic.py` | Selected learned trace actor and critic |
 | `agents/arpe.py` | Portable ARPE candidate loader |
-| `agents/switcher_core.py` | Wait/reverse overrides and Switcher features |
+| `agents/switcher_core.py` | Wait-only override and Switcher features |
 | `agents/switcher.py` | Switcher checkpoint loader and inference |
 | `learning/switcher_actor_critic.py` | Two-action Switcher actor-critic |
 | `pomapf_env/switcher_arpe_env.py` | Switcher training environment |

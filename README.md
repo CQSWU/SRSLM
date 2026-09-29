@@ -3,7 +3,8 @@
 This repository provides the implementation of **SRSLM: Switch and Reweight
 with Shared Trace for Lifelong Partially Observable Multi-Agent Pathfinding**.
 SRSLM combines the search-based AORePlan policy with the learned ARPE policy
-and uses a Switcher to select between their actions.
+and uses a Switcher to select between their actions. When AORePlan proposes
+wait, SRSLM uses ARPE directly; otherwise, the Switcher chooses the branch.
 
 | RePlan | AORePlan |
 | :---: | :---: |

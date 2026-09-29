@@ -184,15 +184,11 @@ class NoRuleController(AllStateSwitcherController):
 
 
 class OnlyRuleController(OnlyWaitController):
-    selector_kind = "deterministic_wait_or_reverse_only"
-
-    def __init__(self, arpe, planner):
-        super().__init__(arpe, planner, final_reverse_guard_enabled=True)
+    """Apply the sole wait rule, with no learned Switcher."""
 
 
 class SRSLMNoRuleConfig(SRSLMConfig):
     name: Literal["SRSLM-NoRule"] = "SRSLM-NoRule"
-    final_reverse_guard_enabled: Literal[False] = False
 
 
 class SRSLMOnlyRuleConfig(SRSLMOnlyWaitConfig):
@@ -200,7 +196,7 @@ class SRSLMOnlyRuleConfig(SRSLMOnlyWaitConfig):
 
 
 class SRSLMNoRule(SRSLM):
-    """Disable both rules, without retraining or replacing the final Switcher."""
+    """Disable the wait rule without retraining or replacing the Switcher."""
 
     def __init__(self, cfg, **kwargs):
         super().__init__(cfg, switcher_factory=_NoRuleSwitcher,
@@ -214,14 +210,14 @@ class SRSLMNoRule(SRSLM):
 
 
 class SRSLMOnlyRule(SRSLMOnlyWait):
-    """Apply wait and final-reverse rules, otherwise use AORePlan; no network."""
+    """Use ARPE on waits and AORePlan on moves, without a learned Switcher."""
 
     def __init__(self, cfg, **kwargs):
         super().__init__(cfg, controller_factory=OnlyRuleController, **kwargs)
 
     def get_switch_stats(self):
         result = super().get_switch_stats()
-        result.update(hybrid_mode="aoreplan_wait_or_final_reverse_only", ablation_name="SRSLM-OnlyRule")
+        result.update(hybrid_mode=ONLY_WAIT_MODE, ablation_name="SRSLM-OnlyRule")
         return result
 
 
