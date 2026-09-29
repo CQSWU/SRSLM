@@ -26,9 +26,7 @@ MAX_STEPS = 1000
 CURRENT = (0, 0)
 HISTORY = (-1, 5)
 GOAL = (0, 9)
-NEAR_WALLS = {(0, col) for col in range(1, 6)} | {
-    (-2, col) for col in range(6)
-}
+NEAR_WALLS = {(0, col) for col in range(1, 6)} | {(-2, col) for col in range(6)}
 REMOTE_WALL = (-1, 6)
 WALLS = NEAR_WALLS | {REMOTE_WALL}
 
@@ -115,10 +113,12 @@ def test_remote_previously_observed_wall_changes_static_first_step(backend):
 
 def test_observed_walls_are_private_to_each_agent(backend):
     check = new_check()
-    check.observe([
-        observation(HISTORY),
-        observation(HISTORY, walls=NEAR_WALLS),
-    ])
+    check.observe(
+        [
+            observation(HISTORY),
+            observation(HISTORY, walls=NEAR_WALLS),
+        ]
+    )
     current = observation()
     check.observe([current, current])
     assert check._planners[0] is not check._planners[1]
@@ -129,9 +129,7 @@ def test_observed_walls_are_private_to_each_agent(backend):
 def test_non_probe_steps_accumulate_walls_before_first_reverse(backend):
     # A physically possible leftward walk through the upper corridor, then
     # down to CURRENT. Only the final, upward proposal is a reverse.
-    wrapper = ao.AORePlanWrapper(
-        SequenceBase([3] * 5 + [2, 1]), max_steps=MAX_STEPS
-    )
+    wrapper = ao.AORePlanWrapper(SequenceBase([3] * 5 + [2, 1]), max_steps=MAX_STEPS)
     for col in range(5, -1, -1):
         assert wrapper.act([observation((-1, col))]) == [3 if col else 2]
         assert wrapper.last_static_astar_invoked_mask == [False]

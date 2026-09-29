@@ -45,9 +45,7 @@ def _upstream_like_calculate_losses(self, mb, num_invalids):
         adv_std,
         1e-7,
     )
-    policy_loss = -(
-        self.actor_weight * advantages * mb.actor_signal
-    )[valids].mean()
+    policy_loss = -(self.actor_weight * advantages * mb.actor_signal)[valids].mean()
     exploration_loss = self.actor_weight * 0.0
     kl_loss = self.actor_weight * 0.0
     kl_old = torch.zeros(int(valids.sum().item()))
@@ -205,8 +203,6 @@ def test_all_wait_batch_has_zero_actor_gradient_and_full_critic_gradient():
     assert summaries["adv_std"].item() == 0.0
 
 
-
-
 def test_non_switcher_two_valid_rows_remain_bitwise_upstream():
     patched_learner = _FakeLearner()
     patched_learner.cfg.encoder_custom = "epom_trace_context"
@@ -315,9 +311,9 @@ class _ActualUpstreamLossLearner:
     def exploration_loss_func(distribution, valids, num_invalids):
         del num_invalids
         probabilities = torch.softmax(distribution.logits, dim=-1)
-        entropy = -(
-            probabilities * torch.log_softmax(distribution.logits, dim=-1)
-        ).sum(dim=-1)
+        entropy = -(probabilities * torch.log_softmax(distribution.logits, dim=-1)).sum(
+            dim=-1
+        )
         return -0.01 * entropy[valids].mean()
 
     @staticmethod

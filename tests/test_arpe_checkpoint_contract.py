@@ -67,7 +67,9 @@ def test_missing_actor_critic_or_contract_buffer_is_rejected(key):
         ("allaction_residual_version", 1),
     ],
 )
-def test_same_shape_different_forward_contract_is_rejected_before_mutation(key, replacement):
+def test_same_shape_different_forward_contract_is_rejected_before_mutation(
+    key, replacement
+):
     model = _model()
     original = _snapshot(model)
     checkpoint = _snapshot(model)
@@ -99,7 +101,9 @@ def test_version_buffer_dtype_mismatch_is_rejected_before_actor_mutation():
     original = _snapshot(model)
     checkpoint = _snapshot(model)
     checkpoint["actor.weight"].fill_(99)
-    checkpoint["allaction_residual_version"] = checkpoint["allaction_residual_version"].float()
+    checkpoint["allaction_residual_version"] = checkpoint[
+        "allaction_residual_version"
+    ].float()
     with pytest.raises(RuntimeError, match="semantic_mismatches"):
         PolicyBackbone._load_model_state(model, checkpoint, "wrong-buffer-dtype")
     for key, tensor in model.state_dict().items():

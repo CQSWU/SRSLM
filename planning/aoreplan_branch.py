@@ -67,9 +67,7 @@ class AORePlanBranch:
             skip = [False] * count
         else:
             if len(skip_agents) != count:
-                raise ValueError(
-                    "skip_agents and observations must have equal sizes."
-                )
+                raise ValueError("skip_agents and observations must have equal sizes.")
             skip = [bool(value) for value in skip_agents]
 
         actions = list(self._wrapper.act(observations, skip_agents=skip))
@@ -118,8 +116,7 @@ class AORePlanBranch:
             bool(value) for value in self._wrapper.last_dynamic_override_mask
         )
         base_mask = [
-            matched and not replaced
-            for matched, replaced in zip(physical, overridden)
+            matched and not replaced for matched, replaced in zip(physical, overridden)
         ]
         self._base.commit_proposals(base_mask)
         self._pending = None

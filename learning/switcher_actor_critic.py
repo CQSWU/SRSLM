@@ -81,9 +81,7 @@ class SwitcherActorCritic(ActorCriticSharedWeights):
             raise ValueError("Switcher requires exactly two branch actions.")
         for key, shape in SWITCHER_FIELD_SHAPES.items():
             if key not in obs_space.spaces or tuple(obs_space[key].shape) != shape:
-                raise ValueError(
-                    f"Switcher expected field {key!r} with shape {shape}."
-                )
+                raise ValueError(f"Switcher expected field {key!r} with shape {shape}.")
         if cfg.use_rnn:
             raise ValueError("Switcher is intentionally feed-forward.")
         super().__init__(model_factory, obs_space, action_space, cfg)

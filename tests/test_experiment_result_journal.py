@@ -22,7 +22,9 @@ def _task(seed=0):
     }
 
 
-def test_result_journal_recovers_successes_and_repairs_only_truncated_tail(tmp_path: Path):
+def test_result_journal_recovers_successes_and_repairs_only_truncated_tail(
+    tmp_path: Path,
+):
     tasks = [_task(0), _task(42)]
     journal = tmp_path / "results.journal.jsonl"
     _initialize_result_journal(journal, CONTRACT, len(tasks))

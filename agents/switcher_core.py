@@ -43,14 +43,17 @@ def switcher_observation_space():
     """The five input fields shared by training and checkpoint inference."""
     from gymnasium import spaces
 
-    return spaces.Dict({
-        key: spaces.Box(
-            -1024.0 if key in {"xy", "target_xy"} else 0.0,
-            1024.0 if key in {"xy", "target_xy"} else 1.0,
-            shape=shape, dtype=np.float32,
-        )
-        for key, shape in SWITCHER_FIELD_SHAPES.items()
-    })
+    return spaces.Dict(
+        {
+            key: spaces.Box(
+                -1024.0 if key in {"xy", "target_xy"} else 0.0,
+                1024.0 if key in {"xy", "target_xy"} else 1.0,
+                shape=shape,
+                dtype=np.float32,
+            )
+            for key, shape in SWITCHER_FIELD_SHAPES.items()
+        }
+    )
 
 
 def _one_hot(actions: np.ndarray) -> np.ndarray:
@@ -233,7 +236,11 @@ class SwitcherController:
                 integer = int(action)
             except (TypeError, ValueError, OverflowError) as exc:
                 raise RuntimeError("AORePlan must return a primitive action.") from exc
-            if not planned or integer != action or not 0 <= integer < NUM_PRIMITIVE_ACTIONS:
+            if (
+                not planned
+                or integer != action
+                or not 0 <= integer < NUM_PRIMITIVE_ACTIONS
+            ):
                 raise RuntimeError("AORePlan must return a valid primitive action.")
             actions.append(integer)
         return tuple(actions)
@@ -296,7 +303,9 @@ class SwitcherController:
     ) -> ResolvedSwitcherStep:
         pending = self._pending
         if pending is None:
-            raise RuntimeError("prepare_actions() must be called before resolve_actions().")
+            raise RuntimeError(
+                "prepare_actions() must be called before resolve_actions()."
+            )
         count = len(pending.arpe_actions)
         selected = np.asarray(selected, dtype=np.int64).reshape(-1)
         wait_bypass = np.asarray(wait_bypass_mask, dtype=bool).reshape(-1)
@@ -319,9 +328,7 @@ class SwitcherController:
         ]
 
         commit = [
-            bool(
-                pending.aoreplan_actions[index] == final_actions[index]
-            )
+            bool(pending.aoreplan_actions[index] == final_actions[index])
             for index in range(count)
         ]
         try:
@@ -376,7 +383,9 @@ class SwitcherController:
     def resolve_actions(self, branches: Sequence[int]) -> ResolvedSwitcherStep:
         pending = self._pending
         if pending is None:
-            raise RuntimeError("prepare_actions() must be called before resolve_actions().")
+            raise RuntimeError(
+                "prepare_actions() must be called before resolve_actions()."
+            )
         count = len(pending.arpe_actions)
         switch_allowed = np.asarray(pending.switch_allowed_mask, dtype=bool)
         eligible_count = int(switch_allowed.sum())
@@ -392,8 +401,9 @@ class SwitcherController:
             selected,
             switcher_choice_count=eligible_count,
             selected_ao_count=int((requested == AO_BRANCH).sum()),
-            wait_bypass_mask=np.logical_and(self.wait_detection_enabled,
-                                            np.asarray(pending.aoreplan_actions) == 0),
+            wait_bypass_mask=np.logical_and(
+                self.wait_detection_enabled, np.asarray(pending.aoreplan_actions) == 0
+            ),
         )
 
     def after_step(self, dones: Sequence[bool]) -> None:
@@ -432,9 +442,7 @@ class SwitcherController:
             "executed_ao_rate": self._ratio(
                 self.executed_ao_count, self.total_action_count
             ),
-            "executed_caar_count": (
-                self.total_action_count - self.executed_ao_count
-            ),
+            "executed_caar_count": (self.total_action_count - self.executed_ao_count),
             "aoreplan_wait_bypass_count": self.wait_bypass_count,
             "aoreplan_wait_bypass_rate": self._ratio(
                 self.wait_bypass_count, self.total_action_count
@@ -448,10 +456,6 @@ class SwitcherController:
             "static_astar_query_count": self.static_astar_query_count,
             "aoreplan_commit_count": self.aoreplan_commit_count,
         }
-
-
-
-
 
 
 __all__ = [

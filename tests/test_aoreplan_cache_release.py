@@ -1,4 +1,5 @@
 """Failure-cache lifetime regressions for both planner backends."""
+
 import sys
 
 import numpy as np
@@ -12,6 +13,7 @@ MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 BACKENDS = [("python", PythonPlanner)]
 if sys.platform != "win32":
     from planning.planner import planner as NativePlanner
+
     BACKENDS.append(("native", NativePlanner))
 
 
@@ -34,8 +36,9 @@ def observation(target=(0, 2), *, occupied=(), walls=()):
     for action in occupied:
         di, dj = MOVES[action]
         agents[5 + di, 5 + dj] = 1
-    return [{"xy": (0, 0), "target_xy": target,
-             "obstacles": obstacles, "agents": agents}]
+    return [
+        {"xy": (0, 0), "target_xy": target, "obstacles": obstacles, "agents": agents}
+    ]
 
 
 @pytest.fixture(params=BACKENDS, ids=[name for name, _ in BACKENDS])

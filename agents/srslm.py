@@ -30,8 +30,8 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     candidate: ARPEConfig | None = None
 
 
-class _Deployment:
-    """Common environment hooks for full SRSLM and its ablations."""
+class SRSLM:
+    """Use ARPE for AORePlan waits and Switcher for AORePlan moves."""
 
     def set_grid_config(self, grid_config):
         self.controller.set_grid_config(grid_config)
@@ -47,10 +47,6 @@ class _Deployment:
 
     def get_action_correction_stats(self):
         return self.candidate.get_action_correction_stats()
-
-
-class SRSLM(_Deployment):
-    """Use ARPE for AORePlan waits and Switcher for AORePlan moves."""
 
     def __init__(
         self,
@@ -71,7 +67,8 @@ class SRSLM(_Deployment):
         candidate = getattr(self.switcher, "candidate_artifact", None)
         if cfg.candidate is not None:
             candidate = ArpeCandidateArtifact.from_config(
-                cfg.candidate, project_root or Path(__file__).resolve().parents[1],
+                cfg.candidate,
+                project_root or Path(__file__).resolve().parents[1],
             )
         if candidate is None:
             raise RuntimeError(
@@ -119,8 +116,6 @@ class SRSLM(_Deployment):
             "hybrid_mode": SRSLM_MODE,
             "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
             "switcher_training": "PPO",
-            "value_predictor_loaded": False,
-            "candidate_provenance": self.candidate.get_model_provenance(),
         }
         result.update(self.controller.get_stats())
         result.update(self.switcher.get_stats())

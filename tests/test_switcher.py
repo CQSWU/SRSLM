@@ -52,12 +52,15 @@ class FakeAORePlan:
 
 
 def observations(count):
-    return [{
-        "obstacles": np.zeros((11, 11), dtype=np.float32),
-        "agents": np.zeros((11, 11), dtype=np.float32),
-        "xy": (i, 0),
-        "target_xy": (i, 5),
-    } for i in range(count)]
+    return [
+        {
+            "obstacles": np.zeros((11, 11), dtype=np.float32),
+            "agents": np.zeros((11, 11), dtype=np.float32),
+            "xy": (i, 0),
+            "target_xy": (i, 5),
+        }
+        for i in range(count)
+    ]
 
 
 def test_wait_actions_bypass_switcher_and_directly_use_arpe():

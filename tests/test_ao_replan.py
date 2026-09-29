@@ -43,7 +43,9 @@ class FixedStaticAStar:
         return self.action
 
 
-def observation(position=(5, 5), target=(5, 8), *, agent_actions=(), obstacle_actions=()):
+def observation(
+    position=(5, 5), target=(5, 8), *, agent_actions=(), obstacle_actions=()
+):
     obstacles = np.zeros((11, 11), dtype=np.int8)
     agents = np.zeros((11, 11), dtype=np.int8)
     moves = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
@@ -53,21 +55,31 @@ def observation(position=(5, 5), target=(5, 8), *, agent_actions=(), obstacle_ac
     for action in obstacle_actions:
         di, dj = moves[action]
         obstacles[5 + di, 5 + dj] = 1
-    return [{
-        "obstacles": obstacles,
-        "agents": agents,
-        "xy": position,
-        "target_xy": target,
-    }]
+    return [
+        {
+            "obstacles": obstacles,
+            "agents": agents,
+            "xy": position,
+            "target_xy": target,
+        }
+    ]
 
 
 def test_production_api_has_no_retired_boolean_switches():
     retired = {
-        "use_best_move", "no_path_random", "fix_nones",
-        "handoff_on_reverse", "max_probe_wait_steps",
+        "use_best_move",
+        "no_path_random",
+        "fix_nones",
+        "handoff_on_reverse",
+        "max_probe_wait_steps",
     }
     assert retired.isdisjoint(AORePlanConfig.__fields__)
-    for constructor in (AORePlanBase, StaticAStarCheck, AORePlanWrapper, AORePlanBranch):
+    for constructor in (
+        AORePlanBase,
+        StaticAStarCheck,
+        AORePlanWrapper,
+        AORePlanBranch,
+    ):
         for parameter in inspect.signature(constructor).parameters.values():
             assert parameter.annotation is not bool
             assert not isinstance(parameter.default, bool)

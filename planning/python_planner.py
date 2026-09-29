@@ -86,11 +86,7 @@ class planner:
     def _compute_shortest_path(self) -> None:
         current = (INF, INF)
         steps = 0
-        while (
-            self._open
-            and steps < self.max_steps
-            and current != self.goal
-        ):
+        while self._open and steps < self.max_steps and current != self.goal:
             _f, g, i, j = heapq.heappop(self._open)
             current = i, j
             current_h = self._heuristic(current)
@@ -99,10 +95,7 @@ class planner:
             steps += 1
 
             for neighbor in self._neighbors(current):
-                if (
-                    neighbor in self._closed
-                    or neighbor in self.other_agents
-                ):
+                if neighbor in self._closed or neighbor in self.other_agents:
                     continue
                 next_g = g + 1
                 next_h = self._heuristic(neighbor)

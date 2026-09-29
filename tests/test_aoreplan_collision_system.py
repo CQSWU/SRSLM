@@ -1,7 +1,6 @@
 """Conservative paper planner and its explicit standalone soft exception."""
 
 from types import SimpleNamespace
-from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -9,7 +8,7 @@ import pytest
 from pogema import GridConfig, pogema_v0
 
 from agents.ao_replan import AORePlan, AORePlanConfig
-from agents.srslm import SRSLM, SRSLMConfig
+from agents.srslm import SRSLM
 from agents.switcher_core import SwitcherController
 from planning.ao_replan_algo import AORePlanWrapper
 from planning.aoreplan_branch import AORePlanBranch
@@ -53,7 +52,7 @@ def observation(position=(5, 5), occupied=False):
 def configured_policy(collision, policy_type=AORePlan):
     policy = policy_type(AORePlanConfig())
     policy.set_grid_config(SimpleNamespace(collision_system=collision))
-    with patch('agents.ao_replan.AORePlanBase', SequenceBase):
+    with patch("agents.ao_replan.AORePlanBase", SequenceBase):
         policy.after_reset()
     return policy
 
@@ -68,9 +67,13 @@ def test_default_static_action_into_visible_agent_waits_under_both_rules(collisi
     assert wrapper.last_static_astar_invoked_mask == [True]
 
 
-@pytest.mark.parametrize("policy_type,collision", [
-    (AORePlan, "block_both"), (AORePlan, "soft"),
-])
+@pytest.mark.parametrize(
+    "policy_type,collision",
+    [
+        (AORePlan, "block_both"),
+        (AORePlan, "soft"),
+    ],
+)
 def test_static_astar_without_action_still_waits(policy_type, collision):
     wrapper = configured_policy(collision, policy_type)._ao_wrapper
     wrapper.static_astar = FixedStatic(None)
@@ -105,7 +108,7 @@ def test_branch_conservative_behavior_survives_reset(collision):
 def test_standalone_config_survives_episode_and_wrapper_recreation(collision):
     policy = configured_policy(collision)
     for _ in range(2):
-        with patch('agents.ao_replan.AORePlanBase', SequenceBase):
+        with patch("agents.ao_replan.AORePlanBase", SequenceBase):
             policy.after_reset()
         assert type(policy._ao_wrapper) is AORePlanWrapper
         policy._ao_wrapper.static_astar = FixedStatic(4)
@@ -166,7 +169,9 @@ def test_training_env_reset_uses_same_planner_rule_as_deployment(collision):
         grid_config=config,
         candidate_artifact=SimpleNamespace(),
         candidate_factory=lambda *_args, **_kwargs: Candidate(),
-        planner_factory=lambda **kwargs: AORePlanBranch(base_factory=SequenceBase, **kwargs),
+        planner_factory=lambda **kwargs: AORePlanBranch(
+            base_factory=SequenceBase, **kwargs
+        ),
         base_env_factory=lambda **_kwargs: base_env,
     )
     for _ in range(2):
@@ -184,25 +189,30 @@ def test_supported_pogema_rules_do_not_require_an_audit():
     branch = AORePlanBranch(base_factory=SequenceBase)
     controller = SwitcherController(Candidate(), branch)
     for owner in (policy, controller):
-        for collision in ('block_both', 'soft', 'priority'):
+        for collision in ("block_both", "soft", "priority"):
             owner.set_grid_config(SimpleNamespace(collision_system=collision))
         for config in (SimpleNamespace(), SimpleNamespace(collision_system="unknown")):
             with pytest.raises(ValueError, match="collision"):
                 owner.set_grid_config(config)
-    assert not hasattr(branch, 'set_grid_config')
+    assert not hasattr(branch, "set_grid_config")
 
 
-
-
-
-
-@pytest.mark.parametrize("collision,moved", [("block_both", [False, True]), ("soft", [True, True])])
+@pytest.mark.parametrize(
+    "collision,moved", [("block_both", [False, True]), ("soft", [True, True])]
+)
 def test_pogema_resolves_following_after_actions_are_submitted(collision, moved):
-    env = pogema_v0(GridConfig(
-        map="\n".join(["......."] * 7), agents_xy=[(2, 1), (2, 2)],
-        targets_xy=[[(5, 5), (5, 4)], [(5, 4), (5, 5)]], num_agents=2, obs_radius=1,
-        max_episode_steps=8, on_target="restart", collision_system=collision,
-    ))
+    env = pogema_v0(
+        GridConfig(
+            map="\n".join(["......."] * 7),
+            agents_xy=[(2, 1), (2, 2)],
+            targets_xy=[[(5, 5), (5, 4)], [(5, 4), (5, 5)]],
+            num_agents=2,
+            obs_radius=1,
+            max_episode_steps=8,
+            on_target="restart",
+            collision_system=collision,
+        )
+    )
     try:
         env.reset()
         before = np.asarray(env.unwrapped.grid.get_agents_xy()).copy()

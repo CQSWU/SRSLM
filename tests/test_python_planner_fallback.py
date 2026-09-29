@@ -81,4 +81,3 @@ def test_no_exact_path_uses_cpp_inf_sentinel():
 
     assert local_planner.get_next_node(False) == (START, (INF, INF))
     assert local_planner.get_path(False) == []
-

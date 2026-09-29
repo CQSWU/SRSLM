@@ -2,8 +2,8 @@
 
 Actor and critic have independent Conv32/two-residual-block/FC32 trace encoders
 and 549-to-256 fusion layers. Frozen EPOM-L supplies hidden512 and logits5.
-The entropy gate applies to both Direct's unit bonus and the centred learned
-residual. Stored tie rankings are routing metadata, never neural inputs.
+Training can gate Direct's bonus and the learned residual, or leave both on.
+Deployment settings are separate. Tie rankings are metadata, not neural inputs.
 """
 
 from __future__ import annotations
@@ -94,8 +94,7 @@ class _PaperTraceEncoder(nn.Module):
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         if tuple(inputs.shape[1:]) != (1, self.TRACE_SIZE, self.TRACE_SIZE):
             raise ValueError(
-                "Paper Trace Encoder requires [B,1,11,11], got "
-                f"{tuple(inputs.shape)}."
+                f"Paper Trace Encoder requires [B,1,11,11], got {tuple(inputs.shape)}."
             )
         return self.network(inputs)
 
@@ -128,8 +127,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
 
         if tau_shape != (1, 11, 11):
             raise ValueError(
-                "Paper ARPE requires the [1,11,11] trace crop, "
-                f"got {tau_shape}."
+                f"Paper ARPE requires the [1,11,11] trace crop, got {tau_shape}."
             )
         if (
             len(obs_shape) != 3
@@ -169,14 +167,12 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
             self, model_factory, obs_space, action_space, cfg
         )
         settings = cfg.full_config["experiment_settings"]
-        environment = cfg.full_config["environment"]
         architecture = str(getattr(cfg, "trace_context_architecture", ""))
         if architecture != PAPER_ENTROPY_FUSION_ARCHITECTURE:
             raise ValueError(
                 "Only the retained paper_entropy_fusion architecture is supported, "
                 f"got {architecture!r}."
             )
-        self.reweight_mode = architecture
         self.trace_size = 11
         self.trace_radius = 5
         mask_shape = (
@@ -188,12 +184,10 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
             tuple(obs_space["obs"].shape), tuple(obs_space["tau"].shape), mask_shape
         )
         self.core_out_size = int(self.core.get_out_size())
-        self.trace_rho = float(environment.get("tau_rho", 0.1))
         self.rule_scale = float(settings.get("trace_rule_scale", 1.0))
         self.entropy_threshold = float(
             settings.get("trace_gate_threshold", PRIMAL3_ENTROPY_THRESHOLD)
         )
-        self.checkpoint_entropy_threshold = self.entropy_threshold
         self.learned_gate_mode = str(
             settings.get("trace_context_learned_gate", "entropy")
         )
@@ -203,7 +197,6 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         if self.trace_encoder_input != "real":
             raise ValueError("ARPE expects the real shared trace.")
         self.critic_kind = INDEPENDENT_CRITIC_KIND
-        self.critic_uses_trace = True
         self.residual_cap = 2.0 * RESIDUAL_SCALE
 
         # Actor and critic keep the checkpoint's independent parameter names
@@ -212,9 +205,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         self._build_critic_modules()
         self.trace_fusion_head = nn.Sequential(
             nn.Linear(
-                _PaperTraceEncoder.OUTPUT_SIZE
-                + self.core_out_size
-                + self.NUM_ACTIONS,
+                _PaperTraceEncoder.OUTPUT_SIZE + self.core_out_size + self.NUM_ACTIONS,
                 256,
             ),
             nn.ReLU(),
@@ -228,12 +219,22 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         self._load_and_freeze_base(settings)
         # Register only after loading the plain EPOM-L backbone. All later
         # learned-checkpoint loads must contain these semantic identity fields.
-        self.register_buffer("fixed_entropy_threshold", torch.tensor(self.entropy_threshold, dtype=torch.float64))
-        self.register_buffer("paper_entropy_gate_version", torch.tensor(
-            1 if self.learned_gate_mode == "entropy" else 0, dtype=torch.int64
-        ))
-        self.register_buffer("independent_critic_version", torch.tensor(1, dtype=torch.int64))
-        self.register_buffer("allaction_residual_version", torch.tensor(2, dtype=torch.int64))
+        self.register_buffer(
+            "fixed_entropy_threshold",
+            torch.tensor(self.entropy_threshold, dtype=torch.float64),
+        )
+        self.register_buffer(
+            "paper_entropy_gate_version",
+            torch.tensor(
+                1 if self.learned_gate_mode == "entropy" else 0, dtype=torch.int64
+            ),
+        )
+        self.register_buffer(
+            "independent_critic_version", torch.tensor(1, dtype=torch.int64)
+        )
+        self.register_buffer(
+            "allaction_residual_version", torch.tensor(2, dtype=torch.int64)
+        )
         self._verify_parameter_partition()
         self.expected_trainable_parameters = self.EXPECTED_TRAINABLE_PARAMETERS
         trainable_count = sum(p.numel() for p in self.trainable_parameters())
@@ -246,7 +247,12 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
 
         self.actor_trace_embedding_size = self.actor_trace_encoder.OUTPUT_SIZE
         self.critic_trace_embedding_size = self.critic_trace_encoder.OUTPUT_SIZE
-        self.head_extra_size = 3 * self.NUM_ACTIONS + self.actor_trace_embedding_size + self.critic_trace_embedding_size + 10
+        self.head_extra_size = (
+            3 * self.NUM_ACTIONS
+            + self.actor_trace_embedding_size
+            + self.critic_trace_embedding_size
+            + 10
+        )
         for name in (
             "last_base_logits",
             "last_direct_logits",
@@ -268,37 +274,61 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
 
     def _checkpoint_semantic_errors(self, state_dict, prefix=""):
         expected = {
-            "paper_entropy_gate_version": 1 if self.learned_gate_mode == "entropy" else 0,
+            "paper_entropy_gate_version": 1
+            if self.learned_gate_mode == "entropy"
+            else 0,
             "independent_critic_version": 1,
             "allaction_residual_version": 2,
         }
         errors = []
         for name, version in expected.items():
             marker = state_dict.get(prefix + name)
-            if (not isinstance(marker, torch.Tensor) or marker.numel() != 1
-                    or marker.dtype != torch.int64 or int(marker.item()) != version):
+            if (
+                not isinstance(marker, torch.Tensor)
+                or marker.numel() != 1
+                or marker.dtype != torch.int64
+                or int(marker.item()) != version
+            ):
                 errors.append(f"ARPE checkpoint requires {name}=int64({version})")
         threshold = state_dict.get(prefix + "fixed_entropy_threshold")
-        if (not isinstance(threshold, torch.Tensor) or threshold.numel() != 1
-                or threshold.dtype != torch.float64
-                or float(threshold.item()) != self.entropy_threshold):
+        if (
+            not isinstance(threshold, torch.Tensor)
+            or threshold.numel() != 1
+            or threshold.dtype != torch.float64
+            or float(threshold.item()) != self.entropy_threshold
+        ):
             errors.append("ARPE checkpoint has an incompatible fixed entropy threshold")
         if prefix + "fixed_gap_threshold" in state_dict:
-            errors.append("A gap-gated checkpoint is not the retained entropy-gated ARPE")
+            errors.append(
+                "A gap-gated checkpoint is not the retained entropy-gated ARPE"
+            )
         return errors
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
         if "allaction_residual_version" in self._buffers:
             error_msgs.extend(self._checkpoint_semantic_errors(state_dict, prefix))
-        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict,
-                                     missing_keys, unexpected_keys, error_msgs)
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
 
     def _build_critic_modules(self) -> None:
         if self.core_out_size != 512:
-            raise ValueError(
-                "ARPE requires the official 512D EPOM hidden state."
-            )
+            raise ValueError("ARPE requires the official 512D EPOM hidden state.")
         self.critic_trace_encoder = _PaperTraceEncoder(self.cfg)
         self.critic_fusion_head = nn.Sequential(nn.Linear(549, 256), nn.ReLU())
         self.trace_value_head = nn.Linear(256, 1)
@@ -339,8 +369,15 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         if ranks.shape != (tau.shape[0], 2, 5):
             raise ValueError("Stored routing rankings must be [B,2,5]")
         return torch.cat(
-            [base_context.detach(), centred_trace, legal, centred_trace,
-             actor_trace, critic_trace, ranks.flatten(1)],
+            [
+                base_context.detach(),
+                centred_trace,
+                legal,
+                centred_trace,
+                actor_trace,
+                critic_trace,
+                ranks.flatten(1),
+            ],
             dim=-1,
         )
 
@@ -372,7 +409,9 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         offset += self.NUM_ACTIONS
         actor_trace = core_output[:, offset : offset + self.actor_trace_embedding_size]
         offset += self.actor_trace_embedding_size
-        critic_trace = core_output[:, offset : offset + self.critic_trace_embedding_size]
+        critic_trace = core_output[
+            :, offset : offset + self.critic_trace_embedding_size
+        ]
         offset += self.critic_trace_embedding_size
         if offset != core_output.shape[-1]:
             raise RuntimeError(
@@ -382,12 +421,16 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         return hidden, centred_trace, legal, learned_trace, actor_trace, critic_trace
 
     def _critic_values(
-        self, hidden: torch.Tensor, critic_trace: torch.Tensor,
+        self,
+        hidden: torch.Tensor,
+        critic_trace: torch.Tensor,
         base_logits: torch.Tensor,
     ) -> torch.Tensor:
         """Predict return without sending gradients to the frozen EPOM base."""
 
-        features = self.compose_paper_entropy_fusion_input(critic_trace, hidden, base_logits)
+        features = self.compose_paper_entropy_fusion_input(
+            critic_trace, hidden, base_logits
+        )
         return self.trace_value_head(self.critic_fusion_head(features)).squeeze(-1)
 
     @staticmethod
@@ -421,8 +464,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         )
         if actual != expected:
             raise ValueError(
-                "Paper entropy fusion expects trace32+h512+z5, got "
-                f"{actual}."
+                f"Paper entropy fusion expects trace32+h512+z5, got {actual}."
             )
         return torch.cat(
             [trace_feature, frozen_hidden.detach(), base_logits.detach()], dim=-1
@@ -456,41 +498,59 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
             raise ValueError("entropy_threshold must be finite and non-negative")
         base_logits = base_logits.detach()
         entropy = cls._base_entropy(base_logits)
-        gate = (entropy > entropy_threshold).to(
-            base_logits.dtype
-        ).unsqueeze(-1)
+        gate = (entropy > entropy_threshold).to(base_logits.dtype).unsqueeze(-1)
         residual = bounded_centered_residual(raw_correction)
-        route = (select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
-                 if direct_bonus else torch.zeros_like(base_logits))
+        route = (
+            select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
+            if direct_bonus
+            else torch.zeros_like(base_logits)
+        )
         learned_delta = gate * residual
         final_logits = base_logits + direct_bonus * gate * route + learned_delta
         return final_logits, learned_delta, gate, entropy
 
     def _apply_configured_correction_rule(
-        self, base_logits, raw_correction, pressure, legal, tie_ranks,
+        self,
+        base_logits,
+        raw_correction,
+        pressure,
+        legal,
+        tie_ranks,
     ):
         """Keep checkpoint training semantics separate from explicit inference."""
         inference = getattr(self, "inference_correction", None)
         if inference is not None:
             if self.training:
-                raise RuntimeError("Inference correction must not be used for training.")
+                raise RuntimeError(
+                    "Inference correction must not be used for training."
+                )
             base_logits = base_logits.detach()
             return inference.apply(
-                base_logits, bounded_centered_residual(raw_correction),
+                base_logits,
+                bounded_centered_residual(raw_correction),
                 self._base_entropy(base_logits),
             )
         if self.learned_gate_mode == "entropy":
             return self.apply_paper_entropy_correction_rule(
-                base_logits, raw_correction, pressure, legal, tie_ranks,
+                base_logits,
+                raw_correction,
+                pressure,
+                legal,
+                tie_ranks,
                 direct_bonus=self.rule_scale,
-                entropy_threshold=getattr(self, "entropy_threshold", PRIMAL3_ENTROPY_THRESHOLD),
+                entropy_threshold=getattr(
+                    self, "entropy_threshold", PRIMAL3_ENTROPY_THRESHOLD
+                ),
             )
         base_logits = base_logits.detach()
         entropy = self._base_entropy(base_logits)
         gate = torch.ones_like(base_logits[:, :1])
         residual = bounded_centered_residual(raw_correction)
-        route = (select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
-                 if self.rule_scale else torch.zeros_like(base_logits))
+        route = (
+            select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
+            if self.rule_scale
+            else torch.zeros_like(base_logits)
+        )
         return base_logits + self.rule_scale * route + residual, residual, gate, entropy
 
     def forward_tail(self, core_output, values_only: bool, sample_actions: bool):
@@ -520,11 +580,20 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         )
         actor_input = self.trace_fusion_head(fusion_input)
         raw_correction = self.trace_multiplier_head(actor_input)
-        final_logits, learned_delta, gate, entropy = self._apply_configured_correction_rule(
-            base_logits, raw_correction, centred_trace, legal, ranks,
+        final_logits, learned_delta, gate, entropy = (
+            self._apply_configured_correction_rule(
+                base_logits,
+                raw_correction,
+                centred_trace,
+                legal,
+                ranks,
+            )
         )
-        route = (select_top2_low_pressure(base_logits, centred_trace, legal, ranks)
-                 if self.rule_scale else torch.zeros_like(base_logits))
+        route = (
+            select_top2_low_pressure(base_logits, centred_trace, legal, ranks)
+            if self.rule_scale
+            else torch.zeros_like(base_logits)
+        )
         direct_delta = self.rule_scale * gate * route
         residual = bounded_centered_residual(raw_correction)
         self.last_raw_correction = raw_correction
@@ -536,11 +605,15 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         self.last_learned_delta = learned_delta.detach()
         self.last_gate = gate.detach()
         inference = getattr(self, "inference_correction", None)
-        self.last_learned_gate = (inference.gate(entropy).to(gate) if inference else gate).detach()
+        self.last_learned_gate = (
+            inference.gate(entropy).to(gate) if inference else gate
+        ).detach()
         self.last_base_entropy = entropy.detach()
         self.last_candidate_trace = centred_trace.detach()
         self.last_legal_mask = legal.detach()
-        self.last_bonus_amplitude = self.rule_scale + residual.detach().abs().amax(dim=-1, keepdim=True)
+        self.last_bonus_amplitude = self.rule_scale + residual.detach().abs().amax(
+            dim=-1, keepdim=True
+        )
         self.last_bonus_route = route.detach()
         self.last_action_distribution = get_action_distribution(
             self.action_space, final_logits
@@ -564,114 +637,6 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
                     ),
                 }
             )
-        return result
-
-    def checkpoint_provenance(self) -> dict[str, object]:
-        result = super().checkpoint_provenance()
-        entropy_gated = self.learned_gate_mode == "entropy"
-        trace_parameters = sum(
-            p.numel() for p in self.actor_trace_encoder.parameters() if p.requires_grad
-        )
-        fusion_parameters = sum(
-            p.numel() for p in self.trace_fusion_head.parameters() if p.requires_grad
-        )
-        actor_parameters = sum(
-            p.numel() for p in self.trace_multiplier_head.parameters() if p.requires_grad
-        )
-        critic_parameters = sum(
-            p.numel() for module in (self.critic_trace_encoder, self.critic_fusion_head, self.trace_value_head)
-            for p in module.parameters() if p.requires_grad
-        )
-        result.update(
-            {
-                "trace_architecture": (
-                    "trace_allaction_centered_tanh_residual200_failcredit_v1"
-                ),
-                "actor_inputs": [
-                    "full_crop_centered_trace_1x11x11",
-                    "frozen_epom_recurrent_hidden_512",
-                    "frozen_epom_base_logits_5",
-                ],
-                "actor_output": "five_action_logit_residuals",
-                "actor_uses_epom_hidden": True,
-                "actor_uses_base_logits": True,
-                "actor_uses_raw_base_logits": True,
-                "actor_uses_base_policy_probabilities": False,
-                "actor_uses_base_policy_entropy": False,
-                "actor_input_features": 549,
-                "actor_hidden_features": 256,
-                "actor_trace_encoder": (
-                    "conv32_3x3_two_residual_blocks_flatten_fc32_relu"
-                ),
-                "actor_trace_embedding_features": 32,
-                "actor_receives_candidate_pressure": False,
-                "actor_receives_free_mask_tensor": False,
-                "actor_critic_share_trace_trunk": False,
-                "feature_fusion": "linear549_256_relu",
-                "trace_encoder_parameters": trace_parameters,
-                "feature_fusion_parameters": fusion_parameters,
-                "actor_head_parameters": actor_parameters,
-                "critic_head_parameters": sum(p.numel() for p in self.trace_value_head.parameters()),
-                "actor_trainable_parameters": (
-                    trace_parameters + fusion_parameters + actor_parameters
-                ),
-                "critic_trainable_parameters": critic_parameters,
-                "critic_architecture": INDEPENDENT_CRITIC_KIND,
-                "critic_inputs": ["full_crop_centered_trace_1x11x11", "frozen_epom_hidden_512", "frozen_epom_base_logits_5"],
-                "critic_uses_epom_hidden": True,
-                "critic_uses_trace": self.critic_uses_trace,
-                "trace_encoder_input": self.trace_encoder_input,
-                "direct_trace_input": "real" if self.rule_scale else "disabled",
-                "direct_bonus": self.rule_scale,
-                "critic_backpropagates_to_epom": False,
-                "learned_gate_mode": "raw_shannon_entropy_hard_gate" if entropy_gated else "always_one",
-                "checkpoint_learned_gate_mode": self.learned_gate_mode,
-                "entropy_threshold": self.entropy_threshold,
-                "checkpoint_entropy_threshold": self.checkpoint_entropy_threshold,
-                "base_policy_entropy_normalization": "none",
-                "learned_network_uses_free_mask": False,
-                "learned_residual_uses_free_mask": False,
-                "correction_action_order": ["wait", "up", "down", "left", "right"],
-                "logit_rule": ("base_plus_entropy_gate_times_direct_route_and_centered_tanh_residual"
-                               if self.rule_scale else "base_plus_entropy_gated_centered_tanh_residual"),
-                "correction": ("direct_plus_entropy_gated_centered_tanh_residual"
-                               if self.rule_scale else "entropy_gated_centered_tanh_residual"),
-                "correction_source": ("fixed_top2_lower_pressure_bonus1_plus_learned_five_action_residual"
-                                      if self.rule_scale else "learned_five_action_residual_only"),
-                "correction_centering": "five_action_mean_after_tanh",
-                "correction_bound": "centered_half_tanh",
-                "residual_scale": RESIDUAL_SCALE,
-                "residual_common_shift_removed": True,
-                "zero_initial_correction": True,
-                "entropy_gate_applies_to_correction": entropy_gated,
-                "trace_input": "full_11x11_free_cell_mean_centered_trace",
-                "trace_obstacles_and_padding": "zero",
-                "residual_gate": "raw_base_entropy_gate" if entropy_gated else "always_one",
-                "learned_residual_centering": "five_action_mean_after_tanh",
-                "learned_residual_bound": "centered_half_tanh",
-                "initial_policy": "exact_entropy_gated_direct_bonus1" if self.rule_scale else "exact_base_policy",
-                "expected_trainable_parameters": self.EXPECTED_TRAINABLE_PARAMETERS,
-                "allaction_residual_version": 2,
-                "independent_critic_version": 1,
-                "paper_entropy_gate_version": 1 if entropy_gated else 0,
-                "final_action_mask": False,
-                "tie_breaking": "two_stored_rank_vectors_replayed_with_observation",
-                "routing_metadata_inputs": ["static_free_mask", TIE_KEY],
-                "routing_metadata_enters_learned_network": False,
-                "winner_excludes_wait": True,
-                "winner_filters_other_agents": False,
-                "head_extra_size": self.head_extra_size,
-            }
-        )
-        if not entropy_gated:
-            result.update(
-                logit_rule="base_plus_direct_route_and_centered_tanh_residual",
-                correction="direct_plus_ungated_centered_tanh_residual",
-                initial_policy="exact_ungated_direct_bonus1" if self.rule_scale else "exact_base_policy",
-            )
-        inference = getattr(self, "inference_correction", None)
-        if inference is not None:
-            result["inference_correction"] = inference.provenance()
         return result
 
 

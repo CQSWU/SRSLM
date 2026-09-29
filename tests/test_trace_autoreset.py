@@ -20,10 +20,10 @@ from pomapf_env.wrappers import TauObservationWrapper
 
 
 def _map(size=16, obstacle=None):
-    cells = [['.'] * size for _ in range(size)]
+    cells = [["."] * size for _ in range(size)]
     if obstacle is not None:
-        cells[obstacle[0]][obstacle[1]] = '#'
-    return '\n'.join(''.join(row) for row in cells)
+        cells[obstacle[0]][obstacle[1]] = "#"
+    return "\n".join("".join(row) for row in cells)
 
 
 def _grid(**changes):
@@ -38,8 +38,8 @@ def _grid(**changes):
         seed=1,
         obs_radius=5,
         max_episode_steps=3,
-        on_target='restart',
-        collision_system='block_both',
+        on_target="restart",
+        collision_system="block_both",
     )
     values.update(changes)
     return POMAPFConfig(**values)
@@ -49,34 +49,32 @@ def _grid(**changes):
 def environment_factory(monkeypatch):
     created = []
 
-    def factory(
-        grid=None, *, auto_reset=True, raw_tau=False, trace_variant='real'
-    ):
+    def factory(grid=None, *, auto_reset=True, raw_tau=False, trace_variant="real"):
         grid = _grid() if grid is None else grid
         # Keep the actual training factory/observation stack; only select the
         # already-supported inner environment reset contract for this test.
         monkeypatch.setattr(
             train,
-            'make_env',
+            "make_env",
             lambda env_cfg: make_pomapf(
                 grid_config=env_cfg.grid_config, auto_reset=auto_reset
             ),
         )
         cfg = SimpleNamespace(
-            encoder_custom='epom_trace_context',
+            encoder_custom="epom_trace_context",
             seed=1,
             full_config={
-                'environment': {
-                    'grid_config': grid.dict(),
-                    'grid_memory_obs_radius': 7,
-                    'tau_rho': 0.1,
-                    'tau_radius': 5,
-                    'tau_raw': raw_tau,
-                    'trace_variant': trace_variant,
+                "environment": {
+                    "grid_config": grid.dict(),
+                    "grid_memory_obs_radius": 7,
+                    "tau_rho": 0.1,
+                    "tau_radius": 5,
+                    "tau_raw": raw_tau,
+                    "trace_variant": trace_variant,
                 }
             },
         )
-        env = train.create_pogema_env('POMAPF-EPOM-ST-v0', cfg)
+        env = train.create_pogema_env("POMAPF-EPOM-ST-v0", cfg)
         created.append(env)
         current = env
         while not isinstance(current, TauObservationWrapper):
@@ -86,8 +84,6 @@ def environment_factory(monkeypatch):
     yield factory
     for env in created:
         env.close()
-
-
 
 
 def _assert_first_frame(trace, observations):
@@ -113,15 +109,15 @@ def _assert_first_frame(trace, observations):
             if trace.raw_tau
             else reference.extract_local_tau(row, col, 5)
         )
-        np.testing.assert_array_equal(observation['tau'][0], expected_crop)
+        np.testing.assert_array_equal(observation["tau"][0], expected_crop)
         np.testing.assert_array_equal(
-            observation['tau_free_mask'][0],
+            observation["tau_free_mask"][0],
             reference.extract_local_free_mask(row, col, 5),
         )
 
 
-@pytest.mark.parametrize('collision_system', ['block_both', 'soft'])
-@pytest.mark.parametrize('raw_tau', [False, True])
+@pytest.mark.parametrize("collision_system", ["block_both", "soft"])
+@pytest.mark.parametrize("raw_tau", [False, True])
 def test_same_map_autoreset_starts_fresh_and_deposits_once(
     environment_factory, collision_system, raw_tau
 ):
@@ -145,16 +141,16 @@ def test_same_map_autoreset_starts_fresh_and_deposits_once(
             assert trace._grid() is previous_grid
 
 
-@pytest.mark.parametrize('second_size', [16, 20])
+@pytest.mark.parametrize("second_size", [16, 20])
 def test_autoreset_rebinds_changed_map_mask_and_shape(
     environment_factory, monkeypatch, second_size
 ):
-    first_name = 'trace-autoreset-test-map-0'
-    second_name = 'trace-autoreset-test-map-1'
+    first_name = "trace-autoreset-test-map-0"
+    second_name = "trace-autoreset-test-map-1"
     monkeypatch.setitem(MAPS_REGISTRY, first_name, _map(16, (5, 5)))
     monkeypatch.setitem(MAPS_REGISTRY, second_name, _map(second_size, (6, 6)))
     env, trace = environment_factory(
-        _grid(map=None, map_name='trace-autoreset-test-map-')
+        _grid(map=None, map_name="trace-autoreset-test-map-")
     )
     obs, _ = env.reset()
     _assert_first_frame(trace, obs)
@@ -198,6 +194,7 @@ def test_terminal_without_autoreset_preserves_final_trace(environment_factory):
     assert trace._grid() is not grid
     _assert_first_frame(trace, obs)
 
+
 def test_lifelong_target_change_keeps_trace_and_grid(environment_factory):
     env, trace = environment_factory(
         _grid(targets_xy=[[[4, 5], [10, 10]], [[3, 3], [8, 9]]], max_episode_steps=10)
@@ -205,11 +202,11 @@ def test_lifelong_target_change_keeps_trace_and_grid(environment_factory):
     obs, _ = env.reset()
     grid = trace._grid()
     before = trace.aco.tau.copy()
-    old_target = np.asarray(obs[0]['target_xy']).copy()
+    old_target = np.asarray(obs[0]["target_xy"]).copy()
     obs, _, terminated, truncated, _ = env.step([4, 0])
     assert not any(terminated) and not any(truncated)
     assert trace._grid() is grid
-    assert not np.array_equal(obs[0]['target_xy'], old_target)
+    assert not np.array_equal(obs[0]["target_xy"], old_target)
     expected = before * 0.9
     for xy in {tuple(position) for position in trace._global_positions()}:
         expected[xy] += 1.0
@@ -219,7 +216,7 @@ def test_lifelong_target_change_keeps_trace_and_grid(environment_factory):
 
 def test_partial_termination_does_not_reset_trace(environment_factory):
     env, trace = environment_factory(
-        _grid(on_target='finish', targets_xy=[[4, 5], [3, 3]], max_episode_steps=10)
+        _grid(on_target="finish", targets_xy=[[4, 5], [3, 3]], max_episode_steps=10)
     )
     obs, _ = env.reset()
     grid = trace._grid()
@@ -233,7 +230,7 @@ def test_partial_termination_does_not_reset_trace(environment_factory):
 
 def test_all_terminated_autoreset_starts_fresh(environment_factory):
     env, trace = environment_factory(
-        _grid(on_target='finish', targets_xy=[[4, 5], [8, 9]], max_episode_steps=10)
+        _grid(on_target="finish", targets_xy=[[4, 5], [8, 9]], max_episode_steps=10)
     )
     obs, _ = env.reset()
     grid = trace._grid()

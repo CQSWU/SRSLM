@@ -12,8 +12,9 @@ def test_rank_metadata_preserves_direct_two_draw_order_and_ties():
     np.testing.assert_array_equal(ranks[:, 1].argmax(1), second.argmax(1))
     np.testing.assert_array_equal(rng.random(10), reference.random(10))
     assert ranks.dtype == np.float32
-    np.testing.assert_array_equal(np.sort(ranks, axis=-1),
-                                  np.broadcast_to(np.arange(5), (17, 2, 5)))
+    np.testing.assert_array_equal(
+        np.sort(ranks, axis=-1), np.broadcast_to(np.arange(5), (17, 2, 5))
+    )
 
 
 def test_restarting_tie_rng_reproduces_episode_not_previous_episode_state():

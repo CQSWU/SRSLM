@@ -69,9 +69,7 @@ def _validate_r5_trace_contract(full_config: dict) -> dict[str, object]:
             f"tau_raw=False, got {raw_tau!r}."
         )
     if trace_variant != "real":
-        raise RuntimeError(
-            f"ARPE expects the shared trace, got {trace_variant!r}."
-        )
+        raise RuntimeError(f"ARPE expects the shared trace, got {trace_variant!r}.")
     return {
         "tau_radius": TRACE_RADIUS,
         "tau_size": TRACE_SIZE,
@@ -84,9 +82,7 @@ def _validate_r5_trace_contract(full_config: dict) -> dict[str, object]:
 class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
     name: Literal["EPOM-TraceContext"] = "EPOM-TraceContext"
     path_to_weights: str
-    checkpoint_kind: Literal[
-        "latest", "best", "milestone"
-    ] = "latest"
+    checkpoint_kind: Literal["latest", "best", "milestone"] = "latest"
     milestone_checkpoint: Optional[str] = None
     # Historical standalone ARPE reports sampled like Direct; the frozen
     # SRSLM branch used Torch, sharing its stream with Switcher.
@@ -97,9 +93,13 @@ class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
         milestone = values.get("milestone_checkpoint")
         if values.get("checkpoint_kind") == "milestone":
             if not isinstance(milestone, str) or not milestone.strip():
-                raise ValueError("checkpoint_kind='milestone' requires milestone_checkpoint")
+                raise ValueError(
+                    "checkpoint_kind='milestone' requires milestone_checkpoint"
+                )
         elif milestone is not None:
-            raise ValueError("milestone_checkpoint requires checkpoint_kind='milestone'")
+            raise ValueError(
+                "milestone_checkpoint requires checkpoint_kind='milestone'"
+            )
         return values
 
 
@@ -112,7 +112,9 @@ class EPOMTraceContext(PolicyBackbone):
             self.cfg.full_config["environment"]["grid_memory_obs_radius"]
         )
         self.grid_memory = MultipleGridMemory()
-        self._trace_contract = _validate_r5_trace_contract(self.saved_config["full_config"])
+        self._trace_contract = _validate_r5_trace_contract(
+            self.saved_config["full_config"]
+        )
         if int(self.tau_radius) != TRACE_RADIUS:
             raise RuntimeError(
                 "Runtime tau_radius disagrees with checkpoint config: "
@@ -135,7 +137,6 @@ class EPOMTraceContext(PolicyBackbone):
             checkpoint = super()._load_checkpoint(
                 checkpoint_dir, device, checkpoint_kind
             )
-            self.loaded_checkpoint_kind = checkpoint_kind
             return checkpoint
 
         candidate = Path(self.algo_cfg.milestone_checkpoint).expanduser()
@@ -148,15 +149,10 @@ class EPOMTraceContext(PolicyBackbone):
                 f"Missing requested milestone checkpoint: {candidate}"
             )
         if candidate.suffix != ".pth":
-            raise ValueError(
-                f"Milestone checkpoint must be a .pth file: {candidate}"
-            )
+            raise ValueError(f"Milestone checkpoint must be a .pth file: {candidate}")
 
         self.checkpoint_path = candidate
-        checkpoint, self.checkpoint_sha256 = self._load_checkpoint_path(
-            candidate, device, "milestone"
-        )
-        self.loaded_checkpoint_kind = "milestone"
+        checkpoint = self._load_checkpoint_path(candidate, device, "milestone")
         return checkpoint
 
     def after_reset(self):
@@ -176,9 +172,7 @@ class EPOMTraceContext(PolicyBackbone):
         """
 
         for observation, (row, col) in zip(observations, positions):
-            free = self.aco.extract_local_free_mask(
-                int(row), int(col), TRACE_RADIUS
-            )
+            free = self.aco.extract_local_free_mask(int(row), int(col), TRACE_RADIUS)
             if free.shape != (TRACE_SIZE, TRACE_SIZE):
                 raise RuntimeError(
                     "Trace mask escaped the radius-5 observation contract: "
@@ -194,9 +188,7 @@ class EPOMTraceContext(PolicyBackbone):
         num_agents = len(observations)
 
         self.grid_memory.update(observations)
-        self.grid_memory.modify_observation(
-            observations, self.grid_memory_radius
-        )
+        self.grid_memory.modify_observation(observations, self.grid_memory_radius)
         observations = MatrixObservationWrapper.to_matrix(observations)
 
         if self.rnn_states is None or len(self.rnn_states) != num_agents:
@@ -240,9 +232,7 @@ class EPOMTraceContext(PolicyBackbone):
         with torch.no_grad():
             obs_torch = TensorDict(
                 {
-                    key: torch.from_numpy(
-                        np.stack([obs[key] for obs in observations])
-                    )
+                    key: torch.from_numpy(np.stack([obs[key] for obs in observations]))
                     .to(self.device)
                     .float()
                     for key in observations[0]
@@ -268,9 +258,7 @@ class EPOMTraceContext(PolicyBackbone):
     def get_action_correction_stats(self):
         if not self._context_diagnostic_steps:
             return {}
-        keys = set.intersection(
-            *(set(step) for step in self._context_diagnostic_steps)
-        )
+        keys = set.intersection(*(set(step) for step in self._context_diagnostic_steps))
         return {
             f"context_{key}": float(
                 np.mean([step[key] for step in self._context_diagnostic_steps])
@@ -278,31 +266,10 @@ class EPOMTraceContext(PolicyBackbone):
             for key in sorted(keys)
         }
 
-    def get_model_provenance(self):
-        model_provenance = deepcopy(self.ppo.checkpoint_provenance())
-        return {
-            "method": "EPOM-TraceContext",
-            "weights_path": str(Path(self.algo_cfg.path_to_weights).resolve()),
-            "checkpoint_kind": getattr(
-                self, "loaded_checkpoint_kind", self.algo_cfg.checkpoint_kind
-            ),
-            "checkpoint_path": str(self.checkpoint_path),
-            "checkpoint_sha256": self.checkpoint_sha256,
-            "config_path": str(self.config_path),
-            "config_sha256": self.config_sha256,
-            "trace_contract": deepcopy(self._trace_contract),
-            "action_sampling": self.algo_cfg.action_sampling,
-            "tie_breaking": "two_stored_rank_vectors_replayed_with_observation",
-            "model": model_provenance,
-        }
-
     def after_step(self, dones):
         super().after_step(dones)
         if all(dones):
             self.grid_memory.clear()
-
-    def get_name(self):
-        return f"EPOM-TraceContext({self.checkpoint_path.name})"
 
 
 __all__ = [

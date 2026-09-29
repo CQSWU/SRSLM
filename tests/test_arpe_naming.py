@@ -1,4 +1,5 @@
 """Current method/API names change without rewriting checkpoint identities."""
+
 import importlib.util
 import inspect
 import json
@@ -8,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 import run_experiments as runner
-from agents.arpe import ARPE, ARPEConfig, ArpeCandidateArtifact
+from agents.arpe import ARPEConfig, ArpeCandidateArtifact
 from agents.switcher_core import ARPE_BRANCH
 from pomapf_env.switcher_arpe_env import switcher_observation_space
 
@@ -24,8 +25,16 @@ def test_new_name_is_the_only_current_method_and_cli_namespace():
     assert "arpe_candidate_manifest" in parameters
     assert "arpe_weights_path" not in parameters
     assert "caar_candidate_manifest" not in parameters
-    with patch("sys.argv", ["run_experiments.py", "--algorithms", "ARPE",
-                           "--arpe-candidate-manifest", "configs/arpe_final_candidate.json"]):
+    with patch(
+        "sys.argv",
+        [
+            "run_experiments.py",
+            "--algorithms",
+            "ARPE",
+            "--arpe-candidate-manifest",
+            "configs/arpe_final_candidate.json",
+        ],
+    ):
         args = runner.parse_args()
     assert args.arpe_candidate_manifest == "configs/arpe_final_candidate.json"
     with pytest.raises(ValueError, match="Unsupported"):
@@ -36,9 +45,7 @@ def test_new_name_is_the_only_current_method_and_cli_namespace():
 
 
 def test_selected_declaration_contains_portable_weight_paths():
-    data = json.loads(
-        (ROOT / "configs" / "arpe_final_candidate.json").read_text()
-    )
+    data = json.loads((ROOT / "configs" / "arpe_final_candidate.json").read_text())
     assert data["kind"] == "epom_trace_context_caar_milestone"
     assert data["schema"] == "switcher_candidate_caar_v1"
     artifact = ArpeCandidateArtifact.from_mapping(data, ROOT)

@@ -1,6 +1,6 @@
 # Reproducibility
 
-Selected inference settings and checkpoint identities are listed in
+Selected inference settings and checkpoint folders are listed in
 [CURRENT_VERSION.md](../CURRENT_VERSION.md). Weights and raw experiment records
 are kept separately from Git. Compatible custom weights can be loaded without
 editing a hash allowlist.

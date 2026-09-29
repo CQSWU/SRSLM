@@ -52,7 +52,10 @@ def test_branch_has_one_fixed_policy_and_minimal_step_fields():
     assert branch.planner_policy == AO_PLANNER_POLICY
     step = branch.propose([obs()])
     assert set(step.__dataclass_fields__) == {
-        "actions", "planned_mask", "reverse_mask", "static_astar_invoked_mask"
+        "actions",
+        "planned_mask",
+        "reverse_mask",
+        "static_astar_invoked_mask",
     }
     branch.commit([False])
 

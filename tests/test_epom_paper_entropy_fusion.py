@@ -132,8 +132,6 @@ def test_fusion_input_is_trace32_h512_z5_and_detaches_frozen_epom():
     assert logits.grad is None
 
 
-
-
 def test_residual_uses_tanh_then_five_action_mean_not_raw_subtraction():
     raw = torch.tensor([[20.62, -30.0, 0.0, 2.0, -1.0], [4.0] * 5])
     bounded = 0.5 * torch.tanh(raw)
@@ -148,10 +146,14 @@ def test_residual_uses_tanh_then_five_action_mean_not_raw_subtraction():
 
 def test_no_direct_rule_ignores_pressure_and_keeps_entropy_gated_learning():
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
-    raw = torch.tensor([[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True)
+    raw = torch.tensor(
+        [[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True
+    )
     pressure, legal, ranks = _routing(2)
-    final, delta, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, pressure, legal, ranks, direct_bonus=0.0
+    final, delta, gate, _ = (
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, raw, pressure, legal, ranks, direct_bonus=0.0
+        )
     )
     expected = base + gate * bounded_centered_residual(raw)
     torch.testing.assert_close(final, expected)
@@ -167,8 +169,6 @@ def test_no_direct_rule_ignores_pressure_and_keeps_entropy_gated_learning():
     assert torch.count_nonzero(raw.grad[0]).item() == 5
     torch.testing.assert_close(raw.grad[1], torch.zeros(5))
     torch.testing.assert_close(delta, final - base)
-
-
 
 
 def test_direct_rewards_low_pressure_of_top_two_legal_moves_only():
@@ -197,8 +197,10 @@ def test_stored_tie_ranks_make_repeated_ppo_forward_identical():
 def test_zero_output_keeps_direct_bonus_and_closed_gate_keeps_base():
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     pressure, legal, ranks = _routing(2)
-    final, learned_delta, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, torch.zeros_like(base), pressure, legal, ranks
+    final, learned_delta, gate, _ = (
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, torch.zeros_like(base), pressure, legal, ranks
+        )
     )
     expected = base.clone()
     expected[0, 2] += 1.0
@@ -211,8 +213,10 @@ def test_v2_formula_is_direct_plus_entropy_gated_bounded_centered_residual():
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     raw = torch.tensor([[2.0, -1.0, 0.0, 4.0, -3.0], [1.0, 2.0, 3.0, 4.0, 5.0]])
     pressure, legal, ranks = _routing(2)
-    final, delta, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, pressure, legal, ranks
+    final, delta, gate, _ = (
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, raw, pressure, legal, ranks
+        )
     )
     residual = 0.5 * torch.tanh(raw)
     residual -= residual.mean(dim=-1, keepdim=True)
@@ -226,11 +230,15 @@ def test_v2_formula_is_direct_plus_entropy_gated_bounded_centered_residual():
 
 def test_entropy_closed_rows_have_no_actor_gradient_but_open_rows_adjust_all_actions():
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
-    raw = torch.tensor([[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True)
+    raw = torch.tensor(
+        [[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True
+    )
     pressure, legal, ranks = _routing(2)
     legal[0, 4] = 0
-    final, delta, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, pressure, legal, ranks
+    final, delta, gate, _ = (
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, raw, pressure, legal, ranks
+        )
     )
     F.cross_entropy(final, torch.tensor([1, 2]), reduction="sum").backward()
     torch.testing.assert_close(gate, torch.tensor([[1.0], [0.0]]))
@@ -244,13 +252,17 @@ def test_explicit_training_gate_and_direct_bonus_are_configurable():
     base = torch.tensor([[4.0, 0.0, 0.0, 0.0, 0.0]])
     raw = torch.zeros_like(base)
     pressure, legal, ranks = _routing(1)
-    default, _, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, pressure, legal, ranks
+    default, _, gate, _ = (
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, raw, pressure, legal, ranks
+        )
     )
     assert not gate.any()
     torch.testing.assert_close(default, base)
-    final, _, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, pressure, legal, ranks, entropy_threshold=0.1, direct_bonus=2.5
+    final, _, gate, _ = (
+        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+            base, raw, pressure, legal, ranks, entropy_threshold=0.1, direct_bonus=2.5
+        )
     )
     assert gate.all()
     route = select_top2_low_pressure(base, pressure, legal, ranks)
@@ -270,8 +282,12 @@ def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_
     fusion = model.compose_paper_entropy_fusion_input(actor_feature, hidden, logits)
     raw = model.trace_multiplier_head(model.trace_fusion_head(fusion))
     pressure, legal, ranks = _routing(4)
-    adjusted = model.apply_paper_entropy_correction_rule(logits.detach(), raw, pressure, legal, ranks)[0]
-    values = model._critic_values(hidden, model.critic_trace_encoder(critic_tau), logits)
+    adjusted = model.apply_paper_entropy_correction_rule(
+        logits.detach(), raw, pressure, legal, ranks
+    )[0]
+    values = model._critic_values(
+        hidden, model.critic_trace_encoder(critic_tau), logits
+    )
     F.cross_entropy(adjusted, torch.tensor([0, 1, 2, 3])).backward()
     assert actor_tau.grad is not None
     assert critic_tau.grad is None
@@ -287,7 +303,11 @@ def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_
     assert model.trace_value_head.weight.grad.norm().item() > 0
     assert hidden.grad is None
     assert logits.grad is None
-    assert all(parameter.grad is None for module in model._frozen_base_modules for parameter in module.parameters())
+    assert all(
+        parameter.grad is None
+        for module in model._frozen_base_modules
+        for parameter in module.parameters()
+    )
 
 
 def test_full_forward_retains_direct_and_zero_initial_residual(full_model):
@@ -306,31 +326,38 @@ def test_full_forward_retains_direct_and_zero_initial_residual(full_model):
         assert all(not parameter.requires_grad for parameter in module.parameters())
         for key, value in module.state_dict().items():
             torch.testing.assert_close(value, expected[key], rtol=0, atol=0)
-    torch.testing.assert_close(model.last_learned_delta, torch.zeros_like(model.last_learned_delta))
+    torch.testing.assert_close(
+        model.last_learned_delta, torch.zeros_like(model.last_learned_delta)
+    )
     torch.testing.assert_close(model.last_final_logits, model.last_direct_logits)
-    torch.testing.assert_close(model.last_direct_logits, model.last_base_logits + model.last_rule_delta)
+    torch.testing.assert_close(
+        model.last_direct_logits, model.last_base_logits + model.last_rule_delta
+    )
     assert (model.last_rule_delta >= 0).all()
     assert (model.last_rule_delta.sum(dim=-1) <= 1).all()
 
 
-def test_provenance_reports_checkpoint_semantics_and_independent_critic(full_model):
+def test_actor_and_critic_have_independent_parameters(full_model):
     model, _, _ = full_model
-    provenance = model.checkpoint_provenance()
-    assert provenance["actor_inputs"] == [
-        "full_crop_centered_trace_1x11x11",
-        "frozen_epom_recurrent_hidden_512",
-        "frozen_epom_base_logits_5",
-    ]
-    assert provenance["actor_trainable_parameters"] == 303_333
-    assert provenance["critic_trainable_parameters"] == 302_305
-    assert provenance["actor_critic_share_trace_trunk"] is False
-    assert provenance["critic_architecture"] == INDEPENDENT_CRITIC_KIND
-    assert provenance["critic_uses_trace"] is True
-    assert provenance["critic_backpropagates_to_epom"] is False
-    assert provenance["actor_receives_free_mask_tensor"] is False
-    assert provenance["actor_receives_candidate_pressure"] is False
-    assert provenance["allaction_residual_version"] == 2
-    assert provenance["residual_scale"] == 0.5
+    actor = (
+        model.actor_trace_encoder,
+        model.trace_fusion_head,
+        model.trace_multiplier_head,
+    )
+    critic = (
+        model.critic_trace_encoder,
+        model.critic_fusion_head,
+        model.trace_value_head,
+    )
+    actor_parameters = [p for module in actor for p in module.parameters()]
+    critic_parameters = [p for module in critic for p in module.parameters()]
+    assert sum(p.numel() for p in actor_parameters) == 303_333
+    assert sum(p.numel() for p in critic_parameters) == 302_305
+    assert {id(p) for p in actor_parameters}.isdisjoint(
+        id(p) for p in critic_parameters
+    )
+    assert all(p.requires_grad for p in actor_parameters + critic_parameters)
+    assert int(model.allaction_residual_version) == 2
 
 
 def test_packed_rollout_keeps_critic_and_tie_metadata_and_backpropagates(full_model):
@@ -354,17 +381,23 @@ def test_packed_rollout_keeps_critic_and_tie_metadata_and_backpropagates(full_mo
     assert packed_core.data.shape == (6, 512 + 89)
     assert new_states.shape == states.shape
     for name in ("batch_sizes", "sorted_indices", "unsorted_indices"):
-        torch.testing.assert_close(getattr(packed_core, name), getattr(packed_head, name))
+        torch.testing.assert_close(
+            getattr(packed_core, name), getattr(packed_head, name)
+        )
     torch.testing.assert_close(packed_core.data[:, -89:], packed_head.data[:, -89:])
     with torch.no_grad():
-        reference_input = model._packed_like(packed_head, packed_head.data[:, :-89].detach())
+        reference_input = model._packed_like(
+            packed_head, packed_head.data[:, :-89].detach()
+        )
         reference_core, reference_states = model.core(reference_input, states)
     torch.testing.assert_close(packed_core.data[:, :512], reference_core.data)
     torch.testing.assert_close(new_states, reference_states)
 
     # Sample Factory supplies unpacked row data to forward_tail. The full 89
     # extra fields must survive, including the stored 2x5 Direct tie ranks.
-    result = model.forward_tail(packed_core.data, values_only=False, sample_actions=False)
+    result = model.forward_tail(
+        packed_core.data, values_only=False, sample_actions=False
+    )
     assert result["action_logits"].shape == (6, 5)
     assert result["values"].shape == (6,)
     assert torch.isfinite(result["action_logits"]).all()
@@ -372,14 +405,24 @@ def test_packed_rollout_keeps_critic_and_tie_metadata_and_backpropagates(full_mo
     loss = F.cross_entropy(result["action_logits"], torch.arange(6) % 5)
     loss = loss + result["values"].square().mean()
     loss.backward()
-    for module in (model.actor_trace_encoder, model.critic_trace_encoder,
-                   model.trace_fusion_head, model.critic_fusion_head,
-                   model.trace_multiplier_head, model.trace_value_head):
+    for module in (
+        model.actor_trace_encoder,
+        model.critic_trace_encoder,
+        model.trace_fusion_head,
+        model.critic_fusion_head,
+        model.trace_multiplier_head,
+        model.trace_value_head,
+    ):
         gradients = [parameter.grad for parameter in module.parameters()]
-        assert all(gradient is not None and torch.isfinite(gradient).all()
-                   for gradient in gradients)
-    assert all(parameter.grad is None for module in model._frozen_base_modules
-               for parameter in module.parameters())
+        assert all(
+            gradient is not None and torch.isfinite(gradient).all()
+            for gradient in gradients
+        )
+    assert all(
+        parameter.grad is None
+        for module in model._frozen_base_modules
+        for parameter in module.parameters()
+    )
     with torch.no_grad():
         model.trace_multiplier_head[-1].weight.zero_()
         model.trace_multiplier_head[-1].bias.zero_()

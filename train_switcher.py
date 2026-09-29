@@ -34,9 +34,7 @@ def create_switcher_env(
 ):
     del render_mode
     if full_env_name != ENV_NAME:
-        raise ValueError(
-            f"Switcher entrypoint cannot construct {full_env_name!r}."
-        )
+        raise ValueError(f"Switcher entrypoint cannot construct {full_env_name!r}.")
     environment = Environment(**cfg.full_config["environment"]).for_worker(env_config)
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
@@ -66,19 +64,15 @@ def prepare_switcher_config(config: dict) -> tuple[object, object]:
 
     # Keep the duplicated environment field in sync automatically.  Users only
     # need to edit candidate_policy when selecting another ARPE checkpoint.
-    payload.setdefault("environment", {})[
-        "switcher_caar_weights_path"
-    ] = artifact.weights_relative
+    payload.setdefault("environment", {})["switcher_caar_weights_path"] = (
+        artifact.weights_relative
+    )
 
     experiment, flat_config = base_train.validate_config(payload)
     if flat_config.encoder_custom != "switcher":
-        raise ValueError(
-            "Switcher requires encoder_custom='switcher'."
-        )
+        raise ValueError("Switcher requires encoder_custom='switcher'.")
     if flat_config.env != ENV_NAME:
-        raise ValueError(
-            f"Switcher requires environment {ENV_NAME!r}."
-        )
+        raise ValueError(f"Switcher requires environment {ENV_NAME!r}.")
     if bool(flat_config.use_rnn):
         raise ValueError("Switcher must remain feed-forward.")
     flat_config.full_config = deepcopy(flat_config.full_config)

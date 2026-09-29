@@ -1,4 +1,3 @@
-import hashlib
 import json
 import tempfile
 import unittest
@@ -11,7 +10,7 @@ from agents.policy_backbone import PolicyBackbone
 
 
 class PolicyBackboneArtifactSnapshotTests(unittest.TestCase):
-    def test_checkpoint_hash_and_load_use_the_same_byte_snapshot(self):
+    def test_checkpoint_load_uses_one_byte_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "checkpoint.pth"
             original = b"original checkpoint bytes"
@@ -27,26 +26,24 @@ class PolicyBackboneArtifactSnapshotTests(unittest.TestCase):
                 "agents.policy_backbone.torch.load",
                 side_effect=replace_path_after_snapshot,
             ):
-                checkpoint, digest = PolicyBackbone._load_checkpoint_path(
+                checkpoint = PolicyBackbone._load_checkpoint_path(
                     path,
                     torch.device("cpu"),
                     "latest",
                 )
 
             self.assertEqual(checkpoint["model"], "loaded original")
-            self.assertEqual(digest, hashlib.sha256(original).hexdigest())
             self.assertEqual(path.read_bytes(), replacement)
 
-    def test_config_hash_and_parse_use_the_same_byte_snapshot(self):
+    def test_config_parse_uses_one_byte_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             payload = json.dumps({"full_config": {"seed": 7}}).encode()
             path.write_bytes(payload)
-            config, digest = PolicyBackbone._load_config_snapshot(path)
+            config = PolicyBackbone._load_config_snapshot(path)
             path.write_text('{"full_config": {"seed": 99}}')
 
             self.assertEqual(config["full_config"]["seed"], 7)
-            self.assertEqual(digest, hashlib.sha256(payload).hexdigest())
 
     def test_incompatible_critic_tensors_cannot_be_silently_dropped(self):
         model = torch.nn.Module()

@@ -9,7 +9,6 @@ module. This support class cannot be selected as a second architecture.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import torch
@@ -47,14 +46,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
     # --------------------------------------------------------- frozen base
 
     @staticmethod
-    def _sha256(path: Path) -> str:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for block in iter(lambda: handle.read(1 << 20), b""):
-                digest.update(block)
-        return digest.hexdigest()
-
-    @staticmethod
     def _resolve_weights_dir(configured: str) -> Path:
         directory = Path(configured).expanduser()
         if not directory.is_absolute():
@@ -80,8 +71,11 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         if not config_path.is_file():
             raise FileNotFoundError(f"No EPOM-L config under {directory}.")
         declared_checkpoint = getattr(self.cfg, "base_checkpoint_path", None)
-        checkpoint_path = (Path(declared_checkpoint).resolve() if declared_checkpoint
-                           else self._latest_checkpoint(directory))
+        checkpoint_path = (
+            Path(declared_checkpoint).resolve()
+            if declared_checkpoint
+            else self._latest_checkpoint(directory)
+        )
 
         serialized = json.loads(config_path.read_text(encoding="utf-8"))
         base_full = serialized.get("full_config", serialized)
@@ -105,9 +99,7 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         grid = base_full.get("environment", {}).get("grid_config", {})
         if grid.get("obs_radius") != 5:
             raise ValueError("The EPOM base requires obs_radius=5.")
-        memory_radius = base_full.get("environment", {}).get(
-            "grid_memory_obs_radius"
-        )
+        memory_radius = base_full.get("environment", {}).get("grid_memory_obs_radius")
         if memory_radius != 7:
             raise RuntimeError(
                 f"EPOM-L grid-memory radius must be 7, got {memory_radius}."
@@ -153,11 +145,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
             for parameter in module.parameters():
                 parameter.requires_grad_(False)
 
-        self.base_weights_dir = str(directory)
-        self.base_checkpoint = checkpoint_path.name
-        self.base_checkpoint_sha256 = self._sha256(checkpoint_path)
-        self.base_config_sha256 = self._sha256(config_path)
-
     def _verify_parameter_partition(self) -> None:
         trainable = [name for name, p in self.named_parameters() if p.requires_grad]
         unexpected = [
@@ -173,7 +160,9 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
             if not any(name.startswith(prefix) for name in trainable)
         ]
         if absent:
-            raise RuntimeError(f"Context modules have no trainable parameters: {absent}")
+            raise RuntimeError(
+                f"Context modules have no trainable parameters: {absent}"
+            )
 
     def train(self, mode: bool = True):
         super().train(mode)
@@ -189,10 +178,9 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
     @staticmethod
     def _base_entropy(logits: torch.Tensor) -> torch.Tensor:
         probabilities = torch.softmax(logits, dim=-1)
-        return -(
-            probabilities
-            * torch.log(probabilities + PRIMAL3_ENTROPY_EPS)
-        ).sum(dim=-1)
+        return -(probabilities * torch.log(probabilities + PRIMAL3_ENTROPY_EPS)).sum(
+            dim=-1
+        )
 
     @staticmethod
     def _packed_like(reference: PackedSequence, data: torch.Tensor) -> PackedSequence:
@@ -215,9 +203,7 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         direct_log_p = torch.log_softmax(direct, dim=-1)
         final_log_p = torch.log_softmax(final, dim=-1)
         direct_p = direct_log_p.exp()
-        kl_direct_final = (
-            direct_p * (direct_log_p - final_log_p)
-        ).sum(dim=-1)
+        kl_direct_final = (direct_p * (direct_log_p - final_log_p)).sum(dim=-1)
         gated = self.last_learned_gate.squeeze(-1) > 0.5
         if bool(gated.any()):
             gated_learned_norm = learned[gated].norm(dim=-1).mean()
@@ -226,9 +212,7 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         return {
             "trace_radius": float(self.trace_radius),
             "gate_rate": float(self.last_gate.float().mean()),
-            "learned_gate_rate": float(
-                self.last_learned_gate.float().mean()
-            ),
+            "learned_gate_rate": float(self.last_learned_gate.float().mean()),
             "base_entropy_mean": float(self.last_base_entropy.float().mean()),
             "rule_delta_norm": float(self.last_rule_delta.norm(dim=-1).mean()),
             "learned_delta_norm": float(learned.norm(dim=-1).mean()),
@@ -250,24 +234,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
                 ).mean()
             ),
             "free_candidate_fraction": float(self.last_legal_mask.float().mean()),
-        }
-
-    def checkpoint_provenance(self) -> dict[str, object]:
-        return {
-            "base_weights_dir": self.base_weights_dir,
-            "base_checkpoint": self.base_checkpoint,
-            "base_checkpoint_sha256": self.base_checkpoint_sha256,
-            "base_config_sha256": self.base_config_sha256,
-            "trace_size": self.trace_size,
-            "trace_radius": self.trace_radius,
-            "free_mask_source": self.free_mask_source,
-            "rule_scale": self.rule_scale,
-            "entropy_threshold": self.entropy_threshold,
-            "learned_gate_mode": self.learned_gate_mode,
-            "residual_cap": self.residual_cap,
-            "trainable_parameters": sum(
-                parameter.numel() for parameter in self.trainable_parameters()
-            ),
         }
 
 

@@ -15,9 +15,7 @@ class ExecutedPositionReverseCounter:
     METRIC_VERSION = "previous_timestep_position_target_segment_v3"
 
     def __init__(self, moves: Sequence[Sequence[int]]):
-        self.moves = tuple(
-            (int(move[0]), int(move[1])) for move in moves
-        )
+        self.moves = tuple((int(move[0]), int(move[1])) for move in moves)
         self.reset()
 
     @staticmethod

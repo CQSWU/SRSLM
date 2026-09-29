@@ -128,5 +128,6 @@ class TestOccupancyTrace(unittest.TestCase):
         self.assertAlmostEqual(float(local[2, 1]), 4.0 - mean, places=7)
         self.assertAlmostEqual(float(local[2, 2]), -mean, places=7)
 
+
 if __name__ == "__main__":
     unittest.main()

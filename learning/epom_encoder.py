@@ -5,9 +5,6 @@ from sample_factory.model.model_utils import create_mlp, nonlinearity
 from torch import nn
 
 
-SUPPORTED_COORDINATE_ENCODINGS = ("absolute_v1",)
-
-
 class EPOMEncoder(Encoder):
     """Sample Factory 2 adapter for the official EPOM v0 encoder."""
 
@@ -54,9 +51,7 @@ class EPOMEncoder(Encoder):
         return coordinates / scale
 
     def forward(self, observations):
-        coordinates = self.coordinates_mlp(
-            self._coordinate_features(observations)
-        )
+        coordinates = self.coordinates_mlp(self._coordinate_features(observations))
 
         spatial = self.conv_head(observations["obs"])
         spatial = spatial.contiguous().view(-1, self.conv_head_out_size)
@@ -64,6 +59,3 @@ class EPOMEncoder(Encoder):
 
     def get_out_size(self):
         return self.encoder_out_size
-
-    def get_encoder_out_size(self):
-        return self.get_out_size()

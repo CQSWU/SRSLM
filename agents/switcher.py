@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 from copy import deepcopy
@@ -42,7 +41,6 @@ class Switcher:
     """Choose between ARPE and AORePlan for non-wait AORePlan actions."""
 
     expected_encoder_custom = "switcher"
-    allow_aoreplan_wait = False
     policy_label = "Switcher"
 
     def __init__(self, cfg: SwitcherConfig):
@@ -51,7 +49,6 @@ class Switcher:
         self.config_path = (path / "config.json").resolve()
         register_custom_components()
         payload = self.config_path.read_bytes()
-        self.config_sha256 = hashlib.sha256(payload).hexdigest()
         config = json.loads(payload.decode("utf-8"))
         full_config = deepcopy(config["full_config"])
         declaration = full_config.pop("candidate_policy", None)
@@ -65,6 +62,7 @@ class Switcher:
                 project_root,
             )
         from learning.config import checkpoint_experiment_config
+
         _, flat_config = validate_config(checkpoint_experiment_config(full_config))
         if flat_config.encoder_custom != self.expected_encoder_custom:
             raise RuntimeError(
@@ -74,10 +72,14 @@ class Switcher:
         if bool(flat_config.use_rnn):
             raise RuntimeError("Switcher checkpoint must be feed-forward.")
 
-        observation_space = gym.spaces.Dict({
-            **switcher_observation_space().spaces,
-            "switch_allowed": gym.spaces.Box(0.0, 1.0, shape=(1,), dtype=np.float32),
-        })
+        observation_space = gym.spaces.Dict(
+            {
+                **switcher_observation_space().spaces,
+                "switch_allowed": gym.spaces.Box(
+                    0.0, 1.0, shape=(1,), dtype=np.float32
+                ),
+            }
+        )
         action_space = gym.spaces.Discrete(NUM_BRANCHES)
         actor = create_actor_critic(flat_config, observation_space, action_space)
         self.device = self._resolve_device(cfg.device)
@@ -90,7 +92,6 @@ class Switcher:
         )
         checkpoint_payload = checkpoint_path.read_bytes()
         self.checkpoint_path = checkpoint_path
-        self.checkpoint_sha256 = hashlib.sha256(checkpoint_payload).hexdigest()
         checkpoint = torch.load(
             io.BytesIO(checkpoint_payload),
             map_location=self.device,
@@ -103,7 +104,6 @@ class Switcher:
 
         self.ppo = actor
         self.flat_config = flat_config
-        self.candidate_policy = deepcopy(declaration)
         self.candidate_artifact = candidate_artifact
         self.after_reset()
 
@@ -139,9 +139,7 @@ class Switcher:
             elif kind == "auto":
                 best = sorted(directory.glob("best_*.pth"))
                 if not best:
-                    raise FileNotFoundError(
-                        f"No Switcher checkpoint in {directory}."
-                    )
+                    raise FileNotFoundError(f"No Switcher checkpoint in {directory}.")
                 path = best[-1]
                 label = "best"
             else:
@@ -166,7 +164,10 @@ class Switcher:
             if key not in state:
                 raise ValueError(f"Switcher state is missing {key!r}.")
             array = np.asarray(state[key], dtype=np.float32)
-            if array.ndim != len(trailing_shape) + 1 or tuple(array.shape[1:]) != trailing_shape:
+            if (
+                array.ndim != len(trailing_shape) + 1
+                or tuple(array.shape[1:]) != trailing_shape
+            ):
                 raise ValueError(
                     f"Switcher field {key!r} expected [N,{trailing_shape}], "
                     f"got {array.shape}."
@@ -182,15 +183,13 @@ class Switcher:
             state.get("switch_allowed", arrays["aoreplan_action"][:, :1] < 0.5),
             dtype=np.float32,
         )
-        if (arrays["switch_allowed"].shape != (count, 1)
-                or not np.all(np.isin(arrays["switch_allowed"], (0.0, 1.0)))):
+        if arrays["switch_allowed"].shape != (count, 1) or not np.all(
+            np.isin(arrays["switch_allowed"], (0.0, 1.0))
+        ):
             raise ValueError("Switcher switch_allowed must be a binary [N,1] mask.")
         if not count:
             raise ValueError("Switcher received an empty batch.")
-        if (
-            not self.allow_aoreplan_wait
-            and not np.all(arrays["aoreplan_action"][:, 0] == 0.0)
-        ):
+        if not np.all(arrays["aoreplan_action"][:, 0] == 0.0):
             raise ValueError("Only non-wait AORePlan states may enter Switcher.")
         rnn_states = torch.zeros(
             (count, get_rnn_size(self.flat_config)),
@@ -233,9 +232,6 @@ class Switcher:
         else:
             mean_probability = p05 = p95 = 0.0
         result = {
-            "switcher_checkpoint_path": str(self.checkpoint_path),
-            "switcher_checkpoint_sha256": self.checkpoint_sha256,
-            "switcher_config_sha256": self.config_sha256,
             "switcher_stochastic": not self.cfg.deterministic,
             "switcher_model_choice_count": self.total_choice_count,
             "switcher_model_selected_ao_count": self.ao_choice_count,
@@ -248,13 +244,6 @@ class Switcher:
             "switcher_ao_probability_p05": p05,
             "switcher_ao_probability_p95": p95,
         }
-        if self.candidate_policy is not None:
-            result["switcher_candidate_policy"] = deepcopy(
-                self.candidate_policy
-            )
-            result["switcher_candidate_artifact"] = deepcopy(
-                self.candidate_artifact.as_dict()
-            )
         return result
 
 

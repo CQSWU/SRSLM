@@ -14,11 +14,14 @@ from agents.epom_trace_context import (
 from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
 
 
-@pytest.mark.parametrize("field,value", [
-    ("learned_gate_override", "all"),
-    ("entropy_threshold_override", 0.9),
-    ("checkpoint_kind", "auto"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("learned_gate_override", "all"),
+        ("entropy_threshold_override", 0.9),
+        ("checkpoint_kind", "auto"),
+    ],
+)
 def test_retired_inference_overrides_are_not_accepted(field, value):
     with pytest.raises(ValidationError):
         EPOMTraceContextConfig(path_to_weights="unused", **{field: value})
@@ -35,11 +38,14 @@ def test_checkpoint_selection_never_silently_falls_back_to_best(tmp_path):
         backbone._load_checkpoint(tmp_path, torch.device("cpu"), "latest")
 
 
-@pytest.mark.parametrize("settings", [
-    {"checkpoint_kind": "milestone"},
-    {"checkpoint_kind": "milestone", "milestone_checkpoint": " "},
-    {"checkpoint_kind": "latest", "milestone_checkpoint": "ignored.pth"},
-])
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"checkpoint_kind": "milestone"},
+        {"checkpoint_kind": "milestone", "milestone_checkpoint": " "},
+        {"checkpoint_kind": "latest", "milestone_checkpoint": "ignored.pth"},
+    ],
+)
 def test_milestone_selection_cannot_be_missing_or_ignored(settings):
     with pytest.raises(ValidationError):
         EPOMTraceContextConfig(path_to_weights="unused", **settings)
@@ -91,9 +97,12 @@ def test_trace_contract_preserves_centered_real_input():
 
 def test_historical_action_sampling_is_explicit_and_unchanged():
     assert EPOMTraceContextConfig(path_to_weights="unused").action_sampling == "torch"
-    assert EPOMTraceContextConfig(
-        path_to_weights="unused", action_sampling="direct_numpy"
-    ).action_sampling == "direct_numpy"
+    assert (
+        EPOMTraceContextConfig(
+            path_to_weights="unused", action_sampling="direct_numpy"
+        ).action_sampling
+        == "direct_numpy"
+    )
 
 
 def test_constructor_does_not_require_external_backbone_hash_binding(monkeypatch):
@@ -105,7 +114,9 @@ def test_constructor_does_not_require_external_backbone_hash_binding(monkeypatch
         self.cfg = SimpleNamespace(full_config=config)
         self.saved_config = {"full_config": config}
         self.tau_radius = 5
-        self.ppo = SimpleNamespace(trace_radius=5, verify_frozen_actor_backbone=verifier)
+        self.ppo = SimpleNamespace(
+            trace_radius=5, verify_frozen_actor_backbone=verifier
+        )
 
     monkeypatch.setattr(PolicyBackbone, "__init__", fake_backbone_init)
     cfg = EPOMTraceContextConfig(path_to_weights="unused", seed=42)

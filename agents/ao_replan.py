@@ -23,9 +23,7 @@ class AORePlan:
         self.agent = None
         self._ao_wrapper = None
         self._base = None
-        self._reverse_counter = ExecutedPositionReverseCounter(
-            GridConfig().MOVES
-        )
+        self._reverse_counter = ExecutedPositionReverseCounter(GridConfig().MOVES)
         self._raw_plan_movement_count = 0
         self._static_astar_query_count = 0
         self._no_path_fallback_count = 0
@@ -74,8 +72,7 @@ class AORePlan:
             )
         )
         self._no_path_fallback_count += sum(
-            bool(value)
-            for value in self._ao_wrapper.last_no_path_fallback_mask
+            bool(value) for value in self._ao_wrapper.last_no_path_fallback_mask
         )
 
     def set_grid_config(self, grid_config):

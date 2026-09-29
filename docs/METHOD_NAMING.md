@@ -10,7 +10,7 @@ configuration. Changing the entropy threshold, residual multiplier or fixed
 Direct bonus changes the evaluated policy even if the checkpoint is unchanged.
 See [CURRENT_VERSION.md](../CURRENT_VERSION.md) for the exact retained version.
 
-Original checkpoint/config/result files keep their original names and hashes.
+Original checkpoint files keep their saved parameter names.
 The Switcher still uses serialized `caar_action`, `switcher_caar_*` and candidate
 schema fields. These are saved-format identifiers, not additional methods.
 Removing them would prevent loading the retained weights. Legacy experiment

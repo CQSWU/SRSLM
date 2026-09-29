@@ -13,18 +13,18 @@ import pytest
 import torch
 import yaml
 
-from agents.arpe import ARPE, ArpeCandidateArtifact
+from agents.arpe import ArpeCandidateArtifact
 from agents.switcher_core import SwitcherController
 from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
-    EPOMTraceMultiplierActorCritic, bounded_centered_residual, select_top2_low_pressure,
+    EPOMTraceMultiplierActorCritic,
+    bounded_centered_residual,
+    select_top2_low_pressure,
 )
 from learning.inference_correction import InferenceCorrection
 from planning.aoreplan_branch import AORePlanStep
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
 
 
 def test_inference_gate_is_strict_and_scales_after_centering():
@@ -43,22 +43,28 @@ def test_inference_gate_is_strict_and_scales_after_centering():
 
 @pytest.mark.parametrize("gate_mode", ["entropy", "always"])
 def test_native_training_gate_remains_separate_from_inference(gate_mode):
-    logits = torch.tensor([[100., 0., 0., 0., 0.], [0., 0., 0., 0., 0.]])
-    raw = torch.tensor([[1., -1., 2., -2., 0.]]).repeat(2, 1)
-    pressure = torch.tensor([[0., 4., 1., 2., 3.]]).repeat(2, 1)
-    legal = torch.tensor([[0., 1., 1., 1., 1.]]).repeat(2, 1)
+    logits = torch.tensor([[100.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0]])
+    raw = torch.tensor([[1.0, -1.0, 2.0, -2.0, 0.0]]).repeat(2, 1)
+    pressure = torch.tensor([[0.0, 4.0, 1.0, 2.0, 3.0]]).repeat(2, 1)
+    legal = torch.tensor([[0.0, 1.0, 1.0, 1.0, 1.0]]).repeat(2, 1)
     ranks = torch.arange(5).float().repeat(2, 2, 1)
     model = SimpleNamespace(
-        learned_gate_mode=gate_mode, rule_scale=1.0, training=False,
+        learned_gate_mode=gate_mode,
+        rule_scale=1.0,
+        training=False,
         _base_entropy=EPOMTraceMultiplierActorCritic._base_entropy,
         apply_paper_entropy_correction_rule=EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule,
     )
     apply = EPOMTraceMultiplierActorCritic._apply_configured_correction_rule
     native, _, gate, _ = apply(model, logits, raw, pressure, legal, ranks)
-    expected_gate = torch.ones(2, 1) if gate_mode == "always" else torch.tensor([[0.], [1.]])
+    expected_gate = (
+        torch.ones(2, 1) if gate_mode == "always" else torch.tensor([[0.0], [1.0]])
+    )
     assert torch.equal(gate, expected_gate)
     route = select_top2_low_pressure(logits, pressure, legal, ranks)
-    torch.testing.assert_close(native, logits + gate * route + gate * bounded_centered_residual(raw))
+    torch.testing.assert_close(
+        native, logits + gate * route + gate * bounded_centered_residual(raw)
+    )
     model.inference_correction = InferenceCorrection()
     final, delta, direct_gate, _ = apply(model, logits, raw, pressure, legal, ranks)
     assert torch.equal(final[0], logits[0])
@@ -71,9 +77,14 @@ def test_native_training_gate_remains_separate_from_inference(gate_mode):
 
 
 def _observations(position=(0, 0), target=(0, 5)):
-    return [{"obstacles": np.zeros((11, 11), np.float32),
-             "agents": np.zeros((11, 11), np.float32),
-             "xy": position, "target_xy": target}]
+    return [
+        {
+            "obstacles": np.zeros((11, 11), np.float32),
+            "agents": np.zeros((11, 11), np.float32),
+            "xy": position,
+            "target_xy": target,
+        }
+    ]
 
 
 class _Candidate:
@@ -92,15 +103,21 @@ class _Planner:
         pass
 
     def propose(self, _observations):
-        return AORePlanStep(actions=(self.action,), planned_mask=(True,),
-                            reverse_mask=(self.reverse,), static_astar_invoked_mask=(self.reverse,))
+        return AORePlanStep(
+            actions=(self.action,),
+            planned_mask=(True,),
+            reverse_mask=(self.reverse,),
+            static_astar_invoked_mask=(self.reverse,),
+        )
 
     def commit(self, selected):
         self.committed = tuple(selected)
 
 
 @pytest.mark.parametrize("branch,expected_action", [(0, 1), (1, 3)])
-def test_wait_only_controller_leaves_reverse_actions_to_switcher(branch, expected_action):
+def test_wait_only_controller_leaves_reverse_actions_to_switcher(
+    branch, expected_action
+):
     planner = _Planner()
     controller = SwitcherController(_Candidate(), planner)
     first = controller.prepare_actions(_observations())
@@ -130,9 +147,9 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(branch, expecte
     controller.after_reset()
     assert controller.get_stats()["total_action_count"] == 0
     planner.action = 3
-    assert controller.prepare_actions(_observations((0, 1))).switch_allowed_mask == (True,)
-
-
+    assert controller.prepare_actions(_observations((0, 1))).switch_allowed_mask == (
+        True,
+    )
 
 
 def test_training_and_deployment_share_wait_only_controller():
@@ -141,7 +158,10 @@ def test_training_and_deployment_share_wait_only_controller():
     from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
 
     assert ArpeSwitcherEnv.controller_class is SwitcherController
-    assert inspect.signature(SRSLM).parameters["controller_factory"].default is SwitcherController
+    assert (
+        inspect.signature(SRSLM).parameters["controller_factory"].default
+        is SwitcherController
+    )
     assert "final_reverse_guard_enabled" not in SRSLMConfig.__fields__
 
 
@@ -156,18 +176,26 @@ def _reference_module(path, name):
 def test_as_run_arpe_adapter_matches_when_reference_is_supplied(monkeypatch):
     reference_dir = os.environ.get("SRSLM_REFERENCE_SOURCE")
     if not reference_dir:
-        pytest.skip("Optional immutable as-run reference is not part of the public source")
+        pytest.skip(
+            "Optional immutable as-run reference is not part of the public source"
+        )
     reference_dir = Path(reference_dir)
-    common = _reference_module(reference_dir / "deployment_adapter/common.py", "_srslm_reference_common")
+    common = _reference_module(
+        reference_dir / "deployment_adapter/common.py", "_srslm_reference_common"
+    )
     monkeypatch.setitem(sys.modules, "common", common)
-    adapter = _reference_module(reference_dir / "deployment_adapter/gate_adapter.py", "_srslm_reference_adapter")
+    adapter = _reference_module(
+        reference_dir / "deployment_adapter/gate_adapter.py", "_srslm_reference_adapter"
+    )
     rng = np.random.default_rng(19)
     model = SimpleNamespace(_base_entropy=EPOMTraceMultiplierActorCritic._base_entropy)
     for _ in range(20):
         logits = torch.from_numpy(rng.normal(size=(17, 5))).float()
         raw = torch.from_numpy(rng.normal(size=(17, 5))).float()
         expected = adapter._boost_rule(model, logits, raw, None, None, None)
-        actual = InferenceCorrection().apply(logits, bounded_centered_residual(raw), model._base_entropy(logits))
+        actual = InferenceCorrection().apply(
+            logits, bounded_centered_residual(raw), model._base_entropy(logits)
+        )
         assert all(torch.equal(left, right) for left, right in zip(actual, expected))
 
 
@@ -176,7 +204,9 @@ def test_final_manifest_and_training_example_have_distinct_gates():
     artifact = ArpeCandidateArtifact.from_mapping(mapping, ROOT)
     assert artifact.inference == InferenceCorrection()
     assert not any("sha" in key.lower() for key in mapping)
-    cfg = Experiment(**yaml.safe_load((ROOT / "learning/train_arpe_final.yaml").read_text()))
+    cfg = Experiment(
+        **yaml.safe_load((ROOT / "learning/train_arpe_final.yaml").read_text())
+    )
     assert cfg.experiment_settings.trace_context_learned_gate == "always"
     assert cfg.experiment_settings.trace_rule_scale == 1
     assert cfg.experiment_settings.train_for_env_steps == 1_000_000_000
@@ -187,7 +217,10 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
     mapping = json.loads((ROOT / "configs/arpe_final_candidate.json").read_text())
     artifact = ArpeCandidateArtifact.from_mapping(mapping, ROOT)
     switcher_dir = ROOT / "weights/SRSLM-Switcher-Final-1B"
-    if not artifact.checkpoint_path.is_file() or not (switcher_dir / "config.json").is_file():
+    if (
+        not artifact.checkpoint_path.is_file()
+        or not (switcher_dir / "config.json").is_file()
+    ):
         pytest.skip("Final model weights are distributed separately")
     from agents.srslm import SRSLM, SRSLMConfig
     from agents.arpe import ARPEConfig
@@ -199,28 +232,39 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
 
     source_bytes = artifact.config_path.read_bytes()
     candidate_cfg = ARPEConfig(
-        path_to_weights=str(artifact.weights_path), milestone_checkpoint=str(artifact.checkpoint_path),
-        base_weights_path=str(artifact.base_weights_path), base_checkpoint_path=str(artifact.base_checkpoint_path),
+        path_to_weights=str(artifact.weights_path),
+        milestone_checkpoint=str(artifact.checkpoint_path),
+        base_weights_path=str(artifact.base_weights_path),
+        base_checkpoint_path=str(artifact.base_checkpoint_path),
         inference=artifact.inference.as_dict(),
     )
-    policy = SRSLM(SRSLMConfig(
-        device="cpu", candidate=candidate_cfg,
-        switcher=SwitcherConfig(path_to_weights=str(switcher_dir), device="cpu"),
-    ), project_root=ROOT)
+    policy = SRSLM(
+        SRSLMConfig(
+            device="cpu",
+            candidate=candidate_cfg,
+            switcher=SwitcherConfig(path_to_weights=str(switcher_dir), device="cpu"),
+        ),
+        project_root=ROOT,
+    )
     model = policy.candidate.ppo
     assert model.learned_gate_mode == "always" and model.rule_scale == 1
     assert int(model.paper_entropy_gate_version) == 0
     assert policy.candidate.policy.algo_cfg.action_sampling == "direct_numpy"
     before = {key: value.clone() for key, value in model.state_dict().items()}
     config_before = deepcopy(model.cfg.full_config)
-    batch = TensorDict(obs=torch.zeros(2, 3, 15, 15), xy=torch.zeros(2, 2),
-                       target_xy=torch.ones(2, 2), tau=torch.zeros(2, 1, 11, 11),
-                       tau_free_mask=torch.ones(2, 1, 11, 11))
+    batch = TensorDict(
+        obs=torch.zeros(2, 3, 15, 15),
+        xy=torch.zeros(2, 2),
+        target_xy=torch.ones(2, 2),
+        tau=torch.zeros(2, 1, 11, 11),
+        tau_free_mask=torch.ones(2, 1, 11, 11),
+    )
     batch[TIE_KEY] = torch.arange(5).float().repeat(2, 2, 1)
     with torch.no_grad():
         result = model(batch, torch.zeros(2, get_rnn_size(policy.candidate.policy.cfg)))
     expected = model.last_base_logits + (
-        (model.last_base_entropy > .01).unsqueeze(-1) * 12
+        (model.last_base_entropy > 0.01).unsqueeze(-1)
+        * 12
         * bounded_centered_residual(model.last_raw_correction)
     )
     assert torch.equal(result["action_logits"], expected)

@@ -37,7 +37,9 @@ def test_arpe_artifact_accepts_simple_paths_and_reports_provenance(tmp_path):
     assert artifact.weights_relative == "weights/candidate"
     assert artifact.checkpoint_relative.endswith("checkpoint_1.pth")
     assert artifact.weights_path == tmp_path / declaration["weights_path"]
-    assert artifact.base_checkpoint_path == tmp_path / declaration["base_checkpoint_path"]
+    assert (
+        artifact.base_checkpoint_path == tmp_path / declaration["base_checkpoint_path"]
+    )
     saved = artifact.as_dict()
     assert saved["weights_path"] == declaration["weights_path"]
 
@@ -51,7 +53,9 @@ def test_arpe_artifact_accepts_simple_paths_and_reports_provenance(tmp_path):
 def test_arpe_artifact_accepts_absolute_paths(tmp_path):
     declaration = _artifact_tree(tmp_path)
     declaration["checkpoint_path"] = str(
-        (tmp_path / "weights" / "candidate" / "checkpoint_p0" / "checkpoint_1.pth").resolve()
+        (
+            tmp_path / "weights" / "candidate" / "checkpoint_p0" / "checkpoint_1.pth"
+        ).resolve()
     )
     artifact = ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
     assert artifact.checkpoint_path.is_absolute()

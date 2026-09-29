@@ -25,13 +25,17 @@ class AcoState:
         return self.tau
 
     def configure_from_grid_config(self, grid_config, clear=False):
-        return self.configure_from_obstacle_mask(self._grid_to_obstacles(grid_config.map), clear=clear)
+        return self.configure_from_obstacle_mask(
+            self._grid_to_obstacles(grid_config.map), clear=clear
+        )
 
     def configure_from_obstacle_mask(self, obstacle_mask, clear=False):
         obstacle_mask = np.asarray(obstacle_mask, dtype=bool)
         result = self.configure(*obstacle_mask.shape, clear=clear)
 
-        if self._obstacle_mask is None or not np.array_equal(self._obstacle_mask, obstacle_mask):
+        if self._obstacle_mask is None or not np.array_equal(
+            self._obstacle_mask, obstacle_mask
+        ):
             self._obstacle_mask = obstacle_mask.copy()
             self.tau[self._obstacle_mask] = 0.0
         return result
@@ -122,9 +126,7 @@ class AcoState:
         for obs, (x, y) in zip(obs_batch, positions):
             x, y = int(x), int(y)
             local_radius = (
-                self._observation_radius(obs)
-                if radius is None
-                else int(radius)
+                self._observation_radius(obs) if radius is None else int(radius)
             )
             tau_local = extract(x, y, local_radius)
             obs["tau"] = tau_local[np.newaxis, ...].astype(
@@ -155,7 +157,8 @@ class AcoState:
             crop = np.s_[lx0 : lx0 + (x1 - x0), ly0 : ly0 + (y1 - y0)]
             local[crop] = self.tau[x0:x1, y0:y1]
             free_mask[crop] = (
-                True if self._obstacle_mask is None
+                True
+                if self._obstacle_mask is None
                 else ~self._obstacle_mask[x0:x1, y0:y1]
             )
 
@@ -164,7 +167,9 @@ class AcoState:
     def _ensure_runtime(self, obs_batch):
         if self.tau is None:
             raise RuntimeError("ACO state is not configured yet.")
-        if self.prev_positions is not None and len(self.prev_positions) != len(obs_batch):
+        if self.prev_positions is not None and len(self.prev_positions) != len(
+            obs_batch
+        ):
             self.prev_positions = None
 
     @staticmethod

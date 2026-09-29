@@ -1,4 +1,3 @@
-import hashlib
 import io
 import json
 from os.path import join
@@ -39,13 +38,13 @@ class PolicyBackbone:
 
         register_custom_components()
 
-        config, self.config_sha256 = self._load_config_snapshot(
-            self.config_path
-        )
+        config = self._load_config_snapshot(self.config_path)
         self.saved_config = config
         runtime_config = deepcopy(config["full_config"])
         if algo_cfg.base_weights_path is not None:
-            runtime_config["experiment_settings"]["epom_base_weights_path"] = algo_cfg.base_weights_path
+            runtime_config["experiment_settings"]["epom_base_weights_path"] = (
+                algo_cfg.base_weights_path
+            )
         _, flat_config = validate_config(checkpoint_experiment_config(runtime_config))
         # Paths are deployment inputs, not rewritten checkpoint configuration.
         flat_config.base_checkpoint_path = algo_cfg.base_checkpoint_path
@@ -57,7 +56,9 @@ class PolicyBackbone:
                     f"{type(self).__name__} requires a checkpoint trained with "
                     f"the separate tau observation. Checkpoint path: {path}"
                 )
-            actor_critic = create_actor_critic(flat_config, env.observation_space, env.action_space)
+            actor_critic = create_actor_critic(
+                flat_config, env.observation_space, env.action_space
+            )
         finally:
             env.close()
 
@@ -79,7 +80,9 @@ class PolicyBackbone:
 
         policy_id = flat_config.policy_index
         checkpoint_dir = join(path, f"checkpoint_p{policy_id}")
-        checkpoint = self._load_checkpoint(checkpoint_dir, device, algo_cfg.checkpoint_kind)
+        checkpoint = self._load_checkpoint(
+            checkpoint_dir, device, algo_cfg.checkpoint_kind
+        )
         self._load_model_state(actor_critic, checkpoint["model"], path)
 
         self.ppo = actor_critic
@@ -97,10 +100,7 @@ class PolicyBackbone:
             raise FileNotFoundError(f"Could not find {config_path}")
         with config_path.open("rb") as handle:
             payload = handle.read()
-        return (
-            json.loads(payload.decode("utf-8")),
-            hashlib.sha256(payload).hexdigest(),
-        )
+        return json.loads(payload.decode("utf-8"))
 
     @staticmethod
     def _checkpoint_map_location(device):
@@ -134,7 +134,7 @@ class PolicyBackbone:
             map_location=cls._checkpoint_map_location(device),
             weights_only=False,
         )
-        return checkpoint, hashlib.sha256(payload).hexdigest()
+        return checkpoint
 
     def _load_checkpoint(self, checkpoint_dir, device, checkpoint_kind):
         if checkpoint_kind == "latest":
@@ -144,9 +144,11 @@ class PolicyBackbone:
             checkpoint_path = self._best_checkpoint_path(checkpoint_dir)
             label = "best"
         else:
-            raise ValueError(f"Choose an explicit checkpoint kind, got {checkpoint_kind!r}.")
+            raise ValueError(
+                f"Choose an explicit checkpoint kind, got {checkpoint_kind!r}."
+            )
         self.checkpoint_path = checkpoint_path
-        checkpoint, self.checkpoint_sha256 = self._load_checkpoint_path(
+        checkpoint = self._load_checkpoint_path(
             checkpoint_path,
             device,
             label,
@@ -176,7 +178,9 @@ class PolicyBackbone:
         }
         semantic_mismatches = [
             key
-            for key in sorted(semantic_buffers & current.keys() & checkpoint_state.keys())
+            for key in sorted(
+                semantic_buffers & current.keys() & checkpoint_state.keys()
+            )
             if checkpoint_state[key].dtype != current[key].dtype
             or not torch.equal(
                 checkpoint_state[key].detach().cpu(), current[key].detach().cpu()

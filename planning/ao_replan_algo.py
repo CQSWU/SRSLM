@@ -13,6 +13,7 @@ else:
         cppimport.settings["release_mode"] = True
     importlib.import_module("cppimport.import_hook")
     from planning.planner import planner
+
     if not hasattr(planner, "proposal_failed"):
         raise ImportError(
             "The installed planner extension predates randomized failure caching. "
@@ -49,9 +50,7 @@ class AORePlanBase:
             skip = [False] * count
         else:
             if len(skip_agents) != count:
-                raise ValueError(
-                    "skip_agents and observations must have equal sizes."
-                )
+                raise ValueError("skip_agents and observations must have equal sizes.")
             skip = [bool(value) for value in skip_agents]
 
         if self.planner is None:
@@ -84,8 +83,7 @@ class AORePlanBase:
             cache_failed_action = True
             if local_planner.proposal_failed(position):
                 cache_failed_action = bool(
-                    self.failure_cache_rnd.random()
-                    < FAILURE_CACHE_PROBABILITY
+                    self.failure_cache_rnd.random() < FAILURE_CACHE_PROBABILITY
                 )
             local_planner.observe_position(position, cache_failed_action)
 
@@ -119,9 +117,7 @@ class AORePlanBase:
         """Retain feedback only for dynamic proposals that physically ran."""
 
         if self.planner is None:
-            raise RuntimeError(
-                "AORePlan must act before proposals can be committed."
-            )
+            raise RuntimeError("AORePlan must act before proposals can be committed.")
         if len(executed_mask) != len(self.planner):
             raise ValueError(
                 "executed_mask and AORePlan planners must have equal sizes."

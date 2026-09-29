@@ -15,12 +15,18 @@ def _recipe():
     return yaml.safe_load((root / "learning/train_arpe_final.yaml").read_text())
 
 
-@pytest.mark.parametrize("field,value", [
-    ("trace_context_architecture", "context"),
-    ("trace_context_architecture", "paper_entropy_conv_direct_correction_centered_P_h_z_v3"),
-    ("trace_context_learned_gate", "all"),
-    ("trace_encoder_input", "zero"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("trace_context_architecture", "context"),
+        (
+            "trace_context_architecture",
+            "paper_entropy_conv_direct_correction_centered_P_h_z_v3",
+        ),
+        ("trace_context_learned_gate", "all"),
+        ("trace_encoder_input", "zero"),
+    ],
+)
 def test_retired_model_settings_are_rejected_even_for_saved_trace_configs(field, value):
     raw = _recipe()
     raw["experiment_settings"][field] = value
@@ -28,11 +34,14 @@ def test_retired_model_settings_are_rejected_even_for_saved_trace_configs(field,
         Experiment(**checkpoint_experiment_config(raw))
 
 
-@pytest.mark.parametrize("field,value", [
-    ("trace_context_team_reward_coefficient", 1.0),
-    ("trace_variant", "shuffled"),
-    ("trace_variant", "zero"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("trace_context_team_reward_coefficient", 1.0),
+        ("trace_variant", "shuffled"),
+        ("trace_variant", "zero"),
+    ],
+)
 def test_retired_environment_variants_are_rejected(field, value):
     raw = _recipe()
     raw["environment"][field] = value
@@ -42,7 +51,10 @@ def test_retired_environment_variants_are_rejected(field, value):
 
 def test_only_inert_nontrace_serialized_defaults_are_removed():
     raw = {
-        "experiment_settings": {"encoder_custom": "switcher", "trace_context_architecture": "context"},
+        "experiment_settings": {
+            "encoder_custom": "switcher",
+            "trace_context_architecture": "context",
+        },
         "environment": {"trace_context_team_reward_coefficient": 1.0},
     }
     original = deepcopy(raw)

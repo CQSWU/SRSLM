@@ -1,8 +1,6 @@
 """Frozen ARPE adapter shared by Switcher training and evaluation.
 
-Only the weight directories and checkpoint files are required.  Hashes are
-recorded as provenance after loading, but users are not required to reproduce
-the paper artifact hashes before running or retraining the code.
+Load compatible checkpoint files using the paths in the candidate config.
 """
 
 from __future__ import annotations
@@ -31,7 +29,9 @@ def _artifact_path(project_root: Path, value: object, field: str) -> tuple[str, 
         raise ValueError(f"ARPE candidate {field} must be a non-empty path string.")
     declared = Path(value)
     root = Path(project_root).resolve()
-    resolved = declared.resolve() if declared.is_absolute() else (root / declared).resolve()
+    resolved = (
+        declared.resolve() if declared.is_absolute() else (root / declared).resolve()
+    )
     return str(declared), resolved
 
 
@@ -67,8 +67,7 @@ class ArpeCandidateArtifact:
         missing = required - set(mapping)
         if missing:
             raise ValueError(
-                "ARPE candidate declaration is missing: "
-                f"{sorted(missing)}"
+                f"ARPE candidate declaration is missing: {sorted(missing)}"
             )
 
         root = Path(project_root).resolve()
@@ -96,8 +95,11 @@ class ArpeCandidateArtifact:
             base_weights_path=base_weights_path,
             base_config_path=(base_weights_path / "config.json").resolve(),
             base_checkpoint_path=base_checkpoint_path,
-            inference=(InferenceCorrection(**mapping["inference"])
-                       if mapping.get("inference") is not None else None),
+            inference=(
+                InferenceCorrection(**mapping["inference"])
+                if mapping.get("inference") is not None
+                else None
+            ),
         )
 
     @classmethod
@@ -175,7 +177,9 @@ class ARPE:
         action_sampling: Literal["torch", "direct_numpy"] | None = None,
     ) -> "ARPE":
         if action_sampling is None:
-            action_sampling = artifact.inference.action_sampling if artifact.inference else "torch"
+            action_sampling = (
+                artifact.inference.action_sampling if artifact.inference else "torch"
+            )
         policy = EPOMTraceContext(
             EPOMTraceContextConfig(
                 path_to_weights=str(artifact.weights_path),
@@ -216,13 +220,6 @@ class ARPE:
     def get_action_correction_stats(self) -> dict:
         provider = getattr(self.policy, "get_action_correction_stats", None)
         return provider() if callable(provider) else {}
-
-    def get_model_provenance(self) -> dict[str, object]:
-        return {
-            "schema": ARPE_CANDIDATE_SCHEMA,
-            "candidate": deepcopy(self.artifact.as_dict()),
-            "underlying": deepcopy(self.policy.get_model_provenance()),
-        }
 
 
 __all__ = [

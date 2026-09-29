@@ -9,63 +9,85 @@ from pomapf_env.pomapf_config import POMAPFConfig
 
 # Immutable checkpoint JSONs contain these former defaults. Drop them only
 # when reading saved checkpoints; new YAMLs still reject unused fields.
-OBSOLETE_SAVED_SETTINGS = frozenset({
-    'trace_residual_base_weights_path', 'trace_residual_filters',
-    'trace_residual_hidden', 'trace_residual_use_agents',
-    'trace_residual_use_base_logits', 'trace_residual_gate',
-    'trace_residual_gate_threshold', 'trace_residual_gate_temperature',
-    'trace_residual_gate_rate', 'trace_spatial_input_contract',
-    'trace_spatial_hidden_dim', 'trace_spatial_trace_view',
-    'epom_trace_num_filters', 'epom_trace_num_res_blocks',
-    'epom_trace_embedding_size', 'epom_trace_epom_feature_size',
-    'epom_trace_fusion_size', 'epom_trace_head_size',
-    'trace_context_filters', 'trace_context_embedding_size',
-    'trace_context_hidden_projection', 'trace_context_fusion_size',
-    'trace_context_head_size', 'trace_context_residual_cap',
-    # Serialized defaults from the retired CAAR/NoReweight actors. They are
-    # dropped while reading immutable historical configs.
-    'caar_num_filters', 'caar_num_res_blocks',
-    'caar_tau_num_filters', 'caar_tau_num_conv_layers',
-    'caar_tau_num_res_blocks', 'caar_tau_hidden_size',
-    'caar_learn_residual', 'caar_contextual_pressure',
-    'caar_pressure_head_mode', 'caar_pressure_output_transform',
-    'caar_pressure_cap', 'caar_pressure_init', 'caar_reweight_wait_action',
-    'trace_correction_mode',
-})
+OBSOLETE_SAVED_SETTINGS = frozenset(
+    {
+        "trace_residual_base_weights_path",
+        "trace_residual_filters",
+        "trace_residual_hidden",
+        "trace_residual_use_agents",
+        "trace_residual_use_base_logits",
+        "trace_residual_gate",
+        "trace_residual_gate_threshold",
+        "trace_residual_gate_temperature",
+        "trace_residual_gate_rate",
+        "trace_spatial_input_contract",
+        "trace_spatial_hidden_dim",
+        "trace_spatial_trace_view",
+        "epom_trace_num_filters",
+        "epom_trace_num_res_blocks",
+        "epom_trace_embedding_size",
+        "epom_trace_epom_feature_size",
+        "epom_trace_fusion_size",
+        "epom_trace_head_size",
+        "trace_context_filters",
+        "trace_context_embedding_size",
+        "trace_context_hidden_projection",
+        "trace_context_fusion_size",
+        "trace_context_head_size",
+        "trace_context_residual_cap",
+        # Serialized defaults from the retired CAAR/NoReweight actors. They are
+        # dropped while reading immutable historical configs.
+        "caar_num_filters",
+        "caar_num_res_blocks",
+        "caar_tau_num_filters",
+        "caar_tau_num_conv_layers",
+        "caar_tau_num_res_blocks",
+        "caar_tau_hidden_size",
+        "caar_learn_residual",
+        "caar_contextual_pressure",
+        "caar_pressure_head_mode",
+        "caar_pressure_output_transform",
+        "caar_pressure_cap",
+        "caar_pressure_init",
+        "caar_reweight_wait_action",
+        "trace_correction_mode",
+    }
+)
 
 
 def checkpoint_experiment_config(config):
     """Read retained checkpoints without modifying original config files."""
     normalized = deepcopy(config)
-    settings = normalized.get('experiment_settings', {})
+    settings = normalized.get("experiment_settings", {})
     for key in OBSOLETE_SAVED_SETTINGS:
         settings.pop(key, None)
-    if settings.get('encoder_custom') != 'epom_trace_context':
+    if settings.get("encoder_custom") != "epom_trace_context":
         # These were inert serialized defaults in EPOM/Switcher checkpoints.
         # Never migrate a Trace checkpoint into a different architecture/gate.
-        if settings.get('trace_context_architecture') == 'context':
-            settings.pop('trace_context_architecture')
-        normalized.get('environment', {}).pop(
-            'trace_context_team_reward_coefficient', None
+        if settings.get("trace_context_architecture") == "context":
+            settings.pop("trace_context_architecture")
+        normalized.get("environment", {}).pop(
+            "trace_context_team_reward_coefficient", None
         )
-    if settings.get('encoder_custom') in {
-        'pogema_residual', 'epom_trace_context',
+    if settings.get("encoder_custom") in {
+        "pogema_residual",
+        "epom_trace_context",
     }:
         # An unused Switcher default leaked into early base-policy configs.
         # Do not migrate actual Switcher configs: there it can change routing.
-        normalized.get('environment', {}).pop('switcher_rule_guard_enabled', None)
-    grid = normalized.get('environment', {}).get('grid_config', {})
-    if str(grid.get('map_name', '')).replace('\\', '/') == (
-        'maps/train_capacity_n600.yaml'
+        normalized.get("environment", {}).pop("switcher_rule_guard_enabled", None)
+    grid = normalized.get("environment", {}).get("grid_config", {})
+    if str(grid.get("map_name", "")).replace("\\", "/") == (
+        "maps/train_capacity_n600.yaml"
     ):
         # The selected ARPE checkpoint predates the consolidated map layout.
         # Its immutable config keeps the former filename, while current runs
         # use the single public training registry.
-        grid['map_name'] = 'maps/train.yaml'
+        grid["map_name"] = "maps/train.yaml"
     return normalized
 
-class AsyncPPO(BaseModel, extra=Extra.forbid):
 
+class AsyncPPO(BaseModel, extra=Extra.forbid):
     async_rl: bool = True
 
     experiment_summaries_interval: int = 20
@@ -86,7 +108,7 @@ class AsyncPPO(BaseModel, extra=Extra.forbid):
 
     use_rnn: bool = True
 
-    rnn_type: str = 'gru'
+    rnn_type: str = "gru"
 
     rnn_num_layers: int = 1
 
@@ -102,14 +124,13 @@ class AsyncPPO(BaseModel, extra=Extra.forbid):
 
     max_grad_norm: float = 4.0
 
-
     exploration_loss_coeff: float = 0.003
 
     value_loss_coeff: float = 0.5
 
     kl_loss_coeff: float = 0.0
 
-    exploration_loss: str = 'entropy'
+    exploration_loss: str = "entropy"
 
     num_envs_per_worker: int = 2
 
@@ -125,7 +146,6 @@ class AsyncPPO(BaseModel, extra=Extra.forbid):
 
     decorrelate_envs_on_one_worker: bool = True
 
-
     with_vtrace: bool = True
 
     vtrace_rho: float = 1.0
@@ -139,7 +159,6 @@ class AsyncPPO(BaseModel, extra=Extra.forbid):
     default_niceness: int = 0
 
     actor_worker_gpus: List[int] = Field(default_factory=list)
-
 
     with_pbt: bool = False
 
@@ -159,21 +178,19 @@ class AsyncPPO(BaseModel, extra=Extra.forbid):
 
     pbt_replace_reward_gap_absolute: float = 1e-6
 
-    pbt_target_objective: str = 'true_reward'
+    pbt_target_objective: str = "true_reward"
 
     benchmark: bool = False
 
 
-
 class ExperimentSettings(BaseModel, extra=Extra.forbid):
-
     save_every_sec: int = 120
 
     save_best_every_sec: int = 5
 
     save_best_after: int = 100000
 
-    save_best_metric: str = 'reward'
+    save_best_metric: str = "reward"
 
     keep_checkpoints: int = 1
 
@@ -187,7 +204,6 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     train_for_seconds: int = 10_000_000_000
 
-
     obs_subtract_mean: float = 0.0
 
     obs_scale: float = 1.0
@@ -196,20 +212,21 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     normalize_input_keys: Optional[List[str]] = None
 
-
     gamma: float = 0.99
 
     reward_scale: float = 1.0
 
     reward_clip: float = 10.0
 
+    encoder_custom: Optional[
+        Literal[
+            "pogema_residual",
+            "epom_trace_context",
+            "switcher",
+        ]
+    ] = None
 
-    encoder_custom: Optional[Literal[
-        'pogema_residual', 'epom_trace_context',
-        'switcher',
-    ]] = None
-
-    encoder_subtype: str = 'resnet_impala'
+    encoder_subtype: str = "resnet_impala"
 
     encoder_extra_fc_layers: int = 1
 
@@ -217,28 +234,27 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     decoder_mlp_layers: List[int] = Field(default_factory=list)
 
-
     pogema_encoder_num_filters: int = Field(64, ge=1)
 
     pogema_encoder_num_res_blocks: int = Field(3, ge=0)
 
-    epom_base_weights_path: str = 'weights/EPOM-L'
+    epom_base_weights_path: str = "weights/EPOM-L"
 
     # Direct bonus; zero disables it.
     trace_rule_scale: float = Field(1.0, ge=0.0)
     trace_gate_threshold: float = Field(0.46371241)
 
     # Checkpoints record their training gate; deployment overrides are separate.
-    trace_context_architecture: Literal['paper_entropy_fusion'] = 'paper_entropy_fusion'
-    trace_context_learned_gate: Literal['entropy', 'always'] = 'entropy'
+    trace_context_architecture: Literal["paper_entropy_fusion"] = "paper_entropy_fusion"
+    trace_context_learned_gate: Literal["entropy", "always"] = "entropy"
     # Saved field name for the current real-trace checkpoint.
-    trace_encoder_input: Literal['real'] = 'real'
+    trace_encoder_input: Literal["real"] = "real"
 
     hidden_size: int = 512
 
-    nonlinearity: str = 'relu'
+    nonlinearity: str = "relu"
 
-    policy_initialization: str = 'orthogonal'
+    policy_initialization: str = "orthogonal"
 
     policy_init_gain: float = 1.0
 
@@ -248,29 +264,25 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     actor_critic_share_weights: bool = True
 
-
     adaptive_stddev: bool = True
 
     initial_stddev: float = 1.0
 
-
-    lr_schedule: str = 'kl_adaptive_minibatch'
+    lr_schedule: str = "kl_adaptive_minibatch"
 
     lr_schedule_kl_threshold: Optional[float] = None
 
 
-
 class GlobalSettings(BaseModel, extra=Extra.forbid):
-
-    algo: str = 'APPO'
+    algo: str = "APPO"
 
     env: Optional[str] = None
 
     experiment: Optional[str] = None
 
-    train_dir: str = 'weights/train_dir'
+    train_dir: str = "weights/train_dir"
 
-    device: str = 'gpu'
+    device: str = "gpu"
 
     serial_mode: bool = False
 
@@ -281,9 +293,7 @@ class GlobalSettings(BaseModel, extra=Extra.forbid):
     with_wandb: bool = False
 
 
-
 class Evaluation(BaseModel, extra=Extra.forbid):
-
     fps: int = 0
 
     no_render: bool = True
@@ -293,9 +303,7 @@ class Evaluation(BaseModel, extra=Extra.forbid):
     env_frameskip: int = Field(1, ge=1)
 
 
-
 class Environment(BaseModel, extra=Extra.forbid):
-
     grid_config: POMAPFConfig = Field(default_factory=POMAPFConfig)
 
     # Optional training-only population assignment. Sample Factory creates
@@ -317,7 +325,7 @@ class Environment(BaseModel, extra=Extra.forbid):
     # decay = 1 - tau_rho, so tau_rho=0.1 means a retention factor of 0.9 and a
     # memory of roughly 22 steps.  Papers that write P_t = rho*P_{t-1} + O_t
     # use rho for RETENTION; writing that rho here would invert the memory.
-    trace_variant: Literal['real'] = 'real'
+    trace_variant: Literal["real"] = "real"
     tau_raw: bool = Field(False)
 
     tau_radius: Optional[int] = Field(None, ge=1)
@@ -327,9 +335,7 @@ class Environment(BaseModel, extra=Extra.forbid):
     # Switcher configs can name an ARPE directory; the public config supplies it.
     switcher_caar_weights_path: str = ""
 
-    switcher_caar_checkpoint_kind: Literal[
-        "auto", "latest", "best"
-    ] = "latest"
+    switcher_caar_checkpoint_kind: Literal["auto", "latest", "best"] = "latest"
 
     switcher_caar_device: str = "auto"
 
@@ -346,12 +352,17 @@ class Environment(BaseModel, extra=Extra.forbid):
         """Assign one population per worker without modifying the saved recipe."""
         if self.training_num_agents_by_worker is None:
             return self
-        index = (env_config.get("worker_index", 0) if isinstance(env_config, dict)
-                 else getattr(env_config, "worker_index", 0))
+        index = (
+            env_config.get("worker_index", 0)
+            if isinstance(env_config, dict)
+            else getattr(env_config, "worker_index", 0)
+        )
         try:
             index = int(index or 0)
         except (TypeError, ValueError) as error:
-            raise ValueError("Sample Factory worker index must be an integer.") from error
+            raise ValueError(
+                "Sample Factory worker index must be an integer."
+            ) from error
         if index < 0:
             raise ValueError("Sample Factory worker index must be non-negative.")
         grid = deepcopy(self.grid_config)
@@ -361,20 +372,14 @@ class Environment(BaseModel, extra=Extra.forbid):
         return self.copy(update={"grid_config": grid})
 
 
-
-
-
 class Experiment(BaseModel, extra=Extra.forbid):
-
     name: Optional[str] = None
 
     environment: Environment = Field(default_factory=Environment)
 
     async_ppo: AsyncPPO = Field(default_factory=AsyncPPO)
 
-    experiment_settings: ExperimentSettings = Field(
-        default_factory=ExperimentSettings
-    )
+    experiment_settings: ExperimentSettings = Field(default_factory=ExperimentSettings)
 
     global_settings: GlobalSettings = Field(default_factory=GlobalSettings)
 
@@ -382,26 +387,26 @@ class Experiment(BaseModel, extra=Extra.forbid):
 
     @root_validator
     def validate_arpe_settings(cls, values):
-        environment = values.get('environment')
-        global_settings = values.get('global_settings')
+        environment = values.get("environment")
+        global_settings = values.get("global_settings")
         if (
             environment is not None
             and global_settings is not None
             and global_settings.env != environment.name
         ):
             raise ValueError(
-                'global_settings.env must match environment.name, got '
-                f'{global_settings.env!r} and {environment.name!r}.'
+                "global_settings.env must match environment.name, got "
+                f"{global_settings.env!r} and {environment.name!r}."
             )
         if global_settings is not None and not global_settings.experiment:
-            raise ValueError('An experiment name is required.')
+            raise ValueError("An experiment name is required.")
 
-        settings = values.get('experiment_settings')
+        settings = values.get("experiment_settings")
         if settings is None:
             return values
 
-        if settings.encoder_custom == 'epom_trace_context':
-            if environment is None or environment.name != 'POMAPF-EPOM-ST-v0':
+        if settings.encoder_custom == "epom_trace_context":
+            if environment is None or environment.name != "POMAPF-EPOM-ST-v0":
                 raise ValueError(
                     "EPOM trace-context training requires "
                     "environment.name='POMAPF-EPOM-ST-v0'."
@@ -409,80 +414,74 @@ class Experiment(BaseModel, extra=Extra.forbid):
             grid = environment.grid_config
             if environment.grid_memory_obs_radius != 7:
                 raise ValueError(
-                    'EPOM trace-context training requires '
-                    'grid_memory_obs_radius=7.'
+                    "EPOM trace-context training requires grid_memory_obs_radius=7."
                 )
             if environment.tau_radius != 5:
                 raise ValueError(
-                    'Paper EPOM trace-context training requires tau_radius=5 '
-                    '(an 11x11 trace crop).'
+                    "Paper EPOM trace-context training requires tau_radius=5 "
+                    "(an 11x11 trace crop)."
                 )
-            if settings.trace_context_architecture != 'paper_entropy_fusion':
-                raise ValueError('Only the paper_entropy_fusion ARPE architecture is retained.')
+            if settings.trace_context_architecture != "paper_entropy_fusion":
+                raise ValueError(
+                    "Only the paper_entropy_fusion ARPE architecture is retained."
+                )
             if environment.tau_raw is not False:
                 raise ValueError(
-                    'EPOM trace-context architecture '
-                    f'{settings.trace_context_architecture!r} requires '
-                    'tau_raw=false.'
+                    "EPOM trace-context architecture "
+                    f"{settings.trace_context_architecture!r} requires "
+                    "tau_raw=false."
                 )
             if grid.obs_radius != 5:
-                raise ValueError(
-                    'EPOM trace-context training requires obs_radius=5.'
-                )
+                raise ValueError("EPOM trace-context training requires obs_radius=5.")
             if settings.normalize_input:
                 raise ValueError(
-                    'EPOM trace-context training requires normalize_input=false '
-                    'to preserve the frozen EPOM-L input contract.'
+                    "EPOM trace-context training requires normalize_input=false "
+                    "to preserve the frozen EPOM-L input contract."
                 )
             if settings.hidden_size != 512:
-                raise ValueError('Official EPOM requires hidden_size=512.')
+                raise ValueError("Official EPOM requires hidden_size=512.")
             if settings.pogema_encoder_num_filters != 64:
-                raise ValueError('Official EPOM requires 64 encoder filters.')
+                raise ValueError("Official EPOM requires 64 encoder filters.")
             if settings.pogema_encoder_num_res_blocks != 3:
-                raise ValueError(
-                    'Official EPOM requires 3 encoder residual blocks.'
-                )
+                raise ValueError("Official EPOM requires 3 encoder residual blocks.")
             if settings.encoder_extra_fc_layers != 1:
-                raise ValueError('Official EPOM requires one encoder FC layer.')
+                raise ValueError("Official EPOM requires one encoder FC layer.")
             if not settings.epom_base_weights_path:
                 raise ValueError(
-                    'EPOM trace-context training requires EPOM-L base weights.'
+                    "EPOM trace-context training requires EPOM-L base weights."
                 )
-            async_ppo = values.get('async_ppo')
+            async_ppo = values.get("async_ppo")
             if async_ppo is None or not async_ppo.use_rnn:
-                raise ValueError('Official EPOM requires its recurrent policy.')
-            if async_ppo.rnn_type != 'gru' or async_ppo.rnn_num_layers != 1:
-                raise ValueError('Official EPOM requires a single-layer GRU.')
+                raise ValueError("Official EPOM requires its recurrent policy.")
+            if async_ppo.rnn_type != "gru" or async_ppo.rnn_num_layers != 1:
+                raise ValueError("Official EPOM requires a single-layer GRU.")
             if not np.isfinite(settings.learning_rate) or settings.learning_rate <= 0:
-                raise ValueError('ARPE learning_rate must be finite and positive.')
+                raise ValueError("ARPE learning_rate must be finite and positive.")
             return values
 
-        if settings.encoder_custom == 'switcher':
-            if environment is None or environment.name != 'POMAPF-SRSLM-v0':
-                raise ValueError("Switcher training requires environment.name='POMAPF-SRSLM-v0'.")
-            if environment.switcher_feature_schema != 'srslm_switcher_state_v3':
-                raise ValueError('Unsupported Switcher state schema.')
+        if settings.encoder_custom == "switcher":
+            if environment is None or environment.name != "POMAPF-SRSLM-v0":
+                raise ValueError(
+                    "Switcher training requires environment.name='POMAPF-SRSLM-v0'."
+                )
+            if environment.switcher_feature_schema != "srslm_switcher_state_v3":
+                raise ValueError("Unsupported Switcher state schema.")
             if not environment.switcher_caar_weights_path:
-                raise ValueError('Switcher training requires frozen ARPE weights.')
+                raise ValueError("Switcher training requires frozen ARPE weights.")
             if settings.normalize_input:
                 raise ValueError(
-                    'Switcher requires normalize_input=false so candidate '
-                    'one-hot actions remain exact.'
+                    "Switcher requires normalize_input=false so candidate "
+                    "one-hot actions remain exact."
                 )
             if not np.isfinite(environment.switcher_team_reward_coefficient):
-                raise ValueError(
-                    'switcher_team_reward_coefficient must be finite.'
-                )
-            async_ppo = values.get('async_ppo')
+                raise ValueError("switcher_team_reward_coefficient must be finite.")
+            async_ppo = values.get("async_ppo")
             if async_ppo is not None and async_ppo.use_rnn:
                 raise ValueError(
-                    'Switcher is a feed-forward local-state policy; '
-                    'set use_rnn=false.'
+                    "Switcher is a feed-forward local-state policy; set use_rnn=false."
                 )
             if async_ppo is not None and async_ppo.with_vtrace:
-                raise ValueError(
-                    'Switcher actor masking requires with_vtrace=false.'
-                )
+                raise ValueError("Switcher actor masking requires with_vtrace=false.")
             from learning.switcher_learner_patch import patch_switcher_learner_losses
 
             patch_switcher_learner_losses()
@@ -490,18 +489,14 @@ class Experiment(BaseModel, extra=Extra.forbid):
 
         return values
 
-
-    @validator('global_settings')
-
+    @validator("global_settings")
     def seed_initialization(cls, v, values):
 
-        environment = values.get('environment')
+        environment = values.get("environment")
         if v.env is None and environment is not None:
-
             v.env = environment.name
 
         if v.experiment is None:
-
-            v.experiment = values['name']
+            v.experiment = values["name"]
 
         return v

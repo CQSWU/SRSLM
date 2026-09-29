@@ -20,8 +20,11 @@ def draw_tie_ranks(rng, count):
     # Keep two separate draws: this is also Direct's random-number order.
     for _ in range(2):
         values = rng.random((count, 5))
-        ranks.append(np.argsort(np.argsort(values, axis=1, kind="stable"),
-                                axis=1, kind="stable").astype(np.float32))
+        ranks.append(
+            np.argsort(
+                np.argsort(values, axis=1, kind="stable"), axis=1, kind="stable"
+            ).astype(np.float32)
+        )
     return np.stack(ranks, axis=1)
 
 

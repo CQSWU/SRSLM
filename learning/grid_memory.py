@@ -11,8 +11,8 @@ class GridMemory:
         radius = source.shape[0] // 2
         try:
             target[
-                x - radius:x + radius + 1,
-                y - radius:y + radius + 1,
+                x - radius : x + radius + 1,
+                y - radius : y + radius + 1,
             ] = source
             return True
         except ValueError:
@@ -64,8 +64,8 @@ class GridMemory:
                 and ty + obs_radius + 1 <= size
             ):
                 return self.memory[
-                    tx - obs_radius:tx + obs_radius + 1,
-                    ty - obs_radius:ty + obs_radius + 1,
+                    tx - obs_radius : tx + obs_radius + 1,
+                    ty - obs_radius : ty + obs_radius + 1,
                 ]
             self._grow()
 
@@ -102,13 +102,13 @@ class MultipleGridMemory:
                 )
                 offset = obs_radius - source_radius
                 agents[
-                    offset:offset + source_radius * 2 + 1,
-                    offset:offset + source_radius * 2 + 1,
+                    offset : offset + source_radius * 2 + 1,
+                    offset : offset + source_radius * 2 + 1,
                 ] = observation["agents"]
                 observation["agents"] = agents
             else:
                 offset = source_radius - obs_radius
                 observation["agents"] = observation["agents"][
-                    offset:offset + obs_radius * 2 + 1,
-                    offset:offset + obs_radius * 2 + 1,
+                    offset : offset + obs_radius * 2 + 1,
+                    offset : offset + obs_radius * 2 + 1,
                 ]

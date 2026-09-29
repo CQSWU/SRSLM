@@ -12,8 +12,8 @@ valid rows make every masked mean undefined.  The project-level wrapper keeps
 the upstream implementation byte-for-byte for two or more valid rows.  Only
 the degenerate boundary is handled specially: one row uses the population
 standard deviation (necessarily zero), and zero rows are rejected before a
-forward or optimizer step.  This guard applies to every project policy, including the v4
-trace actors, and does not alter ordinary PPO minibatches.
+forward or optimizer step. This applies to both training entry points and does
+not alter ordinary PPO minibatches.
 """
 
 from __future__ import annotations
@@ -120,18 +120,14 @@ def _calculate_with_valid_count_guard(
 def _build_switcher_calculate_losses(original: Callable) -> Callable:
     def patched(self, mb, num_invalids):
         if getattr(self.cfg, "encoder_custom", None) != "switcher":
-            return _calculate_with_valid_count_guard(
-                original, self, mb, num_invalids
-            )
+            return _calculate_with_valid_count_guard(original, self, mb, num_invalids)
 
         if self.cfg.use_rnn:
             raise RuntimeError("Switcher actor masking requires use_rnn=false.")
         if self.cfg.with_vtrace:
             raise RuntimeError("Switcher actor masking requires with_vtrace=false.")
         if self.cfg.normalize_input:
-            raise RuntimeError(
-                "Switcher actor masking requires normalize_input=false."
-            )
+            raise RuntimeError("Switcher actor masking requires normalize_input=false.")
 
         original_valids = mb.valids
         full_valids = original_valids.bool()

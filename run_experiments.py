@@ -2,8 +2,6 @@
 
 import argparse
 
-import hashlib
-
 import json
 
 import logging
@@ -12,7 +10,6 @@ import multiprocessing
 
 import os
 
-import platform
 
 import random
 
@@ -132,132 +129,6 @@ def _find_switcher_weights(main_dir):
     return str(candidate)
 
 
-
-
-def runtime_provenance():
-    """Record host/runtime details without using them as result identity."""
-    return {
-        "hostname": platform.node(),
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-        "numpy": np.__version__,
-        "torch": torch.__version__,
-        "torch_cuda": torch.version.cuda,
-        "cuda_available": torch.cuda.is_available(),
-        "accelerator_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
-        "ppu_sdk_version": os.environ.get("PPU_SDK_VERSION"),
-    }
-
-
-def static_astar_metric_metadata():
-    """Describe AORePlan's static-A* query statistic."""
-
-    return {
-        "version": "aoreplan_static_astar_query_v3",
-        "scope": "standalone AORePlan in lifelong evaluation",
-        "definition": (
-            "the reported rate counts static-map A* checks triggered by "
-            "reverse dynamic movement proposals"
-        ),
-        "static_astar_query_rate_numerator": (
-            "static-map A* queries attached to raw dynamic RePlan "
-            "non-wait movement proposals"
-        ),
-        "static_astar_query_rate_denominator": (
-            "raw dynamic RePlan non-wait movement proposals before AORePlan "
-            "substitution"
-        ),
-        "no_path_fallback_count": (
-            "dynamic A*/BestMove failures handled by the original 50% wait, "
-            "50% obstacle-screened random-direction fallback"
-        ),
-    }
-
-
-def runtime_metric_metadata():
-    """Describe the wall-clock fields emitted by the experiment runner."""
-
-    return {
-        "version": "end_to_end_episode_wall_v1",
-        "run_time_seconds": (
-            "per-run worker wall time around run_algorithm; includes environment "
-            "construction, reset, policy actions, environment steps, and metric "
-            "collection, but excludes algorithm construction and checkpoint loading"
-        ),
-        "total_elapsed_seconds": (
-            "wall time for the complete ProcessPool batch at the configured "
-            "worker count"
-        ),
-        "elapsed_since_start_seconds": (
-            "cumulative batch time when a result completed; this is not an "
-            "individual run duration"
-        ),
-        "policy_decision_timing_scope": "algo.act_only_perf_counter_v1",
-        "policy_decision_seconds": (
-            "sum of wall-clock durations around algo.act only; excludes reset, "
-            "environment steps, metric collection and algo.after_step; no extra "
-            "accelerator synchronization is inserted. This scope does not "
-            "establish CPU isolation or make runs comparable across hardware/load"
-        ),
-        "policy_decision_calls": "number of completed joint-action algo.act calls",
-        "policy_decision_ms_per_joint_action": (
-            "1000 * policy_decision_seconds / policy_decision_calls"
-        ),
-        "throughput_segments": {
-            "applies_to": "lifelong restart only",
-            "event": "PogemaLifeLong.was_on_goal_after_each_env_step",
-            "window_steps": 512,
-            "step_count": "actual window length; the final window may be shorter than 512",
-            "throughput": "completed goals in this non-overlapping window / step_count",
-            "cumulative_throughput": "cross-check only: completed goals so far / steps so far",
-        },
-    }
-
-
-def contention_metric_metadata():
-    """Describe how many active agents participate in traffic contention."""
-
-    return {
-        "version": "agent_contention_participation_v1",
-        "definition": (
-            "an active agent participates when it is one of multiple movement "
-            "proposals for the same destination, is part of an edge swap, or "
-            "proposes or occupies a destination that is not vacated during "
-            "the environment step"
-        ),
-        "contention_rate_numerator": (
-            "active agent-steps participating in at least one contention event"
-        ),
-        "contention_rate_denominator": "all active agent-steps",
-        "counting_rule": (
-            "each active agent is counted at most once per environment step"
-        ),
-    }
-
-
-def vertex_flow_metric_metadata():
-    """Describe the one-step vertex flow cost used for evaluation."""
-
-    return {
-        "version": "submitted_one_step_vertex_flow_pairs_v1",
-        "definition": (
-            "before collision resolution, valid non-wait movement proposals "
-            "are grouped by destination; a destination with n incoming "
-            "proposals contributes n*(n-1)/2 pairwise vertex-flow cost"
-        ),
-        "vertex_flow_pair_count": (
-            "sum of pairwise same-destination movement proposals over steps"
-        ),
-        "vertex_flow_move_denominator": (
-            "submitted non-wait proposals whose destination is an in-bounds free cell"
-        ),
-        "vertex_flow_pair_cost_per_move": (
-            "vertex_flow_pair_count divided by vertex_flow_move_denominator"
-        ),
-        "capture_point": "submitted actions before environment collision resolution",
-    }
-
-
 def _project_path(main_dir, value):
     path = Path(value)
     if not path.is_absolute():
@@ -294,27 +165,6 @@ def should_cache_algorithm(algorithm, requested):
     """Return whether an inference instance is safe to reuse across episodes."""
     canonical = canonical_algorithm_name(algorithm) or algorithm
     return bool(requested) and canonical not in _EPISODE_FRESH_ALGORITHMS
-
-
-def cache_algorithm_metadata(algorithms, requested):
-    """Describe requested and effective per-algorithm instance caching."""
-    requested = bool(requested)
-    effective_by_algorithm = {
-        algorithm: should_cache_algorithm(algorithm, requested)
-        for algorithm in algorithms
-    }
-    exceptions = {
-        algorithm: "disabled_to_preserve_episode_fresh_policy_state"
-        for algorithm, effective in effective_by_algorithm.items()
-        if requested and not effective
-    }
-    return {
-        "requested": requested,
-        "effective_by_algorithm": effective_by_algorithm,
-        "exceptions": exceptions,
-    }
-
-
 
 
 def _ao_replan_cfg(
@@ -945,9 +795,7 @@ def run_single_experiment(task):
         is_restart = on_target == "restart"
         is_replan = algo_name == "AORePlan"
 
-        if hasattr(algo, "get_hybrid_stats"):
-            hybrid_stats = algo.get_hybrid_stats()
-        elif hasattr(algo, "get_switch_stats"):
+        if hasattr(algo, "get_switch_stats"):
             hybrid_stats = algo.get_switch_stats()
         else:
             hybrid_stats = {}
@@ -955,11 +803,6 @@ def run_single_experiment(task):
             algo.get_action_correction_stats()
             if hasattr(algo, "get_action_correction_stats")
             else {}
-        )
-        model_provenance = (
-            algo.get_model_provenance()
-            if hasattr(algo, "get_model_provenance")
-            else None
         )
         result_record = {
             "algorithm": algo_name,
@@ -985,52 +828,20 @@ def run_single_experiment(task):
         )
         result_record.update(correction_stats)
 
-        if model_provenance is not None:
-            result_record["model_provenance"] = model_provenance
-
         result_record.update(hybrid_stats)
 
-        if is_restart:
-            if is_replan:
-                result_record["reverse_action_rate"] = getattr(
-                    algo, "reverse_action_rate", None
-                )
-                result_record["reverse_action_count"] = getattr(
-                    algo,
-                    "reverse_action_count",
-                    None,
-                )
-                result_record["reverse_action_denominator"] = getattr(
-                    algo,
-                    "reverse_action_denominator",
-                    None,
-                )
-                result_record["reverse_metric_version"] = getattr(
-                    algo,
-                    "reverse_metric_version",
-                    None,
-                )
-                if algo_name == "AORePlan":
-                    result_record["static_astar_query_count"] = getattr(
-                        algo,
-                        "static_astar_query_count",
-                        None,
-                    )
-                    result_record["static_astar_query_denominator"] = getattr(
-                        algo,
-                        "static_astar_query_denominator",
-                        None,
-                    )
-                    result_record["static_astar_query_rate"] = getattr(
-                        algo,
-                        "static_astar_query_rate",
-                        None,
-                    )
-                    result_record["no_path_fallback_count"] = getattr(
-                        algo,
-                        "no_path_fallback_count",
-                        None,
-                    )
+        if is_restart and is_replan:
+            for key in (
+                "reverse_action_rate",
+                "reverse_action_count",
+                "reverse_action_denominator",
+                "reverse_metric_version",
+                "static_astar_query_count",
+                "static_astar_query_denominator",
+                "static_astar_query_rate",
+                "no_path_fallback_count",
+            ):
+                result_record[key] = getattr(algo, key, None)
 
         return result_record
 
@@ -1284,8 +1095,6 @@ def load_map_list_snapshot(path, registry_path=None):
     if any(not isinstance(name, str) or not name for name in data):
         raise ValueError("--map-list keys must be non-empty strings")
 
-    registry_payload = payload
-
     registry = data
 
     if any(not isinstance(value, str) or not value.strip() for value in data.values()):
@@ -1333,13 +1142,7 @@ def load_map_list_snapshot(path, registry_path=None):
 
         map_texts[name] = value
 
-    return (
-        {name: name for name in data},
-        map_texts,
-        hashlib.sha256(payload).hexdigest(),
-        hashlib.sha256(registry_payload).hexdigest(),
-        path,
-    )
+    return {name: name for name in data}, map_texts
 
 
 def build_tasks(
@@ -1985,19 +1788,12 @@ def main():
 
     algorithms = args.algorithms
     srslm_contract = srslm_contract_metadata(algorithms, args.collision_system)
-    hybrid_contract = srslm_contract
 
     agent_counts = parse_agent_counts(args)
 
     seeds = parse_seeds(args)
 
     custom_map = None
-
-    map_list_sha256 = None
-
-    map_registry_sha256 = None
-
-    map_list_path = None
 
     map_texts = None
 
@@ -2007,13 +1803,7 @@ def main():
         maps = {"custom": custom_map["map_name"]}
 
     elif args.map_list:
-        (
-            maps,
-            map_texts,
-            map_list_sha256,
-            map_registry_sha256,
-            map_list_path,
-        ) = load_map_list_snapshot(
+        maps, map_texts = load_map_list_snapshot(
             _project_path(args.main_dir, args.map_list),
             registry_path=_project_path(
                 args.main_dir,
@@ -2034,84 +1824,20 @@ def main():
         map_texts=map_texts,
     )
 
-    algorithm_cache = cache_algorithm_metadata(
-        algorithms,
-        args.cache_algorithms,
-    )
-
     metadata = {
         "started_at": datetime.now().isoformat(timespec="seconds"),
-        "runtime_provenance": runtime_provenance(),
-        "congestion_metric": {
-            "version": _MoveFailureTracker.METRIC_VERSION,
-            "conflict_definition": (
-                "an active agent submitted a non-wait movement action but "
-                "its xy position was unchanged after env.step"
-            ),
-            "congestion_rate_denominator": ("submitted non-wait movement actions"),
-            "agent_conflict_classification": (
-                "the failed move targeted a cell occupied by another agent "
-                "before the step, or multiple agents targeted the same cell"
-            ),
-        },
-        "contention_metric": contention_metric_metadata(),
-        "vertex_flow_metric": vertex_flow_metric_metadata(),
-        "reverse_metric": {
-            "version": "previous_timestep_position_target_segment_v3",
-            "definition": (
-                "a submitted movement proposes the position occupied at the "
-                "immediately previous timestep in the current target segment"
-            ),
-            "reverse_rate_denominator": "submitted non-wait movement actions",
-            "history_update": (
-                "the observed position is recorded every timestep, including "
-                "waits and blocked moves; a target change resets it"
-            ),
-        },
-        "static_astar_metric": static_astar_metric_metadata(),
-        "runtime_metric": runtime_metric_metadata(),
         "algorithms": algorithms,
         "agent_counts": agent_counts,
         "seeds": seeds,
         "maps": maps,
         "workers": args.workers,
         "obs_radius": args.obs_radius,
-        "animate": args.animate,
         "max_steps": args.max_steps,
         "on_target": args.on_target,
         "collision_system": args.collision_system,
-        "custom_map": custom_map,
-        "main_dir": args.main_dir,
-        "arpe_candidate_manifest": getattr(args, "arpe_candidate_manifest", None),
-        "switcher_weights_path": args.switcher_weights_path,
-        "hybrid_mode": (
-            hybrid_contract["hybrid_mode"] if hybrid_contract is not None else None
-        ),
-        "hybrid_components": (
-            hybrid_contract["hybrid_components"]
-            if hybrid_contract is not None
-            else None
-        ),
-        "hybrid_action_policy": (
-            hybrid_contract["action_policy"] if hybrid_contract is not None else None
-        ),
-        "hybrid_guide_algorithm": (
-            hybrid_contract["guide_algorithm"] if hybrid_contract is not None else None
-        ),
-        "hybrid_contract": hybrid_contract,
-        "cache_algorithms_requested": algorithm_cache["requested"],
-        "cache_algorithms_effective_by_algorithm": (
-            algorithm_cache["effective_by_algorithm"]
-        ),
-        "cache_algorithms_exceptions": algorithm_cache["exceptions"],
-        "map_list": str(map_list_path) if map_list_path is not None else None,
-        "map_list_sha256": map_list_sha256,
-        "map_registry_sha256": map_registry_sha256,
-        "trim_border": args.trim_border,
-        "result_journal": args.result_journal,
-        "result_journal_contract": args.result_journal_contract,
-        "resume_result_journal": args.resume_result_journal,
     }
+    if srslm_contract is not None:
+        metadata["srslm"] = srslm_contract
 
     print("Configuration")
 

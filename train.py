@@ -2,7 +2,6 @@ import json
 import os
 import sys
 
-from copy import deepcopy
 from pathlib import Path
 
 
@@ -118,7 +117,9 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
 
     _ensure_patched()
 
-    environment_config = Environment(**cfg.full_config["environment"]).for_worker(env_config)
+    environment_config = Environment(**cfg.full_config["environment"]).for_worker(
+        env_config
+    )
 
     env = make_env(environment_config)
 
@@ -142,13 +143,20 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
             include_free_mask=is_trace_context,
         )
         if is_trace_context:
+
             def index(name):
-                value = (env_config.get(name, 0) if isinstance(env_config, dict)
-                         else getattr(env_config, name, 0))
+                value = (
+                    env_config.get(name, 0)
+                    if isinstance(env_config, dict)
+                    else getattr(env_config, name, 0)
+                )
                 return int(value or 0)
-            routing_seed = (int(getattr(cfg, "seed", 0) or 0)
-                            + 100003 * index("worker_index")
-                            + 1009 * index("vector_index"))
+
+            routing_seed = (
+                int(getattr(cfg, "seed", 0) or 0)
+                + 100003 * index("worker_index")
+                + 1009 * index("vector_index")
+            )
             env = BonusRoutingObservation(env, routing_seed=routing_seed)
             env = FailedMoveCredit(env)
 

@@ -1,2 +1,0 @@
-# Preserve hash-bound candidate declarations byte-for-byte across platforms.
-configs/arpe_final_candidate.json -text

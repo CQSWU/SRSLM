@@ -225,5 +225,6 @@ class MoveFailureTrackerTests(unittest.TestCase):
         self.assertEqual(result["move_failure_count"], 2)
         self.assertEqual(result["congestion_rate"], 1.0)
 
+
 if __name__ == "__main__":
     unittest.main()

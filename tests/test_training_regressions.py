@@ -53,9 +53,7 @@ class TrainingRegressionTests(unittest.TestCase):
             updated = json.loads(resume_config.read_text(encoding="utf-8"))
             self.assertEqual(updated["train_for_env_steps"], 1_000_000_000)
             self.assertEqual(
-                updated["full_config"]["experiment_settings"][
-                    "train_for_env_steps"
-                ],
+                updated["full_config"]["experiment_settings"]["train_for_env_steps"],
                 1_000_000_000,
             )
             self.assertEqual(
@@ -70,11 +68,7 @@ class TrainingRegressionTests(unittest.TestCase):
                 memory.update(0, 0, np.zeros(shape, dtype=np.float32))
 
     def test_obsolete_training_keys_are_rejected(self):
-        config_path = (
-            PROJECT_ROOT
-            / "learning"
-            / "train_arpe_final.yaml"
-        )
+        config_path = PROJECT_ROOT / "learning" / "train_arpe_final.yaml"
         modern = yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
         obsolete_yaml = copy.deepcopy(modern)
