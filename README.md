@@ -72,19 +72,6 @@ authors' notices are preserved in [LICENSE](LICENSE).
 - [Current implementation](CURRENT_VERSION.md)
 - [Map sets](docs/MAPS.md)
 
-## Citation
-
-If you use this repository, please cite:
-
-```bibtex
-@software{xie2026srslm,
-  title  = {SRSLM: Switch and Reweight with Shared Trace for Lifelong Partially Observable Multi-Agent Pathfinding},
-  author = {Jinghu Xie},
-  year   = {2026},
-  url    = {https://github.com/CQSWU/SRSLM}
-}
-```
-
 ## License
 
 This project is released under the [MIT License](LICENSE).
