@@ -16,7 +16,6 @@ schema fields. These are saved-format identifiers, not additional methods.
 Removing them would prevent loading the retained weights. Legacy experiment
 sources belong to the separate historical archive, not the current default path.
 
-Current switching comparisons are Full, NoRule and OnlyRule. NoRule uses the
-same full Switcher with the wait override disabled. OnlyRule uses ARPE on wait
-and AORePlan on every move, without a Switcher. Older independently trained NoWait
-results must not be relabeled as this matched NoRule experiment.
+Public entries are AORePlan, ARPE and SRSLM. Standalone baselines and ablation
+implementations are archived outside this source tree. Existing experiment
+records retain their original method names and configurations.

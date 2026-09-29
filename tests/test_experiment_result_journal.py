@@ -15,7 +15,7 @@ CONTRACT = "a" * 64
 
 def _task(seed=0):
     return {
-        "algorithm": "SRSLM-OnlyWait",
+        "algorithm": "SRSLM",
         "map_name": "map-a",
         "num_agents": 100,
         "seed": seed,

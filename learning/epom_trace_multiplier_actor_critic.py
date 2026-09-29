@@ -200,10 +200,10 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         if self.learned_gate_mode not in {"entropy", "always"}:
             raise ValueError("ARPE training gate must be entropy or always.")
         self.trace_encoder_input = str(settings.get("trace_encoder_input", "real"))
-        if self.trace_encoder_input not in {"real", "zero"}:
-            raise ValueError("trace_encoder_input must be real or zero")
+        if self.trace_encoder_input != "real":
+            raise ValueError("ARPE expects the real shared trace.")
         self.critic_kind = INDEPENDENT_CRITIC_KIND
-        self.critic_uses_trace = self.trace_encoder_input == "real"
+        self.critic_uses_trace = True
         self.residual_cap = 2.0 * RESIDUAL_SCALE
 
         # Actor and critic keep the checkpoint's independent parameter names
@@ -332,8 +332,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         else:
             free = (normalized_obs_dict["obs"][:, 0:1].detach() < 0.5).to(tau.dtype)
         legal = (self.centered_trace_candidates(free) > 0.5).to(tau.dtype)
-        # Keep real candidate pressures for Direct in the zero-input control.
-        learned_tau = torch.zeros_like(tau) if self.trace_encoder_input == "zero" else tau
+        learned_tau = tau
         actor_trace = self.actor_trace_encoder(learned_tau)
         critic_trace = self.critic_trace_encoder(learned_tau)
         ranks = normalized_obs_dict[TIE_KEY].detach().to(tau.dtype)

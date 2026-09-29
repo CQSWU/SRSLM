@@ -6,14 +6,14 @@ import gymnasium as gym
 import numpy as np
 
 class SwitcherEnv(gym.Env):
-    """Runtime base; construct ArpeSwitcherEnv or ArpeNoWaitSwitcherEnv."""
+    """Runtime base; construct ArpeSwitcherEnv."""
 
     metadata = {"render_modes": []}
 
     def __init__(self, *args, **kwargs):
         raise TypeError(
             'SwitcherEnv is a runtime base, not a standalone environment. '
-            'Use ArpeSwitcherEnv or ArpeNoWaitSwitcherEnv with a pinned candidate.'
+            'Use ArpeSwitcherEnv with a pinned candidate.'
         )
 
     @property

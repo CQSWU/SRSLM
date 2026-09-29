@@ -25,16 +25,6 @@ from planning.aoreplan_branch import AORePlanStep
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_final_epom_bundle_layout_is_preferred_with_legacy_fallback(tmp_path):
-    import run_experiments as runner
-
-    legacy = tmp_path / "weights/EPOM-lifelong-finetune-r5/EPOM-Lifelong-Finetune-R5"
-    final = tmp_path / "weights/EPOM-L"
-    for bundle in (legacy, final):
-        (bundle / "checkpoint_p0").mkdir(parents=True)
-        (bundle / "config.json").write_text("{}")
-        (bundle / "checkpoint_p0/model.pth").touch()
-        assert Path(runner._find_epom_lifelong_weights(tmp_path)) == bundle
 
 
 def test_inference_gate_is_strict_and_scales_after_centering():
@@ -143,24 +133,6 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(branch, expecte
     assert controller.prepare_actions(_observations((0, 1))).switch_allowed_mask == (True,)
 
 
-def test_current_rule_ablations_do_not_require_an_independent_switcher():
-    from agents.srslm_arpe_ablation import NoRuleController
-    from agents.switcher_core import OnlyWaitController
-    for kind in (NoRuleController, OnlyWaitController):
-        planner = _Planner()
-        controller = kind(_Candidate(), planner)
-        controller.prepare_actions(_observations())
-        controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
-        planner.action = 3
-        prepared = controller.prepare_actions(_observations((0, 1)))
-        assert prepared.switch_allowed_mask == (True,)
-        result = controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
-        assert result.actions == (3,)
-        planner.action = 0
-        controller.prepare_actions(_observations((0, 1)))
-        result = controller.resolve_actions([1]) if kind is NoRuleController else controller.resolve_actions()
-        assert result.actions == ((0,) if kind is NoRuleController else (1,))
-        assert controller.get_stats()["aoreplan_wait_bypass_count"] == (0 if kind is NoRuleController else 1)
 
 
 def test_training_and_deployment_share_wait_only_controller():
@@ -260,12 +232,3 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
     state = build_switcher_state(_observations() * 2, [1, 2], [4, 3])
     state["switch_allowed"] = np.ones((2, 1), dtype=np.float32)
     assert policy.switcher.choose(state).shape == (2,)
-    from agents.srslm_arpe_ablation import SRSLMNoRule, SRSLMNoRuleConfig
-    no_rule = SRSLMNoRule(SRSLMNoRuleConfig(
-        device="cpu", candidate=candidate_cfg,
-        switcher=SwitcherConfig(path_to_weights=str(switcher_dir), device="cpu"),
-    ), project_root=ROOT)
-    assert no_rule.switcher.checkpoint_sha256 == policy.switcher.checkpoint_sha256
-    state = build_switcher_state(_observations() * 2, [1, 2], [0, 3])
-    state["switch_allowed"] = np.ones((2, 1), dtype=np.float32)
-    assert no_rule.switcher.choose(state).shape == (2,)

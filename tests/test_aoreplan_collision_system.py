@@ -9,7 +9,6 @@ import pytest
 from pogema import GridConfig, pogema_v0
 
 from agents.ao_replan import AORePlan, AORePlanConfig
-from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck, _SoftNoCheckWrapper
 from agents.srslm import SRSLM, SRSLMConfig
 from agents.switcher_core import SwitcherController
 from planning.ao_replan_algo import AORePlanWrapper
@@ -70,7 +69,7 @@ def test_default_static_action_into_visible_agent_waits_under_both_rules(collisi
 
 
 @pytest.mark.parametrize("policy_type,collision", [
-    (AORePlan, "block_both"), (AORePlan, "soft"), (AORePlanSoftNoCheck, "soft"),
+    (AORePlan, "block_both"), (AORePlan, "soft"),
 ])
 def test_static_astar_without_action_still_waits(policy_type, collision):
     wrapper = configured_policy(collision, policy_type)._ao_wrapper
@@ -193,37 +192,8 @@ def test_supported_pogema_rules_do_not_require_an_audit():
     assert not hasattr(branch, 'set_grid_config')
 
 
-def test_soft_no_check_is_explicit_standalone_and_keeps_reset_behavior():
-    policy = configured_policy('soft', AORePlanSoftNoCheck)
-    for _ in range(2):
-        with patch('agents.ao_replan.AORePlanBase', SequenceBase):
-            policy.after_reset()
-        assert type(policy._ao_wrapper) is _SoftNoCheckWrapper
-        policy._ao_wrapper.static_astar = FixedStatic(4)
-        assert policy.act([observation()]) == [1]
-        assert policy.act([observation((4, 5), occupied=True)]) == [4]
-        policy.after_step([True])
-    for collision in ('block_both', 'priority', None):
-        with pytest.raises(ValueError, match='standalone soft'):
-            policy.set_grid_config(SimpleNamespace(collision_system=collision))
 
 
-def test_selecting_soft_search_exception_cannot_change_default_srslm(tmp_path):
-    # Exercise the real SRSLM constructor without overriding its planner
-    # factory. Only learned components are lightweight verified fixtures.
-    standalone = configured_policy('soft', AORePlanSoftNoCheck)
-    assert type(standalone._ao_wrapper) is _SoftNoCheckWrapper
-    artifact = SimpleNamespace(project_root=Path(tmp_path).resolve())
-    policy = SRSLM(SRSLMConfig(), project_root=tmp_path,
-                   candidate_factory=lambda *_args, **_kwargs: Candidate(),
-                   switcher_factory=lambda _cfg: SimpleNamespace(candidate_artifact=artifact))
-    policy.set_grid_config(SimpleNamespace(collision_system='soft'))
-    wrapper = policy.controller.aoreplan._wrapper
-    assert type(wrapper) is AORePlanWrapper
-    assert AORePlan.WRAPPER_CLASS is AORePlanWrapper
-    wrapper.static_astar = FixedStatic(4)
-    wrapper.last_static_astar_invoked_mask = [False]
-    assert wrapper._static_astar_action(0, observation(occupied=True)) == 0
 
 
 @pytest.mark.parametrize("collision,moved", [("block_both", [False, True]), ("soft", [True, True])])

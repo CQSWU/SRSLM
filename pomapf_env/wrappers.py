@@ -340,9 +340,8 @@ class TauObservationWrapper(gym.Wrapper):
     def __init__(self, env, rho=0.1, tau_radius=None, trace_variant="real",
                  raw_tau=False, include_free_mask=False):
         super().__init__(env)
-        from pomapf_env.trace_variant import TraceVariant
-
-        self.variant = TraceVariant(trace_variant)
+        if trace_variant != "real":
+            raise ValueError("ARPE expects the real shared trace.")
         self.raw_tau = bool(raw_tau)
         self.include_free_mask = bool(include_free_mask)
         obs_space = self.env.observation_space
@@ -401,7 +400,7 @@ class TauObservationWrapper(gym.Wrapper):
         return observations, rewards, terminated, truncated, infos
 
     def _observe(self, observations, reset):
-        """Read the real local trace, or zero it for the matched control."""
+        """Read the local shared trace."""
         true_positions = self._global_positions()
         if reset:
             self.aco.reset_episode(
@@ -417,7 +416,6 @@ class TauObservationWrapper(gym.Wrapper):
                 raw_tau=self.raw_tau,
                 radius=self.tau_radius,
             )
-        self.variant.apply(observations)
         if self.include_free_mask:
             for observation, (x, y) in zip(observations, true_positions):
                 free_mask = self.aco.extract_local_free_mask(

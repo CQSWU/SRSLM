@@ -50,35 +50,11 @@ DEFAULT_MAPS = {
 }
 
 
-SUPPORTED_ALGORITHMS = (
-    "RePlan",
-    "AORePlan",
-    "AORePlan-SoftNoCheck",
-    "EPOM-Lifelong-FT",
-    "Direct",
-    "ARPE",
-    "SRSLM-NoRule",
-    "SRSLM-OnlyRule",
-    "SRSLM-NoWait",
-    "SRSLM-OnlyWait",
-    "SRSLM",
-)
-
-DEFAULT_ALGORITHMS = ("RePlan", "AORePlan")
+SUPPORTED_ALGORITHMS = ("AORePlan", "ARPE", "SRSLM")
+DEFAULT_ALGORITHMS = ("AORePlan",)
 ALGORITHM_ALIASES = {
-    "replan": "RePlan",
     "aoreplan": "AORePlan",
-    "aoreplan-softnocheck": "AORePlan-SoftNoCheck",
-    "aoreplan-soft-no-check": "AORePlan-SoftNoCheck",
-    "epom-l": "EPOM-Lifelong-FT",
-    "epom-lifelong-ft": "EPOM-Lifelong-FT",
-    "epom_lifelong_ft": "EPOM-Lifelong-FT",
-    "direct": "Direct",
     "arpe": "ARPE",
-    "srslm-norule": "SRSLM-NoRule",
-    "srslm-onlyrule": "SRSLM-OnlyRule",
-    "srslm-nowait": "SRSLM-NoWait",
-    "srslm-onlywait": "SRSLM-OnlyWait",
     "srslm": "SRSLM",
 }
 
@@ -156,21 +132,6 @@ def _find_switcher_weights(main_dir):
     return str(candidate)
 
 
-def _find_epom_lifelong_weights(main_dir):
-    root = Path(main_dir).resolve() / "weights"
-    candidates = (
-        root / "EPOM-L",
-        root / "EPOM-lifelong-finetune-r5" / "EPOM-Lifelong-Finetune-R5",
-    )
-    for candidate in candidates:
-        if _has_config(candidate) and _has_checkpoints(candidate):
-            return str(candidate)
-    raise FileNotFoundError(
-        "EPOM-L weights were not found. Put the released directory under "
-        "weights/EPOM-L or pass --epom-weights-path. "
-        "The historical weights/EPOM-lifelong-finetune-r5/"
-        "EPOM-Lifelong-Finetune-R5 layout is also supported."
-    )
 
 
 def runtime_provenance():
@@ -326,17 +287,7 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
     return artifact
 
 
-_EPISODE_FRESH_ALGORITHMS = frozenset(
-    (
-        "ARPE",
-        "Direct",
-        "SRSLM",
-        "SRSLM-NoRule",
-        "SRSLM-OnlyRule",
-        "SRSLM-NoWait",
-        "SRSLM-OnlyWait",
-    )
-)
+_EPISODE_FRESH_ALGORITHMS = frozenset(("ARPE", "SRSLM"))
 
 
 def should_cache_algorithm(algorithm, requested):
@@ -364,20 +315,6 @@ def cache_algorithm_metadata(algorithms, requested):
     }
 
 
-def _replan_cfg(seed, max_planning_steps=10000):
-
-    from agents.replan import RePlanConfig
-
-    return RePlanConfig(
-        name="RePlan",
-        fix_loops=True,
-        add_none_if_loop=False,
-        no_path_random=True,
-        use_best_move=True,
-        fix_nones=True,
-        max_planning_steps=max_planning_steps,
-        seed=seed,
-    )
 
 
 def _ao_replan_cfg(
@@ -400,93 +337,21 @@ def build_algorithm(
     seed,
     arpe_candidate_manifest=None,
     switcher_weights_path=None,
-    epom_weights_path=None,
 ):
 
     algo_name = canonical_algorithm_name(algo_name) or algo_name
     if algo_name not in SUPPORTED_ALGORITHMS:
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
 
-    if algo_name == "RePlan":
-        from agents.replan import RePlan
-
-        return RePlan(_replan_cfg(seed))
-
     if algo_name == "AORePlan":
         from agents.ao_replan import AORePlan
 
         return AORePlan(_ao_replan_cfg(seed))
 
-    if algo_name == "AORePlan-SoftNoCheck":
-        from agents.ao_replan_soft_ablation import AORePlanSoftNoCheck
-
-        return AORePlanSoftNoCheck(_ao_replan_cfg(seed))
-
-    if algo_name in (
-        "SRSLM-NoWait",
-        "SRSLM-OnlyWait",
-    ):
-        from agents.srslm_arpe_ablation import (
-            SRSLMNoWait,
-            SRSLMNoWaitConfig,
-            SRSLMOnlyWait,
-            SRSLMOnlyWaitConfig,
-        )
-        from agents.switcher_arpe import AllStateArpeSwitcherConfig
-        from agents.arpe import ARPEConfig
-
-        artifact = _load_arpe_candidate_artifact(
-            main_dir,
-            arpe_candidate_manifest,
-        )
-        candidate = ARPEConfig(
-            path_to_weights=artifact.weights_relative,
-            milestone_checkpoint=artifact.checkpoint_relative,
-            base_weights_path=artifact.base_weights_relative,
-            base_checkpoint_path=artifact.base_checkpoint_relative,
-            inference=artifact.inference.as_dict() if getattr(artifact, "inference", None) else None,
-            seed=seed,
-            device="auto",
-        )
-        if algo_name == "SRSLM-OnlyWait":
-            if switcher_weights_path is not None:
-                raise ValueError(
-                    "SRSLM-OnlyWait is deterministic and must not load "
-                    "--switcher-weights-path."
-                )
-            return SRSLMOnlyWait(
-                SRSLMOnlyWaitConfig(candidate=candidate, seed=seed, device="auto"),
-                project_root=Path(main_dir).resolve(),
-            )
-        if switcher_weights_path is None:
-            raise ValueError(
-                f"{algo_name} requires the independently trained NoWait "
-                "--switcher-weights-path."
-            )
-        switcher = AllStateArpeSwitcherConfig(
-            path_to_weights=str(_project_path(main_dir, switcher_weights_path)),
-            checkpoint_kind="latest",
-            deterministic=False,
-            seed=seed,
-            device="auto",
-        )
-        return SRSLMNoWait(
-            SRSLMNoWaitConfig(
-                candidate=candidate,
-                switcher=switcher,
-                seed=seed,
-                device="auto",
-            ),
-            project_root=Path(main_dir).resolve(),
-        )
-
-    if algo_name in ("SRSLM", "SRSLM-NoRule", "SRSLM-OnlyRule"):
+    if algo_name == "SRSLM":
         from agents.srslm import SRSLM, SRSLMConfig
         from agents.switcher import SwitcherConfig
         from agents.arpe import ARPEConfig
-        from agents.srslm_arpe_ablation import (
-            SRSLMNoRule, SRSLMNoRuleConfig, SRSLMOnlyRule, SRSLMOnlyRuleConfig,
-        )
 
         artifact = _load_arpe_candidate_artifact(main_dir, arpe_candidate_manifest)
         candidate = ARPEConfig(
@@ -497,13 +362,8 @@ def build_algorithm(
             inference=artifact.inference.as_dict() if artifact.inference else None,
         )
 
-        if algo_name == "SRSLM-OnlyRule":
-            return SRSLMOnlyRule(SRSLMOnlyRuleConfig(candidate=candidate, seed=seed),
-                                 project_root=Path(main_dir).resolve())
-        policy_class, config_class = ((SRSLMNoRule, SRSLMNoRuleConfig)
-                                     if algo_name == "SRSLM-NoRule" else (SRSLM, SRSLMConfig))
-        policy = policy_class(
-            config_class(
+        policy = SRSLM(
+            SRSLMConfig(
                 candidate=candidate,
                 switcher=SwitcherConfig(
                     path_to_weights=str(
@@ -521,37 +381,6 @@ def build_algorithm(
             project_root=Path(main_dir).resolve(),
         )
         return policy
-
-    if algo_name == "EPOM-Lifelong-FT":
-        from agents.epom import EPOM, EPOMConfig
-
-        epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
-
-        return EPOM(
-            EPOMConfig(
-                path_to_weights=str(_project_path(main_dir, epom_weights_path)),
-                seed=seed,
-                device="auto",
-                artifact_profile="lifelong_finetuned",
-            )
-        )
-
-    if algo_name == "Direct":
-        from agents.epom_direct_reweight import (
-            EPOMDirectReweight,
-            EPOMDirectReweightConfig,
-        )
-
-        epom_weights_path = epom_weights_path or _find_epom_lifelong_weights(main_dir)
-        return EPOMDirectReweight(
-            EPOMDirectReweightConfig(
-                path_to_weights=str(_project_path(main_dir, epom_weights_path)),
-                artifact_profile="lifelong_finetuned",
-                seed=seed,
-                device="auto",
-                reweight_bonus=1.0,
-            )
-        )
 
     if algo_name == "ARPE":
         from agents.arpe import ARPE
@@ -1077,7 +906,6 @@ def run_single_experiment(task):
         seed,
         task.get("arpe_candidate_manifest"),
         task.get("switcher_weights_path"),
-        task.get("epom_weights_path"),
     )
 
     try:
@@ -1090,7 +918,6 @@ def run_single_experiment(task):
                 seed,
                 arpe_candidate_manifest=task.get("arpe_candidate_manifest"),
                 switcher_weights_path=task.get("switcher_weights_path"),
-                epom_weights_path=task.get("epom_weights_path"),
             )
             if use_cache:
                 _worker_algo_cache[cache_key] = algo
@@ -1116,7 +943,7 @@ def run_single_experiment(task):
 
         on_target = task.get("on_target", "restart")
         is_restart = on_target == "restart"
-        is_replan = algo_name in ("RePlan", "AORePlan", "AORePlan-SoftNoCheck")
+        is_replan = algo_name == "AORePlan"
 
         if hasattr(algo, "get_hybrid_stats"):
             hybrid_stats = algo.get_hybrid_stats()
@@ -1183,7 +1010,7 @@ def run_single_experiment(task):
                     "reverse_metric_version",
                     None,
                 )
-                if algo_name in ("AORePlan", "AORePlan-SoftNoCheck"):
+                if algo_name == "AORePlan":
                     result_record["static_astar_query_count"] = getattr(
                         algo,
                         "static_astar_query_count",
@@ -1563,7 +1390,6 @@ def build_tasks(
             "collision_system": args.collision_system,
             "arpe_candidate_manifest": getattr(args, "arpe_candidate_manifest", None),
             "switcher_weights_path": args.switcher_weights_path,
-            "epom_weights_path": args.epom_weights_path,
             "cache_algorithms": should_cache_algorithm(
                 algorithm,
                 args.cache_algorithms,
@@ -2058,13 +1884,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--epom-weights-path",
-        type=str,
-        default=None,
-        help="Override EPOM weights directory",
-    )
-
-    parser.add_argument(
         "--arpe-candidate-manifest",
         type=str,
         default=None,
@@ -2265,7 +2084,6 @@ def main():
         "main_dir": args.main_dir,
         "arpe_candidate_manifest": getattr(args, "arpe_candidate_manifest", None),
         "switcher_weights_path": args.switcher_weights_path,
-        "epom_weights_path": args.epom_weights_path,
         "hybrid_mode": (
             hybrid_contract["hybrid_mode"] if hybrid_contract is not None else None
         ),

@@ -159,34 +159,7 @@ class SwitcherActorCritic(ActorCriticSharedWeights):
         return result
 
 
-class AllStateSwitcherActorCritic(SwitcherActorCritic):
-    """The same network as SwitcherActorCritic, active on every state."""
-
-    def forward_head(self, normalized_obs_dict):
-        return self.encoder(normalized_obs_dict)
-
-    def forward_core(self, head_output, rnn_states):
-        return self.core(head_output, rnn_states)
-
-    def forward_tail(self, core_output, values_only: bool, sample_actions: bool):
-        decoder_output = self.decoder(core_output)
-        values = self.critic_linear(decoder_output).squeeze()
-        result = TensorDict(values=values)
-        if values_only:
-            return result
-
-        logits, distribution = self.action_parameterization(decoder_output)
-        self.last_action_distribution = distribution
-        result["action_logits"] = logits
-        if sample_actions:
-            actions, log_probs = sample_actions_log_probs(distribution)
-            result["actions"] = actions.squeeze(-1)
-            result["log_prob_actions"] = log_probs
-        return result
-
-
 __all__ = [
-    "AllStateSwitcherActorCritic",
     "SwitcherActorCritic",
     "SwitcherEncoder",
 ]

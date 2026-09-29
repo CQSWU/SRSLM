@@ -30,9 +30,12 @@ AORePlan does not require pretrained weights:
 
 ```bash
 uv run python run_experiments.py \
-  --algorithms RePlan,AORePlan \
+  --algorithms AORePlan \
   --map-types wc3 --map wc3=wc3-128x64-TimbermawHold
 ```
+
+The public methods are AORePlan, ARPE and SRSLM. Baseline and ablation entry
+points are not included; EPOM-L is retained only as the learned methods' base.
 
 For learned methods, place the separately supplied `weights/` directory in
 the project root. Current settings are listed in
@@ -47,9 +50,6 @@ Configurable entry points; exact saved training configurations and curriculum
 drivers are retained with the experiment backup:
 
 ```bash
-# EPOM-L
-uv run python train.py --config_path learning/train_epom.yaml
-
 # ARPE
 uv run python train.py --config_path learning/train_arpe_final.yaml
 
@@ -61,6 +61,10 @@ Training maps are listed in `maps/train.yaml`, and evaluation maps are listed
 in `maps/test.yaml`.
 Training YAMLs are editable examples: choose your own maps, agent counts,
 workers and PPO settings for your hardware.
+
+EPOM-L backbone preparation is retained as supporting code, not as a separate
+benchmark entry. AORePlan builds on RePlan, and ARPE builds on EPOM; the original
+authors' notices are preserved in [LICENSE](LICENSE).
 
 ## Documentation
 

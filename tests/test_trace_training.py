@@ -69,8 +69,8 @@ def test_failed_move_credit_finds_grid_through_wrapper_stack():
     np.testing.assert_allclose(rewards, [-0.0101, -0.0001, 0.9999], atol=1e-7)
 
 
-def test_both_arpe_training_recipes_keep_the_original_learning_rate():
+def test_current_arpe_recipe_keeps_the_final_learning_rate():
     root = Path(__file__).resolve().parents[1]
-    for name in ("train_arpe.yaml", "train_arpe_zero_trace.yaml"):
+    for name in ("train_arpe_final.yaml",):
         recipe = yaml.safe_load((root / "learning" / name).read_text())
-        assert recipe["experiment_settings"]["learning_rate"] == 0.00005
+        assert recipe["experiment_settings"]["learning_rate"] == 0.0001

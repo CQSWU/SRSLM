@@ -21,7 +21,6 @@ AO_BRANCH = 1
 NUM_BRANCHES = 2
 NUM_PRIMITIVE_ACTIONS = 5
 SWITCHER_DECISION_SCOPE = "aoreplan_nonwait_only"
-ALL_STATE_SWITCHER_DECISION_SCOPE = "all_states"
 SWITCHER_FEATURE_SCHEMA = "srslm_switcher_state_v3"
 SWITCHER_CROP_SIZE = 11
 SWITCHER_SPATIAL_SHAPE = (3, SWITCHER_CROP_SIZE, SWITCHER_CROP_SIZE)
@@ -451,46 +450,12 @@ class SwitcherController:
         }
 
 
-class AllStateSwitcherController(SwitcherController):
-    """Route every state, including AORePlan waits, through Switcher."""
-
-    decision_scope = ALL_STATE_SWITCHER_DECISION_SCOPE
-    wait_detection_enabled = False
-    choice_error = "All-state Switcher choices must match the agent batch."
-
-    @staticmethod
-    def _switch_allowed_mask(
-        aoreplan_actions: Sequence[int],
-    ) -> tuple[bool, ...]:
-        return tuple(True for _ in aoreplan_actions)
 
 
-class OnlyWaitController(SwitcherController):
-    """Use ARPE on AORePlan waits and AORePlan on every non-wait state."""
-
-    selector_kind = "deterministic_wait_detect_only"
-    decision_scope = "none"
-    wait_detection_enabled = True
-    learned_switcher_called = False
-
-    def resolve_actions(self) -> ResolvedSwitcherStep:
-        pending = self._pending
-        if pending is None:
-            raise RuntimeError("prepare_actions() must be called before resolve_actions().")
-        switch_allowed = np.asarray(pending.switch_allowed_mask, dtype=bool)
-        selected = np.where(switch_allowed, AO_BRANCH, ARPE_BRANCH)
-        return self._apply_selected_branches(
-            selected,
-            switcher_choice_count=0,
-            selected_ao_count=0,
-            wait_bypass_mask=np.asarray(pending.aoreplan_actions) == 0,
-        )
 
 
 __all__ = [
     "AO_BRANCH",
-    "ALL_STATE_SWITCHER_DECISION_SCOPE",
-    "AllStateSwitcherController",
     "ARPE_BRANCH",
     "FEATURE_DIM",
     "SWITCHER_DECISION_SCOPE",
@@ -505,7 +470,6 @@ __all__ = [
     "PreparedSwitcherStep",
     "ResolvedSwitcherStep",
     "SwitcherController",
-    "OnlyWaitController",
     "build_switcher_state",
     "switcher_observation_space",
 ]

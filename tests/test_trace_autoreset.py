@@ -88,20 +88,6 @@ def environment_factory(monkeypatch):
         env.close()
 
 
-def test_zero_trace_control_preserves_shape_and_free_mask(environment_factory):
-    env, trace = environment_factory(trace_variant='zero')
-    observations, _ = env.reset()
-    assert trace.variant.variant == 'zero'
-    for observation in observations:
-        assert observation['bonus_tie_ranks'].shape == (2, 5)
-        assert observation['tau'].shape == (1, 11, 11)
-        assert not np.any(observation['tau'])
-        assert observation['tau_free_mask'].shape == (1, 11, 11)
-        assert np.any(observation['tau_free_mask'])
-
-    observations, *_ = env.step([0, 0])
-    for observation in observations:
-        assert not np.any(observation['tau'])
 
 
 def _assert_first_frame(trace, observations):

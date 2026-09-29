@@ -7,12 +7,27 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import yaml
 from sample_factory.algo.utils.context import global_env_registry
 
 import train
 import train_switcher
 from pomapf_env.switcher_env import SwitcherEnv
-from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv, ArpeNoWaitSwitcherEnv
+from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
+
+
+def test_training_example_uses_current_candidate_and_wait_only_controller():
+    root = Path(__file__).resolve().parents[1]
+    config = yaml.safe_load((root / 'learning/train_switcher.yaml').read_text())
+    manifest = json.loads((root / 'configs/arpe_final_candidate.json').read_text())
+    assert config['candidate_policy'] == manifest
+    original = deepcopy(config)
+    _, flat = train_switcher.prepare_switcher_config(config)
+    assert config == original
+    assert flat.env == train_switcher.ENV_NAME
+    assert flat.encoder_custom == 'switcher'
+    assert flat.candidate_policy == manifest
+    assert flat.full_config['environment']['switcher_caar_weights_path'] == manifest['weights_path']
 
 
 @pytest.fixture
@@ -29,7 +44,7 @@ def isolated_registry(monkeypatch):
 
 @pytest.mark.parametrize(
     'name',
-    [spec['environment'] for spec in train_switcher.MODES.values()],
+    [train_switcher.ENV_NAME],
 )
 def test_generic_switcher_factory_fails_before_configuration_or_loading(name, isolated_registry):
     train.register_custom_components()
@@ -92,36 +107,29 @@ def _configuration(environment_name, collision):
     })
 
 
-@pytest.mark.parametrize('mode,env_type', [
-    ('final', ArpeSwitcherEnv),
-    ('nowait', ArpeNoWaitSwitcherEnv),
-])
 @pytest.mark.parametrize('collision', ['block_both', 'soft'])
 def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
-    mode, env_type, collision, isolated_registry, monkeypatch,
+    collision, isolated_registry, monkeypatch,
 ):
     # The imported entrypoint constructor still builds its real subclass;
     # only the frozen network is replaced, so this test needs no private weights.
-    spec = train_switcher.MODES[mode]
-    monkeypatch.setitem(
-        spec,
-        'environment_class',
-        partial(env_type, candidate_factory=_FrozenCandidate),
-    )
+    env_type = ArpeSwitcherEnv
+    monkeypatch.setattr(train_switcher, 'ArpeSwitcherEnv',
+                        partial(env_type, candidate_factory=_FrozenCandidate))
     train.register_custom_components()
-    assert isolated_registry[spec['environment']] is train.create_pogema_env
-    train_switcher.register_switcher_components(mode)
-    factory = isolated_registry[spec['environment']]
+    assert isolated_registry[train_switcher.ENV_NAME] is train.create_pogema_env
+    train_switcher.register_switcher_components()
+    factory = isolated_registry[train_switcher.ENV_NAME]
     assert factory is not train.create_pogema_env
-    cfg = _configuration(spec['environment'], collision)
+    cfg = _configuration(train_switcher.ENV_NAME, collision)
     with pytest.raises(ValueError, match='cannot construct'):
         factory('POMAPF-v0', cfg=cfg)
     missing = SimpleNamespace(full_config=deepcopy(cfg.full_config))
     missing.full_config.pop('candidate_policy')
     with pytest.raises(RuntimeError, match='no candidate_policy paths'):
-        factory(spec['environment'], cfg=missing)
+        factory(train_switcher.ENV_NAME, cfg=missing)
 
-    env = factory(spec['environment'], cfg=cfg, env_config={'worker_index': 0})
+    env = factory(train_switcher.ENV_NAME, cfg=cfg, env_config={'worker_index': 0})
     assert type(env) is env_type
     assert env.candidate_artifact.as_dict() == env.candidate.artifact.as_dict()
     rewards_seen = []
@@ -142,8 +150,7 @@ def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
             for observation in observations:
                 assert env.observation_space.contains(observation)
             allowed = tuple(env._prepared.switch_allowed_mask)
-            expected = ((True, True) if env_type is ArpeNoWaitSwitcherEnv else
-                        tuple(a != 0 for a in env._prepared.aoreplan_actions))
+            expected = tuple(a != 0 for a in env._prepared.aoreplan_actions)
             assert allowed == expected
             observations, rewards, terminated, truncated, infos = env.step([index % 2, (index + 1) % 2])
             raw = rewards_seen[-1]

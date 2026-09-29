@@ -31,7 +31,6 @@ from sample_factory.model.model_utils import get_rnn_size
 
 from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
 from learning.grid_memory import MultipleGridMemory
-from pomapf_env.trace_variant import TraceVariant
 from pomapf_env.trace_routing import TIE_KEY, bonus_rng, draw_tie_ranks
 from pomapf_env.wrappers import MatrixObservationWrapper
 
@@ -69,10 +68,9 @@ def _validate_r5_trace_contract(full_config: dict) -> dict[str, object]:
             f"architecture={architecture!r} requires "
             f"tau_raw=False, got {raw_tau!r}."
         )
-    if trace_variant not in {"real", "zero"}:
+    if trace_variant != "real":
         raise RuntimeError(
-            "EPOM-TraceContext inference supports the paper trace or the "
-            f"capacity-matched zero-trace control, got {trace_variant!r}."
+            f"ARPE expects the shared trace, got {trace_variant!r}."
         )
     return {
         "tau_radius": TRACE_RADIUS,
@@ -115,9 +113,6 @@ class EPOMTraceContext(PolicyBackbone):
         )
         self.grid_memory = MultipleGridMemory()
         self._trace_contract = _validate_r5_trace_contract(self.saved_config["full_config"])
-        self._trace_variant = TraceVariant(
-            self._trace_contract["trace_variant"]
-        )
         if int(self.tau_radius) != TRACE_RADIUS:
             raise RuntimeError(
                 "Runtime tau_radius disagrees with checkpoint config: "
@@ -223,7 +218,6 @@ class EPOMTraceContext(PolicyBackbone):
             raw_tau=bool(self._trace_contract["tau_raw"]),
             radius=TRACE_RADIUS,
         )
-        self._trace_variant.apply(observations)
         self._add_exact_free_mask(observations, positions)
         ranks = draw_tie_ranks(self._bonus_rng, num_agents)
         for observation, rank in zip(observations, ranks):

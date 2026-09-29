@@ -11,11 +11,16 @@ The follow-up cleanup shares Switcher input definitions, deployment hooks and
 worker population assignment, and removes unused audit helpers. Checkpoint
 tensors, action sampling and algorithm defaults are unchanged.
 
+Public evaluation now exposes only AORePlan, ARPE and SRSLM. Standalone
+RePlan/EPOM-L, Direct, switching ablations and zero-trace control code have
+been removed. Earlier sources, results and weights remain in the offline
+archive. The required EPOM-L backbone and ARPE training bonus are retained.
+
 ## Selected inference settings
 
 - AORePlan uses the accumulated observed static map, reverse detection, local
   occupancy checking, cache release, and randomized failure caching with
-  probability 0.5. The separate soft search ablation omits occupancy checking.
+  probability 0.5.
 - ARPE uses frozen EPOM-L and the 1B-step learned Trace branch. If the base
   policy's Shannon entropy exceeds 0.01, add twelve times the learned residual;
   otherwise use the base logits unchanged. The residual is `0.5*tanh(raw)`
@@ -23,10 +28,6 @@ tensors, action sampling and algorithm defaults are unchanged.
   inference configuration.
 - Full SRSLM uses ARPE directly when AORePlan proposes wait. Otherwise,
   including a reverse move, the frozen Switcher selects between the proposals.
-  NoRule disables the wait rule with the same full checkpoint; OnlyRule uses
-  ARPE on wait and AORePlan on every move, without a
-  learned Switcher. These are inference ablations, not independently trained
-  variants.
 
 The ARPE checkpoint was trained with the always-on learned correction and
 Direct bonus 1. The final entropy threshold and multiplier are inference

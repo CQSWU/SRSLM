@@ -79,9 +79,9 @@ def test_trace_contract_does_not_infer_a_legacy_architecture(architecture):
         _validate_r5_trace_contract(config)
 
 
-def test_trace_contract_preserves_centered_real_and_zero_controls():
+def test_trace_contract_preserves_centered_real_input():
     config = _trace_config()
-    for variant in ("real", "zero"):
+    for variant in ("real",):
         config["environment"]["trace_variant"] = variant
         contract = _validate_r5_trace_contract(config)
         assert contract["tau_raw"] is False

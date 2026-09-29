@@ -11,7 +11,6 @@ def _encoder_kind(cfg):
         "epom_finetune",
         "epom_trace_context",
         "switcher",
-        "switcher_all_state",
     }:
         raise ValueError(f"Unsupported or retired encoder_custom: {kind!r}")
     return kind
@@ -20,10 +19,7 @@ def _encoder_kind(cfg):
 def make_encoder(cfg, obs_space):
     kind = _encoder_kind(cfg)
 
-    if kind in (
-        "switcher",
-        "switcher_all_state",
-    ):
+    if kind == "switcher":
         from learning.switcher_actor_critic import SwitcherEncoder
 
         return SwitcherEncoder(cfg, obs_space)
@@ -47,11 +43,6 @@ def make_actor_critic(cfg, obs_space, action_space):
         from learning.epom_finetune_actor_critic import EPOMFineTuneActorCritic
 
         actor_critic = EPOMFineTuneActorCritic
-
-    elif kind == "switcher_all_state":
-        from learning.switcher_actor_critic import AllStateSwitcherActorCritic
-
-        actor_critic = AllStateSwitcherActorCritic
 
     elif kind == "switcher":
         from learning.switcher_actor_critic import SwitcherActorCritic

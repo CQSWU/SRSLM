@@ -206,7 +206,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     encoder_custom: Optional[Literal[
         'pogema_residual', 'epom_finetune', 'epom_trace_context',
-        'switcher', 'switcher_all_state',
+        'switcher',
     ]] = None
 
     encoder_subtype: str = 'resnet_impala'
@@ -231,8 +231,8 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
     # Checkpoints record their training gate; deployment overrides are separate.
     trace_context_architecture: Literal['paper_entropy_fusion'] = 'paper_entropy_fusion'
     trace_context_learned_gate: Literal['entropy', 'always'] = 'entropy'
-    # Zero only learned actor/critic inputs; enabled Direct still reads real trace.
-    trace_encoder_input: Literal['real', 'zero'] = 'real'
+    # Saved field name for the current real-trace checkpoint.
+    trace_encoder_input: Literal['real'] = 'real'
 
     hidden_size: int = 512
 
@@ -311,7 +311,6 @@ class Environment(BaseModel, extra=Extra.forbid):
         "POMAPF-EPOM-v0",
         "POMAPF-EPOM-ST-v0",
         "POMAPF-SRSLM-v0",
-        "POMAPF-SRSLM-NoWait-v0",
     ] = "POMAPF-v0"
 
     tau_rho: float = Field(0.1, gt=0.0, le=1.0)
@@ -319,7 +318,7 @@ class Environment(BaseModel, extra=Extra.forbid):
     # decay = 1 - tau_rho, so tau_rho=0.1 means a retention factor of 0.9 and a
     # memory of roughly 22 steps.  Papers that write P_t = rho*P_{t-1} + O_t
     # use rho for RETENTION; writing that rho here would invert the memory.
-    trace_variant: Literal['real', 'zero'] = 'real'
+    trace_variant: Literal['real'] = 'real'
     tau_raw: bool = Field(False)
 
     tau_radius: Optional[int] = Field(None, ge=1)
@@ -462,11 +461,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     f'{settings.trace_context_architecture!r} requires '
                     'tau_raw=false.'
                 )
-            if environment.trace_variant not in {'real', 'zero'}:
-                raise ValueError(
-                    "EPOM trace-context training supports trace_variant='real' "
-                    "or the capacity-matched 'zero' control."
-                )
             if grid.obs_radius != 5:
                 raise ValueError(
                     'EPOM trace-context training requires obs_radius=5.'
@@ -499,18 +493,9 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError('ARPE learning_rate must be finite and positive.')
             return values
 
-        if settings.encoder_custom in ('switcher', 'switcher_all_state'):
-            expected_environments = (
-                {'POMAPF-SRSLM-v0'}
-                if settings.encoder_custom == 'switcher'
-                else {'POMAPF-SRSLM-NoWait-v0'}
-            )
-            if environment is None or environment.name not in expected_environments:
-                raise ValueError(
-                    "Switcher training requires "
-                    "environment.name in "
-                    f"{sorted(expected_environments)!r}."
-                )
+        if settings.encoder_custom == 'switcher':
+            if environment is None or environment.name != 'POMAPF-SRSLM-v0':
+                raise ValueError("Switcher training requires environment.name='POMAPF-SRSLM-v0'.")
             if environment.switcher_feature_schema != 'srslm_switcher_state_v3':
                 raise ValueError('Unsupported Switcher state schema.')
             if not environment.switcher_caar_weights_path:
@@ -534,12 +519,9 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     'Switcher actor masking requires with_vtrace=false.'
                 )
-            if settings.encoder_custom == 'switcher':
-                from learning.switcher_learner_patch import (
-                    patch_switcher_learner_losses,
-                )
+            from learning.switcher_learner_patch import patch_switcher_learner_losses
 
-                patch_switcher_learner_losses()
+            patch_switcher_learner_losses()
             return values
 
         return values

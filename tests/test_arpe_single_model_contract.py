@@ -1,4 +1,4 @@
-"""The public recipe only exposes the retained ARPE model and zero-trace control."""
+"""The public recipe exposes only the retained ARPE model."""
 
 from copy import deepcopy
 from pathlib import Path
@@ -12,13 +12,14 @@ from learning.config import Experiment, checkpoint_experiment_config
 
 def _recipe():
     root = Path(__file__).resolve().parents[1]
-    return yaml.safe_load((root / "learning/train_arpe.yaml").read_text())
+    return yaml.safe_load((root / "learning/train_arpe_final.yaml").read_text())
 
 
 @pytest.mark.parametrize("field,value", [
     ("trace_context_architecture", "context"),
     ("trace_context_architecture", "paper_entropy_conv_direct_correction_centered_P_h_z_v3"),
     ("trace_context_learned_gate", "all"),
+    ("trace_encoder_input", "zero"),
 ])
 def test_retired_model_settings_are_rejected_even_for_saved_trace_configs(field, value):
     raw = _recipe()
@@ -30,6 +31,7 @@ def test_retired_model_settings_are_rejected_even_for_saved_trace_configs(field,
 @pytest.mark.parametrize("field,value", [
     ("trace_context_team_reward_coefficient", 1.0),
     ("trace_variant", "shuffled"),
+    ("trace_variant", "zero"),
 ])
 def test_retired_environment_variants_are_rejected(field, value):
     raw = _recipe()

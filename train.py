@@ -110,7 +110,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
     if full_env_name == "POMAPF-ST-v0":
         raise RuntimeError("POMAPF-ST-v0 is retired; ARPE uses POMAPF-EPOM-ST-v0.")
 
-    if full_env_name in ("POMAPF-SRSLM-v0", "POMAPF-SRSLM-NoWait-v0"):
+    if full_env_name == "POMAPF-SRSLM-v0":
         raise RuntimeError(
             "Switcher training uses its own ARPE path configuration. "
             "Use train_switcher.py for Switcher training, not generic train.py."
@@ -207,7 +207,6 @@ def register_custom_components():
         "POMAPF-EPOM-v0",
         "POMAPF-EPOM-ST-v0",
         "POMAPF-SRSLM-v0",
-        "POMAPF-SRSLM-NoWait-v0",
     ):
         global_env_registry()[name] = create_pogema_env
 

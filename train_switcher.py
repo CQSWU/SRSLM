@@ -1,11 +1,10 @@
-"""Train the final or NoWait two-branch Switcher with an ARPE branch."""
+"""Train the current wait-rule Switcher with a frozen ARPE branch."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from copy import deepcopy
-from functools import partial
 from pathlib import Path
 
 import yaml
@@ -16,40 +15,15 @@ import train as base_train
 from agents.arpe import ArpeCandidateArtifact
 from learning.config import Environment
 from pomapf_env.switcher_arpe_env import (
-    ARPE_NOWAIT_ENV_SCHEMA,
     ARPE_SWITCHER_ENV_SCHEMA,
-    ArpeNoWaitSwitcherEnv,
     ArpeSwitcherEnv,
 )
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-MODES = {
-    "final": {
-        "environment": "POMAPF-SRSLM-v0",
-        "encoder": "switcher",
-        "schema": ARPE_SWITCHER_ENV_SCHEMA,
-        "entrypoint_schema": "srslm_switcher_wait_caar_training_entrypoint_v1",
-        "environment_class": ArpeSwitcherEnv,
-        "decision_scope": "aoreplan_nonwait_only",
-    },
-    "nowait": {
-        "environment": "POMAPF-SRSLM-NoWait-v0",
-        "encoder": "switcher_all_state",
-        "schema": ARPE_NOWAIT_ENV_SCHEMA,
-        "entrypoint_schema": "srslm_switcher_nowait_training_entrypoint_v1",
-        "environment_class": ArpeNoWaitSwitcherEnv,
-        "decision_scope": "all_states",
-    },
-}
-
-
-def _spec(mode: str) -> dict:
-    try:
-        return MODES[mode]
-    except KeyError as exc:
-        raise ValueError(f"Unknown Switcher training mode: {mode!r}") from exc
+ENV_NAME = "POMAPF-SRSLM-v0"
+ENTRYPOINT_SCHEMA = "srslm_switcher_wait_caar_training_entrypoint_v1"
 
 
 def create_switcher_env(
@@ -57,22 +31,18 @@ def create_switcher_env(
     cfg=None,
     env_config=None,
     render_mode=None,
-    *,
-    mode="final",
 ):
     del render_mode
-    spec = _spec(mode)
-    if full_env_name != spec["environment"]:
+    if full_env_name != ENV_NAME:
         raise ValueError(
-            f"{mode} Switcher entrypoint cannot construct {full_env_name!r}."
+            f"Switcher entrypoint cannot construct {full_env_name!r}."
         )
     environment = Environment(**cfg.full_config["environment"]).for_worker(env_config)
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
         raise RuntimeError("Saved Switcher config has no candidate_policy paths.")
     artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
-    environment_class = spec["environment_class"]
-    return environment_class(
+    return ArpeSwitcherEnv(
         grid_config=environment.grid_config,
         candidate_artifact=artifact,
         candidate_device=environment.switcher_caar_device,
@@ -82,16 +52,12 @@ def create_switcher_env(
     )
 
 
-def register_switcher_components(mode="final") -> None:
-    spec = _spec(mode)
+def register_switcher_components() -> None:
     base_train.register_custom_components()
-    global_env_registry()[spec["environment"]] = partial(
-        create_switcher_env, mode=mode
-    )
+    global_env_registry()[ENV_NAME] = create_switcher_env
 
 
-def prepare_switcher_config(config: dict, mode="final") -> tuple[object, object]:
-    spec = _spec(mode)
+def prepare_switcher_config(config: dict) -> tuple[object, object]:
     payload = deepcopy(config)
     declaration = payload.pop("candidate_policy", None)
     if not isinstance(declaration, dict):
@@ -105,21 +71,21 @@ def prepare_switcher_config(config: dict, mode="final") -> tuple[object, object]
     ] = artifact.weights_relative
 
     experiment, flat_config = base_train.validate_config(payload)
-    if flat_config.encoder_custom != spec["encoder"]:
+    if flat_config.encoder_custom != "switcher":
         raise ValueError(
-            f"{mode} Switcher requires encoder_custom={spec['encoder']!r}."
+            "Switcher requires encoder_custom='switcher'."
         )
-    if flat_config.env != spec["environment"]:
+    if flat_config.env != ENV_NAME:
         raise ValueError(
-            f"{mode} Switcher requires environment {spec['environment']!r}."
+            f"Switcher requires environment {ENV_NAME!r}."
         )
     if bool(flat_config.use_rnn):
         raise ValueError("Switcher must remain feed-forward.")
     flat_config.full_config = deepcopy(flat_config.full_config)
     flat_config.full_config["candidate_policy"] = deepcopy(declaration)
     flat_config.candidate_policy = deepcopy(declaration)
-    flat_config.switcher_integration_schema = spec["schema"]
-    flat_config.switcher_training_entrypoint_schema = spec["entrypoint_schema"]
+    flat_config.switcher_integration_schema = ARPE_SWITCHER_ENV_SCHEMA
+    flat_config.switcher_training_entrypoint_schema = ENTRYPOINT_SCHEMA
     return experiment, flat_config
 
 
@@ -143,33 +109,30 @@ def _apply_overrides(config: dict, args) -> set[str]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config_path", required=True)
-    parser.add_argument("--mode", choices=tuple(MODES), default="final")
     parser.add_argument("--run_name")
     parser.add_argument("--train_dir")
     parser.add_argument("--train_for_env_steps", type=int)
     parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args(argv)
 
-    register_switcher_components(args.mode)
+    register_switcher_components()
     config_path = Path(args.config_path).resolve()
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     explicit = _apply_overrides(config, args)
-    _, flat_config = prepare_switcher_config(config, args.mode)
+    _, flat_config = prepare_switcher_config(config)
     base_train._sync_resume_cli_overrides(flat_config, explicit)
     if args.validate_only:
-        spec = _spec(args.mode)
         print(
             json.dumps(
                 {
                     "validated": True,
-                    "mode": args.mode,
-                    "schema": spec["entrypoint_schema"],
-                    "integration_schema": spec["schema"],
+                    "schema": ENTRYPOINT_SCHEMA,
+                    "integration_schema": ARPE_SWITCHER_ENV_SCHEMA,
                     "experiment": flat_config.experiment,
                     "target_frames": int(flat_config.train_for_env_steps),
                     "workers": int(flat_config.num_workers),
                     "candidate_policy": flat_config.candidate_policy,
-                    "decision_scope": spec["decision_scope"],
+                    "decision_scope": "aoreplan_nonwait_only",
                 },
                 sort_keys=True,
             )

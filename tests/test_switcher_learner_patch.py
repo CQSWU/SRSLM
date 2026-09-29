@@ -205,21 +205,6 @@ def test_all_wait_batch_has_zero_actor_gradient_and_full_critic_gradient():
     assert summaries["adv_std"].item() == 0.0
 
 
-def test_all_state_switcher_uses_unmasked_ppo_loss():
-    learner = _FakeLearner()
-    learner.cfg.encoder_custom = "switcher_all_state"
-    batch = _batch(
-        actions=[0, 1, 0, 4],
-        advantages=[8.0, 1.0, -2.0, 3.0],
-        actor_signal=[2.0, 1.0, -3.0, -1.0],
-        returns=[1.0, 2.0, 3.0, 4.0],
-    )
-
-    patched = _calculate(learner, batch)
-    reference = _upstream_like_calculate_losses(learner, batch, 0)
-
-    assert torch.allclose(patched[1], reference[1])
-    assert torch.allclose(patched[5], reference[5])
 
 
 def test_non_switcher_two_valid_rows_remain_bitwise_upstream():

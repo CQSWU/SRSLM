@@ -13,7 +13,6 @@ from agents.arpe import (
     ARPE,
 )
 from agents.switcher_core import (
-    AllStateSwitcherController,
     SWITCHER_FEATURE_SCHEMA,
     SwitcherController,
     switcher_observation_space,
@@ -25,7 +24,6 @@ from pomapf_env.switcher_env import SwitcherEnv
 
 
 ARPE_SWITCHER_ENV_SCHEMA = "srslm_switcher_caar_candidate_env_v1"
-ARPE_NOWAIT_ENV_SCHEMA = "srslm_switcher_caar_candidate_all_states_env_v1"
 
 
 class ArpeSwitcherEnv(SwitcherEnv):
@@ -89,17 +87,8 @@ class ArpeSwitcherEnv(SwitcherEnv):
         return deepcopy(self.candidate.get_model_provenance())
 
 
-class ArpeNoWaitSwitcherEnv(ArpeSwitcherEnv):
-    """Train the two-action Switcher on every state, including planner waits."""
-
-    controller_class = AllStateSwitcherController
-    integration_schema = ARPE_NOWAIT_ENV_SCHEMA
-
-
 __all__ = [
-    "ARPE_NOWAIT_ENV_SCHEMA",
     "ARPE_SWITCHER_ENV_SCHEMA",
-    "ArpeNoWaitSwitcherEnv",
     "ArpeSwitcherEnv",
     "switcher_observation_space",
 ]

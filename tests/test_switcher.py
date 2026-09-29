@@ -5,9 +5,7 @@ from agents.switcher_core import (
     AO_BRANCH,
     ARPE_BRANCH,
     SWITCHER_FEATURE_SCHEMA,
-    AllStateSwitcherController,
     SwitcherController,
-    OnlyWaitController,
 )
 from planning.aoreplan_branch import AORePlanStep
 
@@ -92,44 +90,3 @@ def test_wait_bypass_never_commits_aoreplan_wait():
     result = controller.resolve_actions([])
     assert result.actions == (1,)
     assert planner.commits == [(False,)]
-
-
-def test_all_state_controller_sends_waits_to_the_switcher():
-    planner = FakeAORePlan([0, 4])
-    controller = AllStateSwitcherController(FakeARPE([1, 2]), planner)
-    prepared = controller.prepare_actions(observations(2))
-    assert prepared.switch_allowed_mask == (True, True)
-
-    result = controller.resolve_actions([AO_BRANCH, ARPE_BRANCH])
-
-    assert result.actions == (0, 2)
-    assert result.wait_bypass_mask == (False, False)
-    assert planner.commits == [(True, False)]
-    stats = controller.get_stats()
-    assert stats["switcher_decision_scope"] == "all_states"
-    assert stats["wait_detection_enabled"] is False
-    assert stats["learned_switcher_called"] is True
-    assert stats["switcher_choice_count"] == 2
-    assert stats["aoreplan_wait_bypass_count"] == 0
-
-
-def test_wait_detect_only_uses_no_learned_switcher_choices():
-    planner = FakeAORePlan([0, 4, 0])
-    controller = OnlyWaitController(FakeARPE([1, 2, 0]), planner)
-    prepared = controller.prepare_actions(observations(3))
-    assert prepared.switch_allowed_mask == (False, True, False)
-
-    result = controller.resolve_actions()
-
-    assert result.actions == (1, 4, 0)
-    assert result.selected_branches == (ARPE_BRANCH, AO_BRANCH, ARPE_BRANCH)
-    assert result.wait_bypass_mask == (True, False, True)
-    assert planner.commits == [(False, True, True)]
-    stats = controller.get_stats()
-    assert stats["selector_kind"] == "deterministic_wait_detect_only"
-    assert stats["switcher_decision_scope"] == "none"
-    assert stats["learned_switcher_called"] is False
-    assert stats["switcher_choice_count"] == 0
-    assert stats["executed_ao_count"] == 1
-    assert stats["executed_caar_count"] == 2
-    assert stats["aoreplan_wait_bypass_count"] == 2

@@ -21,36 +21,12 @@ UNUSED_CONTEXT_FIELDS = {
 
 
 def _recipe():
-    path = Path(__file__).resolve().parents[1] / 'learning/train_arpe.yaml'
+    path = Path(__file__).resolve().parents[1] / 'learning/train_arpe_final.yaml'
     return yaml.safe_load(path.read_text())
 
 
-def test_zero_trace_control_is_capacity_and_budget_matched():
-    root = Path(__file__).resolve().parents[1]
-    real = _recipe()
-    zero = yaml.safe_load(
-        (root / 'learning/train_arpe_zero_trace.yaml').read_text()
-    )
-    assert zero['environment']['trace_variant'] == 'real'
-    assert zero['experiment_settings']['trace_encoder_input'] == 'zero'
-
-    zero['name'] = real['name']
-    zero['global_settings']['train_dir'] = real['global_settings']['train_dir']
-    zero['environment']['trace_variant'] = 'real'
-    real['environment']['trace_variant'] = 'real'
-    zero['experiment_settings'].pop('trace_encoder_input')
-    assert zero == real
 
 
-def test_zero_trace_no_direct_training_control_keeps_all_other_settings():
-    raw = _recipe()
-    raw['experiment_settings']['trace_encoder_input'] = 'zero'
-    raw['experiment_settings']['trace_rule_scale'] = 0.0
-    cfg = Experiment(**raw)
-    assert cfg.experiment_settings.trace_encoder_input == 'zero'
-    assert cfg.experiment_settings.trace_rule_scale == 0.0
-    assert cfg.experiment_settings.trace_context_learned_gate == 'entropy'
-    assert cfg.environment.trace_variant == 'real'
 
 
 @pytest.mark.parametrize('kind', ['epom_trace', 'nonexistent_trace'])
