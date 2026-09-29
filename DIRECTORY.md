@@ -9,7 +9,8 @@ third-party repositories stay outside Git.
 | `agents/ao_replan.py` | AORePlan adapter and diagnostics |
 | `planning/ao_replan_algo.py` | Reverse check, accumulated static A*, and cache handling |
 | `planning/aoreplan_branch.py` | Proposal/commit interface shared by SRSLM |
-| `agents/epom.py` | EPOM-L backbone needed by ARPE, not a public comparison method |
+| `learning/epom_encoder.py` | Base-policy encoder required by ARPE |
+| `learning/epom_trace_context_actor_critic.py` | Frozen EPOM-L weight loading and shared ARPE support |
 | `agents/epom_trace_context.py` | ARPE inference, shared trace and episode reset |
 | `learning/epom_trace_multiplier_actor_critic.py` | Selected learned trace actor and critic |
 | `agents/arpe.py` | Portable ARPE candidate loader |
@@ -23,12 +24,10 @@ third-party repositories stay outside Git.
 | `maps/test.yaml` | Complete 36-map test registry, including four resized WC3 maps |
 | `docs/MAPS.md` | Split definition and MovingAI WC3 provenance |
 | `run_experiments.py` | Evaluator and public method registry |
-| `train.py` | EPOM-L and ARPE training entry point |
+| `train.py` | ARPE training entry point |
 | `train_switcher.py` | Current wait-rule Switcher training entry point |
-| `learning/train_epom.yaml` | EPOM-L training recipe |
 | `learning/train_arpe_final.yaml` | Current native ARPE training example; final inference is configured separately |
 | `learning/train_switcher.yaml` | Switcher training example; original curriculum is retained in the run archive |
-| `scripts/train_epom.sh` | EPOM-L launcher |
 | `scripts/train_arpe.sh` | ARPE launcher |
 | `scripts/train_switcher.sh` | Final Switcher launcher |
 | `tests/` | Regression and portable-loading tests |

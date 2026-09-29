@@ -49,7 +49,7 @@ def checkpoint_experiment_config(config):
             'trace_context_team_reward_coefficient', None
         )
     if settings.get('encoder_custom') in {
-        'pogema_residual', 'epom_finetune', 'epom_trace_context',
+        'pogema_residual', 'epom_trace_context',
     }:
         # An unused Switcher default leaked into early base-policy configs.
         # Do not migrate actual Switcher configs: there it can change routing.
@@ -205,7 +205,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
 
     encoder_custom: Optional[Literal[
-        'pogema_residual', 'epom_finetune', 'epom_trace_context',
+        'pogema_residual', 'epom_trace_context',
         'switcher',
     ]] = None
 
@@ -222,7 +222,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     pogema_encoder_num_res_blocks: int = Field(3, ge=0)
 
-    epom_base_weights_path: str = 'weights/EPOM/EPOM'
+    epom_base_weights_path: str = 'weights/EPOM-L'
 
     # Direct bonus; zero disables it.
     trace_rule_scale: float = Field(1.0, ge=0.0)
@@ -308,7 +308,6 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     name: Literal[
         "POMAPF-v0",
-        "POMAPF-EPOM-v0",
         "POMAPF-EPOM-ST-v0",
         "POMAPF-SRSLM-v0",
     ] = "POMAPF-v0"
@@ -399,41 +398,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
 
         settings = values.get('experiment_settings')
         if settings is None:
-            return values
-
-        if settings.encoder_custom == 'epom_finetune':
-            if environment is None or environment.name != 'POMAPF-EPOM-v0':
-                raise ValueError(
-                    "EPOM fine-tuning requires "
-                    "environment.name='POMAPF-EPOM-v0'."
-                )
-            grid = environment.grid_config
-            if environment.grid_memory_obs_radius != 7:
-                raise ValueError(
-                    'Official EPOM requires grid_memory_obs_radius=7.'
-                )
-            if grid.obs_radius != 5:
-                raise ValueError('EPOM fine-tuning requires obs_radius=5.')
-            if settings.normalize_input:
-                raise ValueError(
-                    'EPOM fine-tuning must set normalize_input=false because '
-                    'official EPOM v0 has no observation-normalizer state.'
-                )
-            if settings.hidden_size != 512:
-                raise ValueError('Official EPOM requires hidden_size=512.')
-            if settings.pogema_encoder_num_filters != 64:
-                raise ValueError('Official EPOM requires 64 encoder filters.')
-            if settings.pogema_encoder_num_res_blocks != 3:
-                raise ValueError(
-                    'Official EPOM requires 3 encoder residual blocks.'
-                )
-            if settings.encoder_extra_fc_layers != 1:
-                raise ValueError('Official EPOM requires one encoder FC layer.')
-            async_ppo = values.get('async_ppo')
-            if async_ppo is None or not async_ppo.use_rnn:
-                raise ValueError('Official EPOM requires its recurrent policy.')
-            if async_ppo.rnn_type != 'gru' or async_ppo.rnn_num_layers != 1:
-                raise ValueError('Official EPOM requires a single-layer GRU.')
             return values
 
         if settings.encoder_custom == 'epom_trace_context':

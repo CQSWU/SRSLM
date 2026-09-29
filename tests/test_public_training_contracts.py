@@ -29,7 +29,7 @@ def _recipe():
 
 
 
-@pytest.mark.parametrize('kind', ['epom_trace', 'nonexistent_trace'])
+@pytest.mark.parametrize('kind', ['epom_trace', 'epom_finetune', 'nonexistent_trace'])
 def test_retired_or_unknown_encoder_is_rejected_by_schema_and_factories(kind):
     raw = _recipe()
     raw['experiment_settings']['encoder_custom'] = kind
@@ -69,5 +69,9 @@ def test_retired_noentropy_and_noreweight_recipes_are_absent():
         'learning/train_no_reweight_block_r5_1b.yaml',
         'learning/no_reweight_encoder.py',
         'configs/arpe_noentropy_candidate.json',
+        'learning/epom_finetune_actor_critic.py',
+        'learning/train_epom.yaml',
+        'scripts/train_epom.sh',
+        'agents/epom.py',
     ):
         assert not (root / relative).exists()

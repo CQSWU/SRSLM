@@ -15,6 +15,8 @@ Public evaluation now exposes only AORePlan, ARPE and SRSLM. Standalone
 RePlan/EPOM-L, Direct, switching ablations and zero-trace control code have
 been removed. Earlier sources, results and weights remain in the offline
 archive. The required EPOM-L backbone and ARPE training bonus are retained.
+The independent EPOM fine-tuning module, recipe, launcher and adapter are also
+removed. ARPE loads the frozen base weights directly and does not need them.
 
 ## Selected inference settings
 

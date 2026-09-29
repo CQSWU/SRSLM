@@ -122,7 +122,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
 
     env = make_env(environment_config)
 
-    if full_env_name in ("POMAPF-EPOM-v0", "POMAPF-EPOM-ST-v0"):
+    if full_env_name == "POMAPF-EPOM-ST-v0":
         environment = cfg.full_config["environment"]
         env = GridMemoryObservationWrapper(
             env,
@@ -204,7 +204,6 @@ def register_custom_components():
 
     for name in (
         "POMAPF-v0",
-        "POMAPF-EPOM-v0",
         "POMAPF-EPOM-ST-v0",
         "POMAPF-SRSLM-v0",
     ):

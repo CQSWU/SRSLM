@@ -8,7 +8,6 @@ def _encoder_kind(cfg):
     if kind not in {
         None,
         "pogema_residual",
-        "epom_finetune",
         "epom_trace_context",
         "switcher",
     }:
@@ -27,7 +26,6 @@ def make_encoder(cfg, obs_space):
     if kind in (
         "pogema_residual",
         "epom_trace_context",
-        "epom_finetune",
     ):
         from learning.epom_encoder import EPOMEncoder
 
@@ -39,12 +37,7 @@ def make_encoder(cfg, obs_space):
 def make_actor_critic(cfg, obs_space, action_space):
     kind = _encoder_kind(cfg)
 
-    if kind == "epom_finetune":
-        from learning.epom_finetune_actor_critic import EPOMFineTuneActorCritic
-
-        actor_critic = EPOMFineTuneActorCritic
-
-    elif kind == "switcher":
+    if kind == "switcher":
         from learning.switcher_actor_critic import SwitcherActorCritic
 
         actor_critic = SwitcherActorCritic

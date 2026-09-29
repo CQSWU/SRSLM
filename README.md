@@ -62,8 +62,8 @@ in `maps/test.yaml`.
 Training YAMLs are editable examples: choose your own maps, agent counts,
 workers and PPO settings for your hardware.
 
-EPOM-L backbone preparation is retained as supporting code, not as a separate
-benchmark entry. AORePlan builds on RePlan, and ARPE builds on EPOM; the original
+ARPE loads the supplied EPOM-L backbone; standalone EPOM fine-tuning code is
+not included. AORePlan builds on RePlan, and ARPE builds on EPOM; the original
 authors' notices are preserved in [LICENSE](LICENSE).
 
 ## Documentation
