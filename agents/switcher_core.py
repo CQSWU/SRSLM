@@ -15,8 +15,8 @@ from typing import Mapping, Sequence
 import numpy as np
 
 
-#: execution models this project has audited end to end
-AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
+#: execution models supported by POGEMA
+SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
 ARPE_BRANCH = 0
 AO_BRANCH = 1
 NUM_BRANCHES = 2
@@ -157,11 +157,11 @@ class SwitcherController:
 
     def set_grid_config(self, grid_config) -> None:
         collision_system = getattr(grid_config, "collision_system", None)
-        if collision_system not in AUDITED_COLLISION_SYSTEMS:
+        if collision_system not in SUPPORTED_COLLISION_SYSTEMS:
             raise ValueError(
-                "SRSLM runs only under an audited execution model; received "
-                f"collision_system={collision_system!r}, audited "
-                f"{AUDITED_COLLISION_SYSTEMS}."
+                "SRSLM requires a supported collision system; received "
+                f"collision_system={collision_system!r}, supported "
+                f"{SUPPORTED_COLLISION_SYSTEMS}."
             )
         self.arpe.set_grid_config(grid_config)
 

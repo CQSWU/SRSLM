@@ -313,15 +313,21 @@ def test_entropy_closed_rows_have_no_actor_gradient_but_open_rows_adjust_all_act
     assert delta[0, 4] != 0
 
 
-def test_inference_cannot_silently_change_the_trained_gate():
-    assert not hasattr(EPOMTraceMultiplierActorCritic, "set_inference_learned_gate_override")
-    assert not hasattr(EPOMTraceMultiplierActorCritic, "set_inference_entropy_threshold_override")
-    base = torch.tensor([[20.0, 0.4, 0.3, 0.2, 0.1]])
+def test_explicit_training_gate_and_direct_bonus_are_configurable():
+    base = torch.tensor([[4.0, 0.0, 0.0, 0.0, 0.0]])
+    raw = torch.zeros_like(base)
     pressure, legal, ranks = _routing(1)
-    with pytest.raises(TypeError, match="entropy_threshold"):
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, torch.ones_like(base), pressure, legal, ranks, entropy_threshold=0.0
-        )
+    default, _, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+        base, raw, pressure, legal, ranks
+    )
+    assert not gate.any()
+    torch.testing.assert_close(default, base)
+    final, _, gate, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+        base, raw, pressure, legal, ranks, entropy_threshold=0.1, direct_bonus=2.5
+    )
+    assert gate.all()
+    route = select_top2_low_pressure(base, pressure, legal, ranks)
+    torch.testing.assert_close(final, base + 2.5 * route)
 
 
 def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_model):

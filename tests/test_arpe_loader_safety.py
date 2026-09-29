@@ -96,9 +96,8 @@ def test_historical_action_sampling_is_explicit_and_unchanged():
     ).action_sampling == "direct_numpy"
 
 
-@pytest.mark.parametrize("verification_error", [False, True])
-def test_constructor_verifies_loaded_backbone_once_without_unused_cache(monkeypatch, verification_error):
-    verifier = Mock(side_effect=RuntimeError("backbone differs") if verification_error else None)
+def test_constructor_does_not_require_external_backbone_hash_binding(monkeypatch):
+    verifier = Mock(side_effect=RuntimeError("backbone differs"))
     config = _trace_config()
     config["environment"]["grid_memory_obs_radius"] = 5
 
@@ -110,10 +109,6 @@ def test_constructor_verifies_loaded_backbone_once_without_unused_cache(monkeypa
 
     monkeypatch.setattr(PolicyBackbone, "__init__", fake_backbone_init)
     cfg = EPOMTraceContextConfig(path_to_weights="unused", seed=42)
-    if verification_error:
-        with pytest.raises(RuntimeError, match="backbone differs"):
-            EPOMTraceContext(cfg)
-    else:
-        policy = EPOMTraceContext(cfg)
-        assert not hasattr(policy, "_actor_backbone_verification")
-    verifier.assert_called_once_with()
+    policy = EPOMTraceContext(cfg)
+    assert not hasattr(policy, "_actor_backbone_verification")
+    verifier.assert_not_called()

@@ -63,7 +63,6 @@ class SRSLM:
             seed=int(cfg.seed or 0),
             device=str(cfg.device),
         )
-        self.candidate.verify_frozen()
         planner = planner_factory(
             max_steps=cfg.max_planning_steps,
             seed=cfg.seed,

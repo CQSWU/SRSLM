@@ -6,8 +6,8 @@ from pydantic import Extra, Field
 from agents.reverse_metrics import ExecutedPositionReverseCounter
 from agents.utils_agents import AlgoBase
 
-#: execution models this project has audited end to end
-AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
+#: execution models supported by POGEMA
+SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
 from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper
 
 
@@ -83,11 +83,11 @@ class AORePlan:
 
     def set_grid_config(self, grid_config):
         collision_system = getattr(grid_config, "collision_system", None)
-        if collision_system not in AUDITED_COLLISION_SYSTEMS:
+        if collision_system not in SUPPORTED_COLLISION_SYSTEMS:
             raise ValueError(
-                "AORePlan runs only under an audited execution model; "
-                f"received collision_system={collision_system!r}, audited "
-                f"{AUDITED_COLLISION_SYSTEMS}."
+                "AORePlan requires a supported collision system; "
+                f"received collision_system={collision_system!r}, supported "
+                f"{SUPPORTED_COLLISION_SYSTEMS}."
             )
 
     @property

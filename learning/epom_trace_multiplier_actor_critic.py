@@ -8,6 +8,7 @@ residual. Stored tie rankings are routing metadata, never neural inputs.
 
 from __future__ import annotations
 
+import math
 import torch
 from sample_factory.algo.utils.action_distributions import get_action_distribution
 from sample_factory.algo.utils.tensor_dict import TensorDict
@@ -188,17 +189,11 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         )
         self.core_out_size = int(self.core.get_out_size())
         self.trace_rho = float(environment.get("tau_rho", 0.1))
-        if self.trace_rho != 0.1:
-            raise ValueError("Paper ARPE fixes tau_rho=0.1 for reproducibility.")
         self.rule_scale = float(settings.get("trace_rule_scale", 1.0))
         self.entropy_threshold = float(
             settings.get("trace_gate_threshold", PRIMAL3_ENTROPY_THRESHOLD)
         )
         self.checkpoint_entropy_threshold = self.entropy_threshold
-        if self.entropy_threshold != PRIMAL3_ENTROPY_THRESHOLD:
-            raise ValueError("ARPE requires the checkpoint's fixed entropy threshold.")
-        if self.rule_scale not in (0.0, 1.0):
-            raise ValueError("Direct bonus must be one, or zero for the no-Direct control.")
         self.learned_gate_mode = str(
             settings.get("trace_context_learned_gate", "entropy")
         )
@@ -286,7 +281,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         threshold = state_dict.get(prefix + "fixed_entropy_threshold")
         if (not isinstance(threshold, torch.Tensor) or threshold.numel() != 1
                 or threshold.dtype != torch.float64
-                or float(threshold.item()) != PRIMAL3_ENTROPY_THRESHOLD):
+                or float(threshold.item()) != self.entropy_threshold):
             errors.append("ARPE checkpoint has an incompatible fixed entropy threshold")
         if prefix + "fixed_gap_threshold" in state_dict:
             errors.append("A gap-gated checkpoint is not the retained entropy-gated ARPE")
@@ -444,6 +439,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
         tie_ranks: torch.Tensor,
         *,
         direct_bonus: float = 1.0,
+        entropy_threshold: float = PRIMAL3_ENTROPY_THRESHOLD,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Apply the configured Direct bonus and bounded, centred residual."""
 
@@ -455,11 +451,13 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
             raise ValueError(
                 "base_logits and raw_correction must both have shape [B,5]."
             )
-        if direct_bonus not in (0.0, 1.0):
-            raise ValueError("direct_bonus must be zero or one")
+        if not math.isfinite(direct_bonus) or direct_bonus < 0:
+            raise ValueError("direct_bonus must be finite and non-negative")
+        if not math.isfinite(entropy_threshold) or entropy_threshold < 0:
+            raise ValueError("entropy_threshold must be finite and non-negative")
         base_logits = base_logits.detach()
         entropy = cls._base_entropy(base_logits)
-        gate = (entropy > PRIMAL3_ENTROPY_THRESHOLD).to(
+        gate = (entropy > entropy_threshold).to(
             base_logits.dtype
         ).unsqueeze(-1)
         residual = bounded_centered_residual(raw_correction)
@@ -486,6 +484,7 @@ class EPOMTraceMultiplierActorCritic(EPOMTraceContextActorCritic):
             return self.apply_paper_entropy_correction_rule(
                 base_logits, raw_correction, pressure, legal, tie_ranks,
                 direct_bonus=self.rule_scale,
+                entropy_threshold=getattr(self, "entropy_threshold", PRIMAL3_ENTROPY_THRESHOLD),
             )
         base_logits = base_logits.detach()
         entropy = self._base_entropy(base_logits)

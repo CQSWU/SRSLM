@@ -37,7 +37,9 @@ uv run python run_experiments.py \
 For learned methods, place the separately supplied `weights/` directory in
 the project root. Current settings are listed in
 [CURRENT_VERSION.md](CURRENT_VERSION.md).
-Custom compatible weights are supported; recorded hashes do not restrict loading.
+Use your own compatible weights by editing the paths in
+`configs/arpe_final_candidate.json` and setting `--switcher-weights-path`.
+No hash registration or audit manifest is required.
 
 ## Training
 
@@ -57,6 +59,8 @@ uv run python train_switcher.py --config_path learning/train_switcher.yaml
 
 Training maps are listed in `maps/train.yaml`, and evaluation maps are listed
 in `maps/test.yaml`.
+Training YAMLs are editable examples: choose your own maps, agent counts,
+workers and PPO settings for your hardware.
 
 ## Documentation
 

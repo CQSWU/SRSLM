@@ -19,13 +19,11 @@ class AllStateArpeSwitcherConfig(SwitcherConfig, extra=Extra.forbid):
 
 
 class AllStateArpeSwitcher(Switcher):
-    """Load a feed-forward all-state Switcher and reproduce its ARPE pin."""
+    """Load a feed-forward all-state Switcher with optional ARPE paths."""
 
     expected_encoder_custom = "switcher_all_state"
     allow_aoreplan_wait = True
     policy_label = "all-state ARPE Switcher"
-
-    require_candidate_policy = True
 
     def __init__(self, cfg: AllStateArpeSwitcherConfig):
         super().__init__(cfg)

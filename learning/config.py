@@ -7,9 +7,6 @@ from pydantic import BaseModel, Extra, Field, root_validator, validator
 
 from pomapf_env.pomapf_config import POMAPFConfig
 
-# Both protocols are explicitly supported; saved configs still select one.
-AUDITED_COLLISION_SYSTEMS = ('block_both', 'soft')
-
 # Immutable checkpoint JSONs contain these former defaults. Drop them only
 # when reading saved checkpoints; new YAMLs still reject unused fields.
 OBSOLETE_SAVED_SETTINGS = frozenset({
@@ -227,7 +224,7 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
 
     epom_base_weights_path: str = 'weights/EPOM/EPOM'
 
-    # Direct bonus: one for ARPE, zero for the no-Direct training control.
+    # Direct bonus; zero disables it.
     trace_rule_scale: float = Field(1.0, ge=0.0)
     trace_gate_threshold: float = Field(0.46371241)
 
@@ -400,26 +397,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 )
             if grid.obs_radius != 5:
                 raise ValueError('EPOM fine-tuning requires obs_radius=5.')
-            if grid.max_episode_steps != 512:
-                raise ValueError(
-                    'EPOM fine-tuning requires max_episode_steps=512.'
-                )
-            if grid.num_agents != 200:
-                raise ValueError('EPOM fine-tuning requires num_agents=200.')
-            if grid.on_target != 'restart':
-                raise ValueError(
-                    "EPOM fine-tuning requires on_target='restart'."
-                )
-            if grid.collision_system not in AUDITED_COLLISION_SYSTEMS:
-                raise ValueError(
-                    'EPOM fine-tuning runs only under an audited execution '
-                    f'model; received {grid.collision_system!r}, audited '
-                    f'{AUDITED_COLLISION_SYSTEMS}.'
-                )
-            if str(grid.map_name).replace('\\', '/') != 'maps/train.yaml':
-                raise ValueError(
-                    "EPOM fine-tuning requires map_name='maps/train.yaml'."
-                )
             if settings.normalize_input:
                 raise ValueError(
                     'EPOM fine-tuning must set normalize_input=false because '
@@ -440,46 +417,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError('Official EPOM requires its recurrent policy.')
             if async_ppo.rnn_type != 'gru' or async_ppo.rnn_num_layers != 1:
                 raise ValueError('Official EPOM requires a single-layer GRU.')
-            if async_ppo.recurrence != 32 or async_ppo.rollout != 32:
-                raise ValueError(
-                    'EPOM fine-tuning keeps the official rollout/recurrence of 32.'
-                )
-            official_ppo = {
-                'batch_size': (async_ppo.batch_size, 4096),
-                'num_envs_per_worker': (async_ppo.num_envs_per_worker, 2),
-                'num_epochs': (async_ppo.num_epochs, 1),
-                'max_grad_norm': (async_ppo.max_grad_norm, 5.0),
-                'with_vtrace': (async_ppo.with_vtrace, False),
-                'max_policy_lag': (async_ppo.max_policy_lag, 100),
-                'exploration_loss_coeff': (
-                    async_ppo.exploration_loss_coeff,
-                    0.01,
-                ),
-                'value_loss_coeff': (async_ppo.value_loss_coeff, 0.5),
-                'ppo_clip_ratio': (async_ppo.ppo_clip_ratio, 0.1),
-                'gae_lambda': (async_ppo.gae_lambda, 0.95),
-                'adam_eps': (async_ppo.adam_eps, 1e-6),
-                'adam_beta1': (async_ppo.adam_beta1, 0.9),
-                'adam_beta2': (async_ppo.adam_beta2, 0.999),
-            }
-            mismatched_ppo = {
-                key: {'fine_tune': actual, 'official': expected}
-                for key, (actual, expected) in official_ppo.items()
-                if actual != expected
-            }
-            if mismatched_ppo:
-                raise ValueError(
-                    'EPOM fine-tuning PPO settings differ from official v0: '
-                    f'{mismatched_ppo}'
-                )
-            if settings.learning_rate != 1e-4:
-                raise ValueError(
-                    'EPOM fine-tuning keeps the official learning_rate=1e-4.'
-                )
-            if settings.gamma != 0.99:
-                raise ValueError('EPOM fine-tuning keeps the official gamma=0.99.')
-            if settings.lr_schedule != 'constant':
-                raise ValueError('EPOM fine-tuning requires a constant LR schedule.')
             return values
 
         if settings.encoder_custom == 'epom_trace_context':
@@ -516,36 +453,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                 raise ValueError(
                     'EPOM trace-context training requires obs_radius=5.'
                 )
-            if grid.max_episode_steps != 512:
-                raise ValueError(
-                    'EPOM trace-context training requires max_episode_steps=512.'
-                )
-            if grid.num_agents != 200:
-                raise ValueError(
-                    'EPOM trace-context training requires baseline '
-                    'num_agents=200.'
-                )
-            if grid.on_target != 'restart':
-                raise ValueError(
-                    "EPOM trace-context training requires on_target='restart'."
-                )
-            if grid.collision_system not in AUDITED_COLLISION_SYSTEMS:
-                raise ValueError(
-                    'EPOM trace-context training runs only under an audited '
-                    f'execution model; received {grid.collision_system!r}, '
-                    f'audited {AUDITED_COLLISION_SYSTEMS}.'
-                )
-            if settings.trace_gate_threshold != 0.46371241:
-                raise ValueError('Paper ARPE fixes trace_gate_threshold=0.46371241.')
-            if settings.trace_rule_scale not in (0.0, 1.0):
-                raise ValueError('trace_rule_scale is 1.0 for ARPE or 0.0 for the no-Direct control.')
-            expected_map_name = 'maps/train.yaml'
-            if str(grid.map_name).replace('\\', '/') != expected_map_name:
-                raise ValueError(
-                    'EPOM trace-context architecture '
-                    f'{settings.trace_context_architecture!r} requires '
-                    f'map_name={expected_map_name!r}.'
-                )
             if settings.normalize_input:
                 raise ValueError(
                     'EPOM trace-context training requires normalize_input=false '
@@ -568,77 +475,10 @@ class Experiment(BaseModel, extra=Extra.forbid):
             async_ppo = values.get('async_ppo')
             if async_ppo is None or not async_ppo.use_rnn:
                 raise ValueError('Official EPOM requires its recurrent policy.')
-            training_populations = (
-                environment.training_num_agents_by_worker
-            )
-            if training_populations is not None:
-                allowed_populations = {100, 200, 300, 400, 500, 600}
-                invalid_populations = sorted(
-                    set(training_populations) - allowed_populations
-                )
-                if invalid_populations:
-                    raise ValueError(
-                        'EPOM trace-context training_num_agents_by_worker '
-                        'values must come from '
-                        '{100, 200, 300, 400, 500, 600}; got '
-                        f'{invalid_populations}.'
-                    )
-                if len(training_populations) != async_ppo.num_workers:
-                    raise ValueError(
-                        'EPOM trace-context '
-                        'training_num_agents_by_worker length must equal '
-                        'async_ppo.num_workers; got '
-                        f'{len(training_populations)} and '
-                        f'{async_ppo.num_workers}.'
-                    )
             if async_ppo.rnn_type != 'gru' or async_ppo.rnn_num_layers != 1:
                 raise ValueError('Official EPOM requires a single-layer GRU.')
-            if async_ppo.recurrence != 32 or async_ppo.rollout != 32:
-                raise ValueError(
-                    'EPOM trace-context training keeps rollout/recurrence=32.'
-                )
-            epom_l_ppo = {
-                'batch_size': (async_ppo.batch_size, 4096),
-                'num_envs_per_worker': (async_ppo.num_envs_per_worker, 2),
-                'num_epochs': (async_ppo.num_epochs, 1),
-                'max_grad_norm': (async_ppo.max_grad_norm, 5.0),
-                'with_vtrace': (async_ppo.with_vtrace, False),
-                'max_policy_lag': (async_ppo.max_policy_lag, 100),
-                'exploration_loss_coeff': (
-                    async_ppo.exploration_loss_coeff,
-                    0.0,
-                ),
-                'value_loss_coeff': (async_ppo.value_loss_coeff, 0.5),
-                'ppo_clip_ratio': (async_ppo.ppo_clip_ratio, 0.1),
-                'gae_lambda': (async_ppo.gae_lambda, 0.95),
-                'adam_eps': (async_ppo.adam_eps, 1e-6),
-                'adam_beta1': (async_ppo.adam_beta1, 0.9),
-                'adam_beta2': (async_ppo.adam_beta2, 0.999),
-            }
-            mismatched_ppo = {
-                key: {'trace_context': actual, 'epom_l': expected}
-                for key, (actual, expected) in epom_l_ppo.items()
-                if actual != expected
-            }
-            if mismatched_ppo:
-                raise ValueError(
-                    'EPOM trace-context PPO settings differ from the selected ARPE recipe: '
-                    f'{mismatched_ppo}'
-                )
-            if async_ppo.num_workers > 12:
-                raise ValueError(
-                    'EPOM trace-context training exceeds the 12-worker cap.'
-                )
             if not np.isfinite(settings.learning_rate) or settings.learning_rate <= 0:
                 raise ValueError('ARPE learning_rate must be finite and positive.')
-            if settings.gamma != 0.99:
-                raise ValueError(
-                    'EPOM trace-context training requires gamma=0.99.'
-                )
-            if settings.lr_schedule != 'constant':
-                raise ValueError(
-                    'EPOM trace-context training requires a constant LR schedule.'
-                )
             return values
 
         if settings.encoder_custom in ('switcher', 'switcher_all_state'):
@@ -652,13 +492,6 @@ class Experiment(BaseModel, extra=Extra.forbid):
                     "Switcher training requires "
                     "environment.name in "
                     f"{sorted(expected_environments)!r}."
-                )
-            if environment.grid_config.collision_system not in AUDITED_COLLISION_SYSTEMS:
-                raise ValueError(
-                    'Switcher training runs only under an audited execution '
-                    f'model; received '
-                    f'{environment.grid_config.collision_system!r}, audited '
-                    f'{AUDITED_COLLISION_SYSTEMS}.'
                 )
             if environment.switcher_feature_schema != 'srslm_switcher_state_v3':
                 raise ValueError('Unsupported Switcher state schema.')

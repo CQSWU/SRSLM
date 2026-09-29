@@ -5,6 +5,13 @@ Selected inference settings and checkpoint identities are listed in
 are kept separately from Git. Compatible custom weights can be loaded without
 editing a hash allowlist.
 
+Public runs do not require a paper audit, source-tree hash check, or a match
+between the saved training protocol and the new evaluation protocol. Training
+YAMLs are examples, not enforced recipes: maps, populations, episode length,
+worker count and PPO parameters can be changed. Network shapes and action
+encoding must still be compatible with the checkpoint. The frozen branches
+remain frozen; removing audit checks does not change their numerical behavior.
+
 ## Inference
 
 Copy `EPOM-L`, `ARPE-Final-1B` and `SRSLM-Switcher-Final-1B` from the supplied

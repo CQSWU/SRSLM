@@ -114,16 +114,6 @@ class EPOMTraceContext(PolicyBackbone):
             self.cfg.full_config["environment"]["grid_memory_obs_radius"]
         )
         self.grid_memory = MultipleGridMemory()
-        verifier = getattr(self.ppo, "verify_frozen_actor_backbone", None)
-        if not callable(verifier):
-            raise RuntimeError(
-                "EPOM-TraceContext actor-critic does not expose the required "
-                "frozen-backbone verification hook."
-            )
-        # ``super().__init__`` has already loaded the complete learned
-        # checkpoint.  Compare it now with the digest captured immediately
-        # after the external EPOM-L checkpoint was loaded by the model.
-        verifier()
         self._trace_contract = _validate_r5_trace_contract(self.saved_config["full_config"])
         self._trace_variant = TraceVariant(
             self._trace_contract["trace_variant"]

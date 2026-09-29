@@ -1,4 +1,4 @@
-name: Policy and reproducibility contracts
+name: Tests
 
 on: [push, pull_request]
 

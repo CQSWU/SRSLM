@@ -49,7 +49,6 @@ def _frozen_candidate(cfg, project_root: Path, factory: Callable):
         seed=int(cfg.seed or 0),
         device=str(cfg.candidate.device),
     )
-    candidate.verify_frozen()
     return candidate
 
 

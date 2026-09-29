@@ -1,4 +1,4 @@
-"""Switcher environments backed by one strictly pinned ARPE milestone."""
+"""Switcher environments using a frozen ARPE policy."""
 
 from __future__ import annotations
 
@@ -67,8 +67,8 @@ def switcher_observation_space() -> gym.spaces.Dict:
     )
 
 
-#: execution models this project has audited end to end
-AUDITED_COLLISION_SYSTEMS = ("block_both", "soft")
+#: execution models supported by POGEMA
+SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
 
 class ArpeSwitcherEnv(SwitcherEnv):
     """Keep the established Switcher reward/state and replace branch zero."""
@@ -95,11 +95,11 @@ class ArpeSwitcherEnv(SwitcherEnv):
         if feature_schema != SWITCHER_FEATURE_SCHEMA:
             raise ValueError(f"Unsupported Switcher feature schema {feature_schema!r}.")
         collision_system = getattr(grid_config, "collision_system", None)
-        if collision_system not in AUDITED_COLLISION_SYSTEMS:
+        if collision_system not in SUPPORTED_COLLISION_SYSTEMS:
             raise ValueError(
-                "Switcher training runs only under an audited execution "
-                f"model; received {collision_system!r}, audited "
-                f"{AUDITED_COLLISION_SYSTEMS}."
+                "Switcher training requires a supported collision "
+                f"system; received {collision_system!r}, supported "
+                f"{SUPPORTED_COLLISION_SYSTEMS}."
             )
         if not np.isfinite(team_reward_coefficient):
             raise ValueError("team_reward_coefficient must be finite.")
@@ -112,9 +112,6 @@ class ArpeSwitcherEnv(SwitcherEnv):
             seed=int(grid_config.seed or 0),
             device=str(candidate_device),
         )
-        verification = candidate.verify_frozen()
-        if verification.get("verified") is not True:
-            raise RuntimeError("The frozen ARPE candidate failed verification.")
         planner = planner_factory(
             max_steps=int(max_planning_steps), seed=int(grid_config.seed or 0)
         )
@@ -122,7 +119,6 @@ class ArpeSwitcherEnv(SwitcherEnv):
         self.candidate = candidate
         self.candidate_artifact = candidate_artifact
         self.candidate_label = ARPE_CANDIDATE_LABEL
-        self.candidate_provenance = candidate.get_model_provenance()
         self.team_reward_coefficient = float(team_reward_coefficient)
         self.feature_schema = feature_schema
         self.observation_space = switcher_observation_space()
@@ -132,10 +128,7 @@ class ArpeSwitcherEnv(SwitcherEnv):
         self._prepared = None
 
     def get_candidate_provenance(self) -> dict[str, object]:
-        current = self.candidate.get_model_provenance()
-        if current != self.candidate_provenance:
-            raise RuntimeError("Frozen ARPE provenance changed at runtime.")
-        return deepcopy(current)
+        return deepcopy(self.candidate.get_model_provenance())
 
 
 class ArpeNoWaitSwitcherEnv(ArpeSwitcherEnv):

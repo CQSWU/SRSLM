@@ -3,6 +3,10 @@
 Updated 2026-09-29. Current SRSLM uses only the wait rule. Previously completed
 two-rule experiments are recorded separately below; their results are unchanged.
 
+2026-09-30: removed mandatory paper-audit checks and fixed training-recipe
+restrictions from public entry points. Recorded hashes remain informational.
+Default weights, inference settings and the wait-only rule are unchanged.
+
 ## Selected inference settings
 
 - AORePlan uses the accumulated observed static map, reverse detection, local

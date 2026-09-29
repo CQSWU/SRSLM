@@ -49,7 +49,7 @@ def _artifact_path(project_root: Path, value: object, field: str) -> tuple[str, 
 
 @dataclass(frozen=True)
 class ArpeCandidateArtifact:
-    """Immutable identity of the ARPE policy used as Switcher branch zero."""
+    """Paths and inference settings for Switcher branch zero."""
 
     project_root: Path
     weights_relative: str
@@ -183,16 +183,9 @@ class ARPE:
         self,
         policy: EPOMTraceContext,
         artifact: ArpeCandidateArtifact,
-        *,
-        verified_file_hashes: Mapping[str, str] | None = None,
     ):
         self.policy = policy
         self.artifact = artifact
-        self._verified_file_hashes = dict(
-            verified_file_hashes
-            if verified_file_hashes is not None
-            else artifact.inspect_files()
-        )
         self.ppo.eval()
         for parameter in self.ppo.parameters():
             parameter.requires_grad_(False)
@@ -208,7 +201,6 @@ class ARPE:
         device: str,
         action_sampling: Literal["torch", "direct_numpy"] | None = None,
     ) -> "ARPE":
-        verified = artifact.inspect_files()
         if action_sampling is None:
             action_sampling = artifact.inference.action_sampling if artifact.inference else "torch"
         policy = EPOMTraceContext(
@@ -223,7 +215,7 @@ class ARPE:
                 base_checkpoint_path=str(artifact.base_checkpoint_path),
             )
         )
-        return cls(policy, artifact, verified_file_hashes=verified)
+        return cls(policy, artifact)
 
     @property
     def ppo(self):
@@ -232,24 +224,6 @@ class ARPE:
     @property
     def device(self):
         return self.policy.device
-
-    def verify_frozen(self, *, rehash_files: bool = False) -> dict[str, object]:
-        if rehash_files:
-            self._verified_file_hashes = self.artifact.inspect_files()
-        trainable = [
-            name
-            for name, parameter in self.ppo.named_parameters()
-            if parameter.requires_grad
-        ]
-        if trainable:
-            raise RuntimeError(f"Frozen ARPE exposes trainable parameters: {trainable}")
-        if self.ppo.training:
-            raise RuntimeError("Frozen ARPE was switched to training mode.")
-        return {
-            "verified": True,
-            "trainable_parameter_count": 0,
-            "file_sha256": deepcopy(self._verified_file_hashes),
-        }
 
     def set_grid_config(self, grid_config) -> None:
         self.policy.set_grid_config(grid_config)
@@ -274,7 +248,6 @@ class ARPE:
         return {
             "schema": ARPE_CANDIDATE_SCHEMA,
             "candidate": deepcopy(self.artifact.as_dict()),
-            "frozen_verification": self.verify_frozen(),
             "underlying": deepcopy(self.policy.get_model_provenance()),
         }
 

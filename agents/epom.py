@@ -105,11 +105,6 @@ def _architecture_mismatches(
 def _validate_official_config(full_config):
     """Reject a similarly named checkpoint with a different EPOM network."""
     mismatches = _architecture_mismatches(full_config)
-    if full_config.get("name") != "pomapf-grid-memory-multiagent-full-v2":
-        mismatches["experiment name"] = {
-            "actual": full_config.get("name"),
-            "expected": "pomapf-grid-memory-multiagent-full-v2",
-        }
     if mismatches:
         raise RuntimeError(
             "EPOM config does not describe the official v0 network: "
@@ -118,36 +113,18 @@ def _validate_official_config(full_config):
 
 
 def _validate_lifelong_finetuned_config(full_config):
-    """Require the official EPOM structure and the paper's lifelong protocol."""
+    """Check network compatibility without fixing the training protocol."""
     mismatches = _architecture_mismatches(
         full_config,
         expected_encoder_custom="epom_finetune",
     )
-    environment = full_config["environment"]
-    grid_config = environment["grid_config"]
-    expected_protocol = {
-        "on-target rule": (grid_config.get("on_target"), "restart"),
-        "collision system": (
-            grid_config.get("collision_system"),
-            "block_both",
-        ),
-        "episode horizon": (grid_config.get("max_episode_steps"), 512),
-        "action order": (
-            grid_config.get("MOVES"),
-            [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]],
-        ),
-    }
-    mismatches.update(
-        {
-            name: {"actual": actual, "expected": wanted}
-            for name, (actual, wanted) in expected_protocol.items()
-            if actual != wanted
-        }
-    )
+    moves = full_config["environment"]["grid_config"].get("MOVES")
+    if moves is not None and moves != [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]:
+        raise ValueError("EPOM expects action order: wait, up, down, left, right.")
     if mismatches:
         raise RuntimeError(
-            "EPOM lifelong_finetuned config is incompatible with the audited "
-            f"network/protocol: {mismatches}"
+            "EPOM lifelong_finetuned config has an incompatible "
+            f"network: {mismatches}"
         )
 
 

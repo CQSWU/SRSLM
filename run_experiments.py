@@ -96,80 +96,6 @@ def canonical_algorithm_name(value):
     return ALGORITHM_ALIASES.get(value.strip().lower())
 
 
-def epom_lifelong_result_manifest(results, algorithms):
-    """Pin the one EPOM-L artifact shared by all lifelong hybrid rows."""
-    selected = sorted(
-        set(algorithms)
-        & {
-            "EPOM-Lifelong-FT",
-        }
-    )
-    if not selected:
-        return None
-    error_rows = [
-        row for row in results if row.get("algorithm") in selected and row.get("error")
-    ]
-    if error_rows:
-        return {
-            "validated": False,
-            "algorithms": selected,
-            "error_rows": len(error_rows),
-            "shared_artifact": None,
-        }
-
-    manifests = []
-    rows_by_algorithm = {algorithm: 0 for algorithm in selected}
-    for row in results:
-        algorithm = row.get("algorithm")
-        if algorithm not in rows_by_algorithm or row.get("error"):
-            continue
-        rows_by_algorithm[algorithm] += 1
-        epom = row.get("model_provenance") or {}
-        if epom.get("artifact_profile") != "lifelong_finetuned":
-            raise RuntimeError(
-                f"{algorithm} row is missing lifelong_finetuned EPOM provenance"
-            )
-        manifests.append(
-            {
-                key: epom.get(key)
-                for key in (
-                    "artifact_profile",
-                    "weights_path",
-                    "config_path",
-                    "config_sha256",
-                    "checkpoint_path",
-                    "checkpoint_name",
-                    "checkpoint_size",
-                    "checkpoint_sha256",
-                    "selection_rule",
-                    "training_protocol",
-                    "source_encoder_custom",
-                    "inference_encoder_custom",
-                )
-            }
-        )
-
-    missing = [
-        algorithm for algorithm, count in rows_by_algorithm.items() if count == 0
-    ]
-    if missing:
-        raise RuntimeError(
-            "No successful rows were available for EPOM-L manifest: "
-            + ", ".join(missing)
-        )
-    unique = {json.dumps(item, sort_keys=True) for item in manifests}
-    if len(unique) != 1:
-        raise RuntimeError(
-            "Lifelong hybrids did not use one identical EPOM-L artifact."
-        )
-    return {
-        "validated": True,
-        "algorithms": selected,
-        "shared_artifact": json.loads(next(iter(unique))),
-        "rows_by_algorithm": rows_by_algorithm,
-    }
-
-
 def srslm_contract_metadata(algorithms, collision_system="block_both"):
     """Describe the wait-only bypass and learned Switcher."""
     if "SRSLM" not in algorithms:
@@ -245,14 +171,6 @@ def _find_epom_lifelong_weights(main_dir):
         "The historical weights/EPOM-lifelong-finetune-r5/"
         "EPOM-Lifelong-Finetune-R5 layout is also supported."
     )
-
-
-def _sha256_file(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def runtime_provenance():
@@ -443,91 +361,6 @@ def cache_algorithm_metadata(algorithms, requested):
         "requested": requested,
         "effective_by_algorithm": effective_by_algorithm,
         "exceptions": exceptions,
-    }
-
-
-def srslm_integrity_metadata(
-    args,
-    map_list_sha256=None,
-    map_registry_sha256=None,
-):
-    """Hash the two frozen branches, Switcher, and current routing code."""
-
-    root = Path(args.main_dir).resolve()
-    code_root = Path(__file__).resolve().parent
-    switcher_weights = _project_path(
-        root,
-        args.switcher_weights_path or _find_switcher_weights(root),
-    )
-    # The frozen Switcher retains its training-candidate declaration. The
-    # explicit deployment manifest identifies the inference candidate instead.
-    serialized = json.loads(
-        (switcher_weights / "config.json").read_text(encoding="utf-8")
-    )
-    full_config = serialized.get("full_config", serialized)
-    from agents.switcher import Switcher
-
-    artifact = _load_arpe_candidate_artifact(root, getattr(args, "arpe_candidate_manifest", None))
-    arpe_weights = artifact.weights_path
-    arpe_checkpoint = artifact.checkpoint_path
-    switcher_checkpoint = Switcher._resolve_checkpoint(
-        switcher_weights / "checkpoint_p0", "auto"
-    )
-    files = {
-        "caar_config": arpe_weights / "config.json",
-        "caar_checkpoint": arpe_checkpoint,
-        "base_config": artifact.base_config_path,
-        "base_checkpoint": artifact.base_checkpoint_path,
-        "switcher_config": switcher_weights / "config.json",
-        "switcher_checkpoint": switcher_checkpoint,
-        "run_experiments.py": code_root / "run_experiments.py",
-        "agents/policy_backbone.py": code_root / "agents/policy_backbone.py",
-        "agents/epom_trace_context.py": code_root / "agents/epom_trace_context.py",
-        "agents/arpe.py": code_root / "agents/arpe.py",
-        "learning/epom_trace_context_actor_critic.py": code_root
-        / "learning/epom_trace_context_actor_critic.py",
-        "learning/epom_trace_multiplier_actor_critic.py": code_root
-        / "learning/epom_trace_multiplier_actor_critic.py",
-        "learning/inference_correction.py": code_root / "learning/inference_correction.py",
-        "agents/srslm.py": code_root / "agents/srslm.py",
-        "agents/switcher.py": code_root / "agents/switcher.py",
-        "agents/switcher_core.py": code_root / "agents/switcher_core.py",
-        "agents/reverse_metrics.py": code_root / "agents/reverse_metrics.py",
-        "learning/encoder.py": code_root / "learning/encoder.py",
-        "learning/switcher_actor_critic.py": (
-            code_root / "learning/switcher_actor_critic.py"
-        ),
-        "planning/ao_replan_algo.py": code_root / "planning/ao_replan_algo.py",
-        "planning/aoreplan_branch.py": (code_root / "planning/aoreplan_branch.py"),
-        "pomapf_env/switcher_env.py": code_root / "pomapf_env/switcher_env.py",
-    }
-    if getattr(args, "map_list", None):
-        files["map_list"] = _project_path(root, args.map_list)
-        files["map_registry"] = _project_path(root, "maps/test.yaml")
-    missing = [f"{label}={path}" for label, path in files.items() if not path.is_file()]
-    if missing:
-        raise FileNotFoundError(
-            "Cannot create SRSLM integrity metadata; missing " + ", ".join(missing)
-        )
-    hashes = {label: _sha256_file(path) for label, path in files.items()}
-    aggregate = hashlib.sha256(
-        json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    return {
-        "strategy_kind": "hybrid_switching",
-        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
-        "switcher_training_candidate": full_config.get("candidate_policy"),
-        "inference_candidate": artifact.as_dict(),
-        "arpe_weights_path": str(arpe_weights),
-        "switcher_weights_path": str(switcher_weights),
-        "caar_checkpoint_sha256": hashes["caar_checkpoint"],
-        "switcher_checkpoint_sha256": hashes["switcher_checkpoint"],
-        "artifact_sha256": hashes,
-        "aggregate_sha256": aggregate,
-        "map_list_sha256": (
-            map_list_sha256 if map_list_sha256 is not None else hashes.get("map_list")
-        ),
-        "map_registry_sha256": map_registry_sha256,
     }
 
 
@@ -735,260 +568,6 @@ def build_algorithm(
         )
 
     raise ValueError(f"Unsupported algorithm: {algo_name}")
-
-
-def validate_srslm_stats(stats):
-    """Reject an SRSLM episode that violates the fixed routing contract."""
-
-    required = (
-        "hybrid_mode",
-        "switch_pair",
-        "switcher_training",
-        "value_predictor_loaded",
-        "switcher_feature_schema",
-        "selector_kind",
-        "switcher_decision_scope",
-        "joint_conflict_prediction_enabled",
-        "total_action_count",
-        "switcher_choice_count",
-        "switcher_model_choice_count",
-        "selected_ao_count",
-        "switcher_model_selected_ao_count",
-        "executed_ao_count",
-        "executed_caar_count",
-        "aoreplan_wait_bypass_count",
-        "branch_action_agreement_count",
-        "static_astar_query_count",
-        "aoreplan_commit_count",
-        "switcher_checkpoint_sha256",
-        "switcher_stochastic",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError("SRSLM diagnostics are incomplete: " + ", ".join(missing))
-
-    total = int(stats["total_action_count"])
-    choices = int(stats["switcher_choice_count"])
-    bypasses = int(stats["aoreplan_wait_bypass_count"])
-    selected_ao = int(stats["selected_ao_count"])
-    executed_ao = int(stats["executed_ao_count"])
-    executed_arpe = int(stats["executed_caar_count"])
-    violations = []
-    if stats["hybrid_mode"] != "aoreplan_wait_bypass_switcher_v3":
-        violations.append("hybrid mode differs from the fixed SRSLM policy")
-    # Historical evidence retains CAAR; only its display identity changed.
-    if stats["switch_pair"] not in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]):
-        violations.append("branch names are not ARPE/AORePlan")
-    if stats["switcher_training"] != "PPO":
-        violations.append("Switcher training method is not PPO")
-    if stats["value_predictor_loaded"] is not False:
-        violations.append("a retired value predictor was loaded")
-    if stats["switcher_feature_schema"] != "srslm_switcher_state_v3":
-        violations.append("Switcher state schema differs")
-    if stats["selector_kind"] != "ppo_two_branch_categorical":
-        violations.append("Switcher is not a two-branch categorical policy")
-    if stats["switcher_decision_scope"] != "aoreplan_nonwait_only":
-        violations.append("Switcher received states outside AORePlan moves")
-    if stats["joint_conflict_prediction_enabled"] is not False:
-        violations.append("retired joint-conflict prediction is active")
-    if choices + bypasses != total:
-        violations.append("Switcher choices and rule bypasses do not sum")
-    if executed_ao + executed_arpe != total:
-        violations.append("executed branch counts do not sum")
-    if selected_ao != executed_ao or selected_ao > choices:
-        violations.append("selected and executed AORePlan counts disagree")
-    if int(stats["switcher_model_choice_count"]) != choices:
-        violations.append("Switcher model and router choice counts disagree")
-    if int(stats["switcher_model_selected_ao_count"]) != selected_ao:
-        violations.append("Switcher model and router AO counts disagree")
-    if int(stats["aoreplan_commit_count"]) > total:
-        violations.append("AORePlan commit count exceeds total actions")
-    if int(stats["branch_action_agreement_count"]) > total:
-        violations.append("branch agreement count exceeds total actions")
-    digest = str(stats["switcher_checkpoint_sha256"])
-    if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
-        violations.append("Switcher checkpoint SHA256 is invalid")
-    if stats["switcher_stochastic"] is not True:
-        violations.append("Switcher evaluation is not stochastic")
-    for key in (
-        "switcher_choice_rate",
-        "selected_ao_rate",
-        "executed_ao_rate",
-        "aoreplan_wait_bypass_rate",
-        "branch_action_agreement_rate",
-        "switcher_sampled_ao_rate",
-        "switcher_ao_probability_mean",
-        "switcher_ao_probability_p05",
-        "switcher_ao_probability_p95",
-    ):
-        value = stats.get(key)
-        if value is None or not np.isfinite(value) or not 0.0 <= value <= 1.0:
-            violations.append(f"{key} is not a probability")
-    if violations:
-        raise RuntimeError("SRSLM contract failed: " + "; ".join(violations))
-
-
-def validate_final_srslm_ablation_stats(algorithm, stats):
-    """Validate the two retained ablations that share one ARPE candidate."""
-
-    if algorithm in {"SRSLM-NoRule", "SRSLM-OnlyRule"}:
-        total = int(stats["total_action_count"])
-        choices = int(stats["switcher_choice_count"])
-        arpe = int(stats["executed_caar_count"])
-        ao = int(stats["executed_ao_count"])
-        waits = int(stats["aoreplan_wait_bypass_count"])
-        if total <= 0 or min(choices, arpe, ao, waits) < 0 or arpe + ao != total:
-            raise RuntimeError("Rule-ablation branch counts are inconsistent.")
-        if algorithm == "SRSLM-NoRule":
-            if (choices != total or waits or stats["wait_detection_enabled"]
-                    or stats["switcher_model_choice_count"] != choices
-                    or stats.get("switcher_weight_source_algorithm") != "SRSLM"):
-                raise RuntimeError("NoRule must use the final Switcher on every state.")
-        elif (choices or stats["switcher_model_choice_count"] or arpe != waits
-              or not stats["wait_detection_enabled"]
-              or stats["learned_switcher_called"]):
-            raise RuntimeError("OnlyRule must use only the wait rule without a learned Switcher.")
-        return
-
-    from agents.switcher_arpe import ARPE_SWITCHER_LOADER_SCHEMA
-    from agents.arpe import ARPE_CANDIDATE_SCHEMA
-    from agents.switcher_core import SWITCHER_FEATURE_SCHEMA
-
-    expected_modes = {
-        "SRSLM-NoWait": "all_state_switcher_caar",
-        "SRSLM-OnlyWait": "aoreplan_wait_detect_only_caar",
-    }
-    if algorithm not in expected_modes:
-        raise ValueError(f"Unknown final SRSLM ablation {algorithm!r}.")
-    required = (
-        "hybrid_mode",
-        "ablation_name",
-        "switch_pair",
-        "switcher_training",
-        "value_predictor_loaded",
-        "switcher_feature_schema",
-        "selector_kind",
-        "switcher_decision_scope",
-        "wait_detection_enabled",
-        "learned_switcher_called",
-        "joint_conflict_prediction_enabled",
-        "total_action_count",
-        "switcher_choice_count",
-        "switcher_model_choice_count",
-        "selected_ao_count",
-        "switcher_model_selected_ao_count",
-        "executed_ao_count",
-        "executed_caar_count",
-        "aoreplan_wait_bypass_count",
-        "aoreplan_commit_count",
-        "branch_action_agreement_count",
-        "candidate_provenance",
-    )
-    missing = [key for key in required if key not in stats]
-    if missing:
-        raise RuntimeError(
-            f"{algorithm} diagnostics are incomplete: " + ", ".join(missing)
-        )
-    total = int(stats["total_action_count"])
-    choices = int(stats["switcher_choice_count"])
-    model_choices = int(stats["switcher_model_choice_count"])
-    selected_ao = int(stats["selected_ao_count"])
-    model_selected_ao = int(stats["switcher_model_selected_ao_count"])
-    executed_ao = int(stats["executed_ao_count"])
-    executed_arpe = int(stats["executed_caar_count"])
-    bypasses = int(stats["aoreplan_wait_bypass_count"])
-    violations = []
-    if stats["hybrid_mode"] != expected_modes[algorithm]:
-        violations.append("hybrid mode differs")
-    if stats["ablation_name"] != algorithm:
-        violations.append("ablation name differs")
-    # Historical evidence retains CAAR; only its display identity changed.
-    if stats["switch_pair"] not in (["ARPE", "AORePlan"], ["CAAR", "AORePlan"]):
-        violations.append("branch names differ")
-    if stats["value_predictor_loaded"] is not False:
-        violations.append("retired value predictor was loaded")
-    if stats["switcher_feature_schema"] != SWITCHER_FEATURE_SCHEMA:
-        violations.append("Switcher feature schema differs")
-    if stats["joint_conflict_prediction_enabled"] is not False:
-        violations.append("retired joint conflict predictor is active")
-    if total <= 0 or executed_ao + executed_arpe != total:
-        violations.append("executed branch counts do not sum")
-    if int(stats["aoreplan_commit_count"]) > total:
-        violations.append("AORePlan commits exceed action count")
-    if int(stats["branch_action_agreement_count"]) > total:
-        violations.append("branch agreements exceed action count")
-
-    learned = algorithm != "SRSLM-OnlyWait"
-    if learned:
-        if stats["switcher_training"] != "PPO":
-            violations.append("learned selector is not PPO")
-        if stats["selector_kind"] != "ppo_two_branch_categorical":
-            violations.append("learned selector is not categorical")
-        if stats["learned_switcher_called"] is not True:
-            violations.append("learned Switcher was not called")
-        if stats.get("switcher_loader_schema") != ARPE_SWITCHER_LOADER_SCHEMA:
-            violations.append("wrong Switcher loader schema")
-        if stats.get("switcher_stochastic") is not True:
-            violations.append("learned Switcher is not stochastic")
-        if stats.get("switcher_weight_source_algorithm") != "SRSLM-NoWait":
-            violations.append("learned deployment did not use NoWait weights")
-        if stats.get("switcher_training_decision_scope") != "all_states":
-            violations.append("Switcher training scope is not all states")
-        if model_choices != choices or model_selected_ao != selected_ao:
-            violations.append("model and router counts differ")
-        if selected_ao != executed_ao or selected_ao > choices:
-            violations.append("selected and executed AO counts differ")
-        if stats["switcher_decision_scope"] != "all_states":
-            violations.append("NoWait did not route all states")
-        if stats["wait_detection_enabled"] is not False:
-            violations.append("NoWait still has wait detection")
-        if choices != total or bypasses != 0:
-            violations.append("NoWait did not invoke the network everywhere")
-        digest = str(stats.get("switcher_checkpoint_sha256", ""))
-        if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
-            violations.append("Switcher checkpoint SHA256 is invalid")
-    else:
-        if stats["switcher_training"] != "none":
-            violations.append("OnlyWait unexpectedly declares training")
-        if stats["selector_kind"] != "deterministic_wait_detect_only":
-            violations.append("OnlyWait selector differs")
-        if stats["switcher_decision_scope"] != "none":
-            violations.append("OnlyWait declares a learned decision scope")
-        if stats["wait_detection_enabled"] is not True:
-            violations.append("OnlyWait disabled wait detection")
-        if stats["learned_switcher_called"] is not False:
-            violations.append("OnlyWait called a learned Switcher")
-        if any((choices, model_choices, selected_ao, model_selected_ao)):
-            violations.append("OnlyWait recorded learned choices")
-        if executed_arpe != bypasses:
-            violations.append("OnlyWait ARPE executions differ from waits")
-        if stats.get("switcher_stochastic") is not False:
-            violations.append("OnlyWait is not deterministic")
-
-    candidate = stats.get("candidate_provenance") or {}
-    frozen = candidate.get("frozen_verification") or {}
-    if candidate.get("schema") != ARPE_CANDIDATE_SCHEMA:
-        violations.append("candidate provenance schema differs")
-    if (
-        frozen.get("verified") is not True
-        or frozen.get("trainable_parameter_count") != 0
-    ):
-        violations.append("candidate is not verified frozen")
-    artifact = candidate.get("candidate") or {}
-    if artifact.get("frozen") is not True:
-        violations.append("candidate artifact is not frozen")
-    for key in (
-        "switcher_choice_rate",
-        "selected_ao_rate",
-        "executed_ao_rate",
-        "aoreplan_wait_bypass_rate",
-        "branch_action_agreement_rate",
-    ):
-        value = stats.get(key)
-        if value is None or not np.isfinite(value) or not 0.0 <= value <= 1.0:
-            violations.append(f"{key} is not a probability")
-    if violations:
-        raise RuntimeError(f"{algorithm} contract failed: " + "; ".join(violations))
 
 
 class _MoveFailureTracker:
@@ -1545,15 +1124,6 @@ def run_single_experiment(task):
             hybrid_stats = algo.get_switch_stats()
         else:
             hybrid_stats = {}
-        if algo_name == "SRSLM":
-            validate_srslm_stats(hybrid_stats)
-        elif algo_name in (
-            "SRSLM-NoRule",
-            "SRSLM-OnlyRule",
-            "SRSLM-NoWait",
-            "SRSLM-OnlyWait",
-        ):
-            validate_final_srslm_ablation_stats(algo_name, hybrid_stats)
         correction_stats = (
             algo.get_action_correction_stats()
             if hasattr(algo, "get_action_correction_stats")
@@ -2645,15 +2215,6 @@ def main():
         map_texts=map_texts,
     )
 
-    if srslm_contract is not None:
-        integrity_metadata = srslm_integrity_metadata(
-            args,
-            map_list_sha256=map_list_sha256,
-            map_registry_sha256=map_registry_sha256,
-        )
-    else:
-        integrity_metadata = None
-
     algorithm_cache = cache_algorithm_metadata(
         algorithms,
         args.cache_algorithms,
@@ -2720,7 +2281,6 @@ def main():
             hybrid_contract["guide_algorithm"] if hybrid_contract is not None else None
         ),
         "hybrid_contract": hybrid_contract,
-        "integrity": integrity_metadata,
         "cache_algorithms_requested": algorithm_cache["requested"],
         "cache_algorithms_effective_by_algorithm": (
             algorithm_cache["effective_by_algorithm"]
@@ -2761,11 +2321,6 @@ def main():
         result_journal=args.result_journal,
         journal_contract=args.result_journal_contract,
         resume_result_journal=args.resume_result_journal,
-    )
-
-    metadata["epom_lifelong_manifest"] = epom_lifelong_result_manifest(
-        results,
-        algorithms,
     )
 
     metadata["finished_at"] = datetime.now().isoformat(timespec="seconds")

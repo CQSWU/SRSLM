@@ -180,12 +180,14 @@ def test_training_env_reset_uses_same_planner_rule_as_deployment(collision):
         assert env.controller.resolve_actions([]).actions == (3,)
 
 
-def test_missing_or_unaudited_execution_rule_is_rejected_at_adapter_boundary():
+def test_supported_pogema_rules_do_not_require_an_audit():
     policy = AORePlan(AORePlanConfig())
     branch = AORePlanBranch(base_factory=SequenceBase)
     controller = SwitcherController(Candidate(), branch)
     for owner in (policy, controller):
-        for config in (SimpleNamespace(), SimpleNamespace(collision_system="priority")):
+        for collision in ('block_both', 'soft', 'priority'):
+            owner.set_grid_config(SimpleNamespace(collision_system=collision))
+        for config in (SimpleNamespace(), SimpleNamespace(collision_system="unknown")):
             with pytest.raises(ValueError, match="collision"):
                 owner.set_grid_config(config)
     assert not hasattr(branch, 'set_grid_config')
