@@ -51,9 +51,9 @@ Full evaluations use all 36 maps, populations 100/200/300/400/500/600, seeds
 are separate evaluations. Recorded soft results use the original simulator
 behavior, not the later occupancy fix.
 
-Keep raw rows unchanged. Contracts record maps, source/configuration hashes,
-checkpoint identities and execution settings. Decision percentages use pooled
-counts. New SRSLM runs count only wait overrides. Older two-rule runs retain
+Experiment results and data backups are kept locally, not in this repository.
+Keep raw rows unchanged. Decision percentages use pooled counts.
+New SRSLM runs count only wait overrides. Older two-rule runs retain
 their original wait and reverse counts and must not be relabeled as wait-only.
 Long-episode analysis retains all eight 512-step throughput windows rather than
 only an overall mean. Old 960/1050 runs and incomplete historical records should

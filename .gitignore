@@ -30,8 +30,9 @@ weights/
 *.ckpt*
 *.7z
 
-# Experiment outputs and immutable local audit records
+# Experiment outputs and local-only data backups
 results/
+reproduction/
 logs/
 artifacts/
 backups/
