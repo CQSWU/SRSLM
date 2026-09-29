@@ -18,8 +18,7 @@ from torch import nn
 
 from agents.switcher_core import (
     NUM_BRANCHES,
-    NUM_PRIMITIVE_ACTIONS,
-    SWITCHER_COORD_DIM,
+    SWITCHER_FIELD_SHAPES,
     SWITCHER_SPATIAL_SHAPE,
     SWITCHER_VECTOR_DIM,
 )
@@ -80,14 +79,7 @@ class SwitcherActorCritic(ActorCriticSharedWeights):
             raise ValueError("Switcher requires shared actor-critic weights.")
         if getattr(action_space, "n", None) != NUM_BRANCHES:
             raise ValueError("Switcher requires exactly two branch actions.")
-        expected = {
-            "obs": SWITCHER_SPATIAL_SHAPE,
-            "xy": (SWITCHER_COORD_DIM,),
-            "target_xy": (SWITCHER_COORD_DIM,),
-            "caar_action": (NUM_PRIMITIVE_ACTIONS,),
-            "aoreplan_action": (NUM_PRIMITIVE_ACTIONS,),
-        }
-        for key, shape in expected.items():
+        for key, shape in SWITCHER_FIELD_SHAPES.items():
             if key not in obs_space.spaces or tuple(obs_space[key].shape) != shape:
                 raise ValueError(
                     f"Switcher expected field {key!r} with shape {shape}."

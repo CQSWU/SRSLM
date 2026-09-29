@@ -36,15 +36,16 @@ def test_arpe_artifact_accepts_simple_paths_and_reports_provenance(tmp_path):
 
     assert artifact.weights_relative == "weights/candidate"
     assert artifact.checkpoint_relative.endswith("checkpoint_1.pth")
-    assert len(artifact.inspect_files()) == 4
+    assert artifact.weights_path == tmp_path / declaration["weights_path"]
+    assert artifact.base_checkpoint_path == tmp_path / declaration["base_checkpoint_path"]
     saved = artifact.as_dict()
     assert saved["weights_path"] == declaration["weights_path"]
 
-    # Replacing a user checkpoint is allowed; its new digest is simply recorded.
-    before = artifact.inspect_files()[str(artifact.checkpoint_path)]
+    # Paths remain usable when users supply a different checkpoint.
     artifact.checkpoint_path.write_bytes(b"changed")
-    after = artifact.inspect_files()[str(artifact.checkpoint_path)]
-    assert after != before
+    reloaded = ArpeCandidateArtifact.from_mapping(saved, tmp_path)
+    assert reloaded == artifact
+    assert reloaded.checkpoint_path.read_bytes() == b"changed"
 
 
 def test_arpe_artifact_accepts_absolute_paths(tmp_path):

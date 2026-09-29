@@ -21,7 +21,7 @@ from agents.switcher_core import (
 )
 from agents.utils_agents import AlgoBase
 from planning.aoreplan_branch import AORePlanBranch
-from agents.srslm import SRSLM, SRSLMConfig
+from agents.srslm import SRSLM, SRSLMConfig, _Deployment
 from agents.switcher import Switcher
 
 
@@ -44,34 +44,14 @@ class SRSLMOnlyWaitConfig(AlgoBase, extra=Extra.forbid):
 
 def _frozen_candidate(cfg, project_root: Path, factory: Callable):
     artifact = ArpeCandidateArtifact.from_config(cfg.candidate, project_root)
-    candidate = factory(
+    return factory(
         artifact,
         seed=int(cfg.seed or 0),
         device=str(cfg.candidate.device),
     )
-    return candidate
 
 
-class _BaseDeployment:
-    cfg: AlgoBase
-
-    def set_grid_config(self, grid_config):
-        self.controller.set_grid_config(grid_config)
-
-    def set_env(self, env):
-        self.controller.set_env(env)
-
-    def after_step(self, dones):
-        self.controller.after_step(dones)
-
-    def get_additional_info(self):
-        return self.get_switch_stats()
-
-    def get_action_correction_stats(self):
-        return self.candidate.get_action_correction_stats()
-
-
-class SRSLMNoWait(_BaseDeployment):
+class SRSLMNoWait(_Deployment):
     """Invoke the independently trained Switcher on every planner state."""
 
     def __init__(
@@ -123,7 +103,7 @@ class SRSLMNoWait(_BaseDeployment):
         return result
 
 
-class SRSLMOnlyWait(_BaseDeployment):
+class SRSLMOnlyWait(_Deployment):
     """Use ARPE on AORePlan waits and AORePlan on every non-wait state."""
 
     def __init__(
@@ -182,10 +162,6 @@ class NoRuleController(AllStateSwitcherController):
         return prepared
 
 
-class OnlyRuleController(OnlyWaitController):
-    """Apply the sole wait rule, with no learned Switcher."""
-
-
 class SRSLMNoRuleConfig(SRSLMConfig):
     name: Literal["SRSLM-NoRule"] = "SRSLM-NoRule"
 
@@ -210,9 +186,6 @@ class SRSLMNoRule(SRSLM):
 
 class SRSLMOnlyRule(SRSLMOnlyWait):
     """Use ARPE on waits and AORePlan on moves, without a learned Switcher."""
-
-    def __init__(self, cfg, **kwargs):
-        super().__init__(cfg, controller_factory=OnlyRuleController, **kwargs)
 
     def get_switch_stats(self):
         result = super().get_switch_stats()

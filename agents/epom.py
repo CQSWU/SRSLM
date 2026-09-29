@@ -22,15 +22,7 @@ from train import register_custom_components
 
 
 OFFICIAL_EPOM_RELEASE = "v0"
-OFFICIAL_EPOM_CONFIG_SHA256 = (
-    "ea9c470bad09e78c8b66dc579296a4da745e117affb84c7ce732d1dbd74e0c40"
-)
 OFFICIAL_EPOM_CHECKPOINT = "checkpoint_000311682_1000002674.pth"
-OFFICIAL_EPOM_CHECKPOINT_SIZE = 116_465_689
-OFFICIAL_EPOM_CHECKPOINT_SHA256 = (
-    "549feac19e21593af072677305945d7c22bd7f66cb07927a92eb59f2f8a3cce9"
-)
-EPOM_ARTIFACT_PROFILES = ("official_v0", "lifelong_finetuned")
 _CHECKPOINT_PATTERN = re.compile(r"^checkpoint_(\d+)_(\d+)\.pth$")
 
 

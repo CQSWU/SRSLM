@@ -1,7 +1,7 @@
 """Frozen EPOM-L support for the retained paper ARPE model.
 
 The historical class name remains the parent of EPOMTraceMultiplierActorCritic.
-It provides checkpoint validation, frozen-backbone identity, training-mode
+It provides checkpoint loading, frozen-base training-mode
 control and shared diagnostics; it no longer constructs a standalone contextual
 residual model. The concrete paper architecture is defined in the multiplier
 module. This support class cannot be selected as a second architecture.
@@ -37,12 +37,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
     )
     # Concrete paper ARPE declares the exact permitted trainable prefixes.
     TRAINABLE_PREFIXES: tuple[str, ...] = ()
-    ACTOR_BACKBONE_MODULE_NAMES = (
-        "encoder",
-        "core",
-        "decoder",
-        "action_parameterization",
-    )
 
     def __init__(self, model_factory, obs_space, action_space, cfg):
         raise TypeError(
@@ -59,101 +53,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
             for block in iter(lambda: handle.read(1 << 20), b""):
                 digest.update(block)
         return digest.hexdigest()
-
-    @staticmethod
-    def _update_digest_field(digest, value: str) -> None:
-        """Add one unambiguous UTF-8 field to a deterministic digest."""
-
-        payload = value.encode("utf-8")
-        digest.update(len(payload).to_bytes(8, byteorder="big", signed=False))
-        digest.update(payload)
-
-    def _actor_backbone_modules(self) -> tuple[tuple[str, nn.Module], ...]:
-        """Return only modules that can change the frozen actor policy.
-
-        The critic and return normalizer are deliberately absent.  The
-        observation normalizer is included when present because its buffers
-        transform actor inputs before the encoder.
-        """
-
-        modules: list[tuple[str, nn.Module]] = []
-        for name in self.ACTOR_BACKBONE_MODULE_NAMES:
-            module = getattr(self, name, None)
-            if not isinstance(module, nn.Module):
-                raise RuntimeError(
-                    f"Frozen actor backbone is missing module {name!r}."
-                )
-            modules.append((name, module))
-
-        obs_normalizer = getattr(self, "obs_normalizer", None)
-        if obs_normalizer is not None:
-            if not isinstance(obs_normalizer, nn.Module):
-                raise RuntimeError(
-                    "obs_normalizer exists but is not a torch module; its "
-                    "actor-input state cannot be verified."
-                )
-            modules.append(("obs_normalizer", obs_normalizer))
-        return tuple(modules)
-
-    def _actor_backbone_tensor_sha256(self) -> str:
-        """Hash actor-backbone tensor names, metadata, and exact bytes.
-
-        Length-prefixed fields make the stream unambiguous.  Tensor bytes are
-        read from a contiguous CPU uint8 view, so the digest does not depend on
-        the current accelerator or on ``torch.save`` serialization details.
-        """
-
-        digest = hashlib.sha256()
-        self._update_digest_field(digest, "EPOM actor backbone tensor digest v1")
-        for module_name, module in self._actor_backbone_modules():
-            self._update_digest_field(digest, module_name)
-            state = module.state_dict()
-            self._update_digest_field(digest, str(len(state)))
-            for tensor_name in sorted(state):
-                tensor = state[tensor_name]
-                if not isinstance(tensor, torch.Tensor):
-                    raise RuntimeError(
-                        "Actor backbone state contains a non-tensor entry: "
-                        f"{module_name}.{tensor_name}"
-                    )
-                if tensor.layout != torch.strided:
-                    raise RuntimeError(
-                        "Actor backbone state contains an unsupported non-dense "
-                        f"tensor: {module_name}.{tensor_name} ({tensor.layout})"
-                    )
-                self._update_digest_field(digest, tensor_name)
-                self._update_digest_field(digest, str(tensor.dtype))
-                self._update_digest_field(
-                    digest, ",".join(str(value) for value in tensor.shape)
-                )
-                raw = (
-                    tensor.detach()
-                    .to(device="cpu")
-                    .contiguous()
-                    .reshape(-1)
-                    .view(torch.uint8)
-                    .numpy()
-                    .tobytes(order="C")
-                )
-                digest.update(len(raw).to_bytes(8, byteorder="big", signed=False))
-                digest.update(raw)
-        return digest.hexdigest()
-
-    def verify_frozen_actor_backbone(self) -> dict[str, object]:
-        """Report whether the loaded actor matches its initialization (optional)."""
-
-        expected = getattr(
-            self, "actor_backbone_tensor_sha256_expected", None
-        )
-        current = self._actor_backbone_tensor_sha256()
-        self.actor_backbone_tensor_sha256_current = current
-        verified = current == expected
-        self.actor_backbone_tensor_sha256_verified = verified
-        return {
-            "expected": expected,
-            "current": current,
-            "verified": verified,
-        }
 
     @staticmethod
     def _resolve_weights_dir(configured: str) -> Path:
@@ -258,16 +157,6 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         self.base_checkpoint = checkpoint_path.name
         self.base_checkpoint_sha256 = self._sha256(checkpoint_path)
         self.base_config_sha256 = self._sha256(config_path)
-        # This digest is captured immediately after the external EPOM-L state
-        # is loaded.  It is a plain runtime attribute (not checkpoint state),
-        # so loading the learned run cannot replace the expected value.
-        self.actor_backbone_tensor_sha256_expected = (
-            self._actor_backbone_tensor_sha256()
-        )
-        self.actor_backbone_tensor_sha256_current = (
-            self.actor_backbone_tensor_sha256_expected
-        )
-        self.actor_backbone_tensor_sha256_verified = True
 
     def _verify_parameter_partition(self) -> None:
         trainable = [name for name, p in self.named_parameters() if p.requires_grad]
@@ -364,19 +253,11 @@ class EPOMTraceContextActorCritic(ActorCriticSharedWeights):
         }
 
     def checkpoint_provenance(self) -> dict[str, object]:
-        current_digest = self._actor_backbone_tensor_sha256()
-        self.actor_backbone_tensor_sha256_current = current_digest
-        expected_digest = self.actor_backbone_tensor_sha256_expected
-        verified = current_digest == expected_digest
-        self.actor_backbone_tensor_sha256_verified = verified
         return {
             "base_weights_dir": self.base_weights_dir,
             "base_checkpoint": self.base_checkpoint,
             "base_checkpoint_sha256": self.base_checkpoint_sha256,
             "base_config_sha256": self.base_config_sha256,
-            "actor_backbone_tensor_sha256_expected": expected_digest,
-            "actor_backbone_tensor_sha256_current": current_digest,
-            "actor_backbone_tensor_sha256_verified": verified,
             "trace_size": self.trace_size,
             "trace_radius": self.trace_radius,
             "free_mask_source": self.free_mask_source,

@@ -23,9 +23,8 @@ from sample_factory.utils.utils import log
 
 from agents.switcher_core import (
     NUM_BRANCHES,
-    NUM_PRIMITIVE_ACTIONS,
-    SWITCHER_COORD_DIM,
-    SWITCHER_SPATIAL_SHAPE,
+    SWITCHER_FIELD_SHAPES,
+    switcher_observation_space,
 )
 from agents.arpe import ArpeCandidateArtifact
 from agents.utils_agents import AlgoBase
@@ -75,41 +74,10 @@ class Switcher:
         if bool(flat_config.use_rnn):
             raise RuntimeError("Switcher checkpoint must be feed-forward.")
 
-        observation_space = gym.spaces.Dict(
-            {
-                "switch_allowed": gym.spaces.Box(0.0, 1.0, shape=(1,), dtype=np.float32),
-                "obs": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=SWITCHER_SPATIAL_SHAPE,
-                    dtype=np.float32,
-                ),
-                "xy": gym.spaces.Box(
-                    low=-1024.0,
-                    high=1024.0,
-                    shape=(SWITCHER_COORD_DIM,),
-                    dtype=np.float32,
-                ),
-                "target_xy": gym.spaces.Box(
-                    low=-1024.0,
-                    high=1024.0,
-                    shape=(SWITCHER_COORD_DIM,),
-                    dtype=np.float32,
-                ),
-                "caar_action": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(NUM_PRIMITIVE_ACTIONS,),
-                    dtype=np.float32,
-                ),
-                "aoreplan_action": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(NUM_PRIMITIVE_ACTIONS,),
-                    dtype=np.float32,
-                ),
-            }
-        )
+        observation_space = gym.spaces.Dict({
+            **switcher_observation_space().spaces,
+            "switch_allowed": gym.spaces.Box(0.0, 1.0, shape=(1,), dtype=np.float32),
+        })
         action_space = gym.spaces.Discrete(NUM_BRANCHES)
         actor = create_actor_critic(flat_config, observation_space, action_space)
         self.device = self._resolve_device(cfg.device)
@@ -191,13 +159,7 @@ class Switcher:
         self._ao_probability_samples = []
 
     def choose(self, state: Mapping[str, np.ndarray]) -> np.ndarray:
-        expected = {
-            "obs": SWITCHER_SPATIAL_SHAPE,
-            "xy": (SWITCHER_COORD_DIM,),
-            "target_xy": (SWITCHER_COORD_DIM,),
-            "caar_action": (NUM_PRIMITIVE_ACTIONS,),
-            "aoreplan_action": (NUM_PRIMITIVE_ACTIONS,),
-        }
+        expected = SWITCHER_FIELD_SHAPES
         arrays = {}
         count = None
         for key, trailing_shape in expected.items():

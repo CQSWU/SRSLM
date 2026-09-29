@@ -7,7 +7,6 @@ the paper artifact hashes before running or retraining the code.
 
 from __future__ import annotations
 
-import hashlib
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,17 +24,6 @@ from learning.inference_correction import InferenceCorrection
 ARPE_CANDIDATE_KIND = "epom_trace_context_caar_milestone"
 ARPE_CANDIDATE_LABEL = "ARPE"
 ARPE_CANDIDATE_SCHEMA = "switcher_candidate_caar_v1"
-ARPE_TRACE_ARCHITECTURE = (
-    "trace_allaction_centered_tanh_residual200_failcredit_v1"
-)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _artifact_path(project_root: Path, value: object, field: str) -> tuple[str, Path]:
@@ -119,21 +107,6 @@ class ArpeCandidateArtifact:
         project_root: Path,
     ) -> "ArpeCandidateArtifact":
         return cls.from_mapping(config.as_mapping(), project_root)
-
-    def inspect_files(self) -> dict[str, str]:
-        """Check that inputs exist and return hashes for optional provenance."""
-        files = (
-            self.config_path,
-            self.checkpoint_path,
-            self.base_config_path,
-            self.base_checkpoint_path,
-        )
-        inspected: dict[str, str] = {}
-        for path in files:
-            if not path.is_file():
-                raise FileNotFoundError(f"ARPE input is missing: {path}")
-            inspected[str(path)] = _sha256(path)
-        return inspected
 
     def as_dict(self) -> dict[str, object]:
         result = {
@@ -256,7 +229,6 @@ __all__ = [
     "ARPE_CANDIDATE_KIND",
     "ARPE_CANDIDATE_LABEL",
     "ARPE_CANDIDATE_SCHEMA",
-    "ARPE_TRACE_ARCHITECTURE",
     "ArpeCandidateArtifact",
     "ARPE",
     "ARPEConfig",

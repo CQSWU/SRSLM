@@ -4,10 +4,7 @@ from pogema import GridConfig
 from pydantic import Extra, Field
 
 from agents.reverse_metrics import ExecutedPositionReverseCounter
-from agents.utils_agents import AlgoBase
-
-#: execution models supported by POGEMA
-SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
+from agents.utils_agents import AlgoBase, SUPPORTED_COLLISION_SYSTEMS
 from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper
 
 

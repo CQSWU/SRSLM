@@ -14,12 +14,11 @@ from agents.arpe import (
 )
 from agents.switcher_core import (
     AllStateSwitcherController,
-    NUM_PRIMITIVE_ACTIONS,
-    SWITCHER_COORD_DIM,
     SWITCHER_FEATURE_SCHEMA,
-    SWITCHER_SPATIAL_SHAPE,
     SwitcherController,
+    switcher_observation_space,
 )
+from agents.utils_agents import SUPPORTED_COLLISION_SYSTEMS
 from planning.aoreplan_branch import AORePlanBranch
 from pomapf_env.env import make_pomapf
 from pomapf_env.switcher_env import SwitcherEnv
@@ -28,47 +27,6 @@ from pomapf_env.switcher_env import SwitcherEnv
 ARPE_SWITCHER_ENV_SCHEMA = "srslm_switcher_caar_candidate_env_v1"
 ARPE_NOWAIT_ENV_SCHEMA = "srslm_switcher_caar_candidate_all_states_env_v1"
 
-
-def switcher_observation_space() -> gym.spaces.Dict:
-    """Return the unchanged five-field Switcher-v3 observation contract."""
-
-    return gym.spaces.Dict(
-        {
-            "obs": gym.spaces.Box(
-                0.0, 1.0, shape=SWITCHER_SPATIAL_SHAPE, dtype=np.float32
-            ),
-            "xy": gym.spaces.Box(
-                -1024.0,
-                1024.0,
-                shape=(SWITCHER_COORD_DIM,),
-                dtype=np.float32,
-            ),
-            "target_xy": gym.spaces.Box(
-                -1024.0,
-                1024.0,
-                shape=(SWITCHER_COORD_DIM,),
-                dtype=np.float32,
-            ),
-            # The public feature name remains caar_action because branch zero
-            # is ARPE and changing it would alter the trained network state.
-            "caar_action": gym.spaces.Box(
-                0.0,
-                1.0,
-                shape=(NUM_PRIMITIVE_ACTIONS,),
-                dtype=np.float32,
-            ),
-            "aoreplan_action": gym.spaces.Box(
-                0.0,
-                1.0,
-                shape=(NUM_PRIMITIVE_ACTIONS,),
-                dtype=np.float32,
-            ),
-        }
-    )
-
-
-#: execution models supported by POGEMA
-SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
 
 class ArpeSwitcherEnv(SwitcherEnv):
     """Keep the established Switcher reward/state and replace branch zero."""
@@ -90,7 +48,7 @@ class ArpeSwitcherEnv(SwitcherEnv):
         base_env_factory=make_pomapf,
     ):
         # Initialise shared runtime fields here; the base is not directly
-        # constructible. This environment owns the pinned candidate lifecycle.
+        # constructible. This environment owns the frozen candidate lifecycle.
         gym.Env.__init__(self)
         if feature_schema != SWITCHER_FEATURE_SCHEMA:
             raise ValueError(f"Unsupported Switcher feature schema {feature_schema!r}.")

@@ -14,9 +14,8 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from agents.utils_agents import SUPPORTED_COLLISION_SYSTEMS
 
-#: execution models supported by POGEMA
-SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
 ARPE_BRANCH = 0
 AO_BRANCH = 1
 NUM_BRANCHES = 2
@@ -28,9 +27,31 @@ SWITCHER_CROP_SIZE = 11
 SWITCHER_SPATIAL_SHAPE = (3, SWITCHER_CROP_SIZE, SWITCHER_CROP_SIZE)
 SWITCHER_COORD_DIM = 2
 SWITCHER_VECTOR_DIM = 2 * SWITCHER_COORD_DIM + 2 * NUM_PRIMITIVE_ACTIONS
+SWITCHER_FIELD_SHAPES = {
+    "obs": SWITCHER_SPATIAL_SHAPE,
+    "xy": (SWITCHER_COORD_DIM,),
+    "target_xy": (SWITCHER_COORD_DIM,),
+    # Serialized checkpoint field; branch zero is ARPE.
+    "caar_action": (NUM_PRIMITIVE_ACTIONS,),
+    "aoreplan_action": (NUM_PRIMITIVE_ACTIONS,),
+}
 # The total number of scalar inputs is useful for architecture reporting even
 # though the encoder keeps the spatial tensor and vector fields separate.
 FEATURE_DIM = int(np.prod(SWITCHER_SPATIAL_SHAPE)) + SWITCHER_VECTOR_DIM
+
+
+def switcher_observation_space():
+    """The five input fields shared by training and checkpoint inference."""
+    from gymnasium import spaces
+
+    return spaces.Dict({
+        key: spaces.Box(
+            -1024.0 if key in {"xy", "target_xy"} else 0.0,
+            1024.0 if key in {"xy", "target_xy"} else 1.0,
+            shape=shape, dtype=np.float32,
+        )
+        for key, shape in SWITCHER_FIELD_SHAPES.items()
+    })
 
 
 def _one_hot(actions: np.ndarray) -> np.ndarray:
@@ -478,6 +499,7 @@ __all__ = [
     "SWITCHER_COORD_DIM",
     "SWITCHER_CROP_SIZE",
     "SWITCHER_FEATURE_SCHEMA",
+    "SWITCHER_FIELD_SHAPES",
     "SWITCHER_SPATIAL_SHAPE",
     "SWITCHER_VECTOR_DIM",
     "PreparedSwitcherStep",
@@ -485,4 +507,5 @@ __all__ = [
     "SwitcherController",
     "OnlyWaitController",
     "build_switcher_state",
+    "switcher_observation_space",
 ]

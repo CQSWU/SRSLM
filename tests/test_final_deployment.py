@@ -144,8 +144,9 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(branch, expecte
 
 
 def test_current_rule_ablations_do_not_require_an_independent_switcher():
-    from agents.srslm_arpe_ablation import NoRuleController, OnlyRuleController
-    for kind in (NoRuleController, OnlyRuleController):
+    from agents.srslm_arpe_ablation import NoRuleController
+    from agents.switcher_core import OnlyWaitController
+    for kind in (NoRuleController, OnlyWaitController):
         planner = _Planner()
         controller = kind(_Candidate(), planner)
         controller.prepare_actions(_observations())

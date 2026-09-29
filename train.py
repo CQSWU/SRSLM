@@ -71,15 +71,11 @@ def _patch_checkpoint_loading():
             try:
                 log.warning("Loading state from checkpoint %s...", latest_checkpoint)
 
-                try:
-                    return torch.load(
-                        latest_checkpoint,
-                        map_location=load_device,
-                        weights_only=False,
-                    )
-
-                except TypeError:
-                    return torch.load(latest_checkpoint, map_location=load_device)
+                return torch.load(
+                    latest_checkpoint,
+                    map_location=load_device,
+                    weights_only=False,
+                )
 
             except Exception as error:
                 log.exception(
@@ -122,34 +118,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
 
     _ensure_patched()
 
-    environment_config: Environment = Environment(**cfg.full_config["environment"])
-
-    training_populations = environment_config.training_num_agents_by_worker
-    if training_populations is not None:
-        if isinstance(env_config, dict):
-            worker_index = env_config.get("worker_index", 0)
-        else:
-            worker_index = getattr(env_config, "worker_index", 0)
-        if worker_index is None:
-            worker_index = 0
-        try:
-            worker_index = int(worker_index)
-        except (TypeError, ValueError) as error:
-            raise ValueError(
-                "Sample Factory env_config.worker_index must be an integer."
-            ) from error
-        if worker_index < 0:
-            raise ValueError(
-                "Sample Factory env_config.worker_index must be non-negative."
-            )
-
-        worker_grid_config = deepcopy(environment_config.grid_config)
-        worker_grid_config.num_agents = training_populations[
-            worker_index % len(training_populations)
-        ]
-        environment_config = environment_config.copy(
-            update={"grid_config": worker_grid_config}
-        )
+    environment_config = Environment(**cfg.full_config["environment"]).for_worker(env_config)
 
     env = make_env(environment_config)
 

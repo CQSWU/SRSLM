@@ -30,7 +30,26 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     candidate: ARPEConfig | None = None
 
 
-class SRSLM:
+class _Deployment:
+    """Common environment hooks for full SRSLM and its ablations."""
+
+    def set_grid_config(self, grid_config):
+        self.controller.set_grid_config(grid_config)
+
+    def set_env(self, env):
+        self.controller.set_env(env)
+
+    def after_step(self, dones):
+        self.controller.after_step(dones)
+
+    def get_additional_info(self):
+        return self.get_switch_stats()
+
+    def get_action_correction_stats(self):
+        return self.candidate.get_action_correction_stats()
+
+
+class SRSLM(_Deployment):
     """Use ARPE for AORePlan waits and Switcher for AORePlan moves."""
 
     def __init__(
@@ -70,12 +89,6 @@ class SRSLM:
         self.controller = controller_factory(self.candidate, planner)
         self.device = getattr(self.candidate, "device", cfg.device)
 
-    def set_grid_config(self, grid_config):
-        self.controller.set_grid_config(grid_config)
-
-    def set_env(self, env):
-        self.controller.set_env(env)
-
     def after_reset(self):
         self.controller.after_reset()
         self.switcher.after_reset()
@@ -101,9 +114,6 @@ class SRSLM:
             branches = np.empty(0, dtype=np.int64)
         return list(self.controller.resolve_actions(branches).actions)
 
-    def after_step(self, dones):
-        self.controller.after_step(dones)
-
     def get_switch_stats(self):
         result = {
             "hybrid_mode": SRSLM_MODE,
@@ -115,12 +125,6 @@ class SRSLM:
         result.update(self.controller.get_stats())
         result.update(self.switcher.get_stats())
         return result
-
-    def get_additional_info(self):
-        return self.get_switch_stats()
-
-    def get_action_correction_stats(self):
-        return self.candidate.get_action_correction_stats()
 
 
 __all__ = [

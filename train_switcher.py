@@ -52,24 +52,6 @@ def _spec(mode: str) -> dict:
         raise ValueError(f"Unknown Switcher training mode: {mode!r}") from exc
 
 
-def _environment_for_worker(cfg, env_config) -> Environment:
-    environment = Environment(**cfg.full_config["environment"])
-    populations = environment.training_num_agents_by_worker
-    if populations is None:
-        return environment
-    worker_index = (
-        env_config.get("worker_index", 0)
-        if isinstance(env_config, dict)
-        else getattr(env_config, "worker_index", 0)
-    )
-    worker_index = int(worker_index or 0)
-    if worker_index < 0:
-        raise ValueError("Sample Factory worker index must be non-negative.")
-    worker_grid = deepcopy(environment.grid_config)
-    worker_grid.num_agents = populations[worker_index % len(populations)]
-    return environment.copy(update={"grid_config": worker_grid})
-
-
 def create_switcher_env(
     full_env_name,
     cfg=None,
@@ -84,7 +66,7 @@ def create_switcher_env(
         raise ValueError(
             f"{mode} Switcher entrypoint cannot construct {full_env_name!r}."
         )
-    environment = _environment_for_worker(cfg, env_config)
+    environment = Environment(**cfg.full_config["environment"]).for_worker(env_config)
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
         raise RuntimeError("Saved Switcher config has no candidate_policy paths.")

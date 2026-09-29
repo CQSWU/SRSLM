@@ -367,11 +367,18 @@ def test_full_forward_retains_direct_and_zero_initial_residual(full_model):
     model, batch, cfg = full_model
     nn.init.zeros_(model.trace_multiplier_head[-1].weight)
     nn.init.zeros_(model.trace_multiplier_head[-1].bias)
+    frozen_states = [
+        {key: value.detach().clone() for key, value in module.state_dict().items()}
+        for module in model._frozen_base_modules
+    ]
     outputs = model(batch, torch.zeros(len(batch["obs"]), cfg.hidden_size))
     assert outputs["action_logits"].shape == (len(batch["obs"]), 5)
     assert outputs["values"].shape == (len(batch["obs"]),)
     assert model.critic_kind == INDEPENDENT_CRITIC_KIND
-    assert model.verify_frozen_actor_backbone()["verified"] is True
+    for module, expected in zip(model._frozen_base_modules, frozen_states):
+        assert all(not parameter.requires_grad for parameter in module.parameters())
+        for key, value in module.state_dict().items():
+            torch.testing.assert_close(value, expected[key], rtol=0, atol=0)
     torch.testing.assert_close(model.last_learned_delta, torch.zeros_like(model.last_learned_delta))
     torch.testing.assert_close(model.last_final_logits, model.last_direct_logits)
     torch.testing.assert_close(model.last_direct_logits, model.last_base_logits + model.last_rule_delta)

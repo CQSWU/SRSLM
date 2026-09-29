@@ -344,6 +344,24 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     switcher_feature_schema: str = "srslm_switcher_state_v3"
 
+    def for_worker(self, env_config=None):
+        """Assign one population per worker without modifying the saved recipe."""
+        if self.training_num_agents_by_worker is None:
+            return self
+        index = (env_config.get("worker_index", 0) if isinstance(env_config, dict)
+                 else getattr(env_config, "worker_index", 0))
+        try:
+            index = int(index or 0)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Sample Factory worker index must be an integer.") from error
+        if index < 0:
+            raise ValueError("Sample Factory worker index must be non-negative.")
+        grid = deepcopy(self.grid_config)
+        grid.num_agents = self.training_num_agents_by_worker[
+            index % len(self.training_num_agents_by_worker)
+        ]
+        return self.copy(update={"grid_config": grid})
+
 
 
 

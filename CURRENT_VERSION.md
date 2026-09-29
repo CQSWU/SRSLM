@@ -7,6 +7,10 @@ two-rule experiments are recorded separately below; their results are unchanged.
 restrictions from public entry points. Recorded hashes remain informational.
 Default weights, inference settings and the wait-only rule are unchanged.
 
+The follow-up cleanup shares Switcher input definitions, deployment hooks and
+worker population assignment, and removes unused audit helpers. Checkpoint
+tensors, action sampling and algorithm defaults are unchanged.
+
 ## Selected inference settings
 
 - AORePlan uses the accumulated observed static map, reverse detection, local
