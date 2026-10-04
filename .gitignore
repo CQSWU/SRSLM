@@ -44,6 +44,17 @@ otherpolicy/
 
 data/
 renders/
+*.json
+!/configs/*.json
+*.jsonl
+*.ndjson
+*.csv
+*.tsv
+*.npy
+*.npz
+*.parquet
+*.h5
+*.hdf5
 
 .idea/
 .vscode/
