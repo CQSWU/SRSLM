@@ -26,9 +26,9 @@ uv sync
 uv run python run_experiments.py --algorithms AORePlan
 ```
 
-For SRSLM, place `EPOM-L`, `ARPE-Final-1B` and `SRSLM-Switcher-Final-1B`
-in `weights/`, including their configs and checkpoints. ARPE needs only the
-first two folders. Weights and experiment data are not included in this repository.
+Download the [model weights](https://github.com/CQSWU/SRSLM/releases/tag/weights-v1)
+and extract them into `weights/`. ARPE needs `EPOM-L` and `ARPE-Final-1B`;
+SRSLM also needs `SRSLM-Switcher-Final-1B`. Experiment data is not included.
 
 ```bash
 uv run python run_experiments.py --algorithms SRSLM
