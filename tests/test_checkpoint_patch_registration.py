@@ -1,5 +1,3 @@
-"""Checkpoint loading hooks must be safe to register more than once."""
-
 from sample_factory.algo.learning.learner import Learner
 
 from train import _patch_checkpoint_loading

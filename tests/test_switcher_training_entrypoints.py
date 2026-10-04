@@ -1,5 +1,3 @@
-"""The public registry routes Switcher training through its dedicated entry."""
-
 from copy import deepcopy
 from functools import partial
 import json
@@ -14,6 +12,7 @@ from sample_factory.algo.utils.context import global_env_registry
 import train
 import train_switcher
 from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
+from agents.arpe import ArpeCandidateArtifact
 
 
 def test_training_example_uses_current_candidate_and_wait_only_controller():
@@ -26,11 +25,9 @@ def test_training_example_uses_current_candidate_and_wait_only_controller():
     assert config == original
     assert flat.env == train_switcher.ENV_NAME
     assert flat.encoder_custom == "switcher"
-    assert flat.candidate_policy == manifest
-    assert (
-        flat.full_config["environment"]["switcher_caar_weights_path"]
-        == manifest["weights_path"]
-    )
+    expected = ArpeCandidateArtifact.from_mapping(manifest, root).as_dict()
+    assert flat.candidate_policy == expected
+    assert flat.full_config["candidate_policy"] == expected
 
 
 @pytest.fixture
@@ -64,8 +61,6 @@ def test_unused_environment_base_is_removed():
 
 
 class _FrozenCandidate:
-    """A lightweight candidate only; the environment and planner remain real."""
-
     def __init__(self, artifact, *, seed, device):
         self.artifact = artifact
         self.reset_count = 0
@@ -95,7 +90,6 @@ def _configuration(environment_name, collision):
             "candidate_policy": declaration,
             "environment": {
                 "name": environment_name,
-                "switcher_caar_weights_path": declaration["weights_path"],
                 "switcher_caar_device": "cpu",
                 "switcher_team_reward_coefficient": 1.0,
                 "grid_config": {
@@ -118,8 +112,7 @@ def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
     isolated_registry,
     monkeypatch,
 ):
-    # The imported entrypoint constructor still builds its real subclass;
-    # only the frozen network is replaced, so this test needs no private weights.
+
     env_type = ArpeSwitcherEnv
     monkeypatch.setattr(
         train_switcher,
@@ -176,7 +169,7 @@ def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
                 == 2
             )
             assert np.all(np.isfinite(rewards))
-        # The 3-step environment completed and auto-reset more than once.
+
         assert env.candidate.steps == 8
         assert env.candidate.reset_count >= 4
     finally:

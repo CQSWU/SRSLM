@@ -1,12 +1,3 @@
-"""Shared state construction and action routing for the SRSLM Switcher.
-
-The switcher never predicts primitive MAPF actions.  ARPE and AORePlan first
-produce one action each.  AORePlan waits bypass the learned selector and use
-ARPE directly.  All other states are sent to the two-branch Switcher.  This
-module is independent from Sample Factory so training and deployment share the
-same routing and planner-feedback semantics.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,7 +12,6 @@ AO_BRANCH = 1
 NUM_BRANCHES = 2
 NUM_PRIMITIVE_ACTIONS = 5
 SWITCHER_DECISION_SCOPE = "aoreplan_nonwait_only"
-SWITCHER_FEATURE_SCHEMA = "srslm_switcher_state_v3"
 SWITCHER_CROP_SIZE = 11
 SWITCHER_SPATIAL_SHAPE = (3, SWITCHER_CROP_SIZE, SWITCHER_CROP_SIZE)
 SWITCHER_COORD_DIM = 2
@@ -30,17 +20,12 @@ SWITCHER_FIELD_SHAPES = {
     "obs": SWITCHER_SPATIAL_SHAPE,
     "xy": (SWITCHER_COORD_DIM,),
     "target_xy": (SWITCHER_COORD_DIM,),
-    # Serialized checkpoint field; branch zero is ARPE.
     "caar_action": (NUM_PRIMITIVE_ACTIONS,),
     "aoreplan_action": (NUM_PRIMITIVE_ACTIONS,),
 }
-# The total number of scalar inputs is useful for architecture reporting even
-# though the encoder keeps the spatial tensor and vector fields separate.
-FEATURE_DIM = int(np.prod(SWITCHER_SPATIAL_SHAPE)) + SWITCHER_VECTOR_DIM
 
 
 def switcher_observation_space():
-    """The five input fields shared by training and checkpoint inference."""
     from gymnasium import spaces
 
     return spaces.Dict(
@@ -78,7 +63,6 @@ def build_switcher_state(
     arpe_actions: Sequence[int],
     aoreplan_actions: Sequence[int],
 ) -> dict[str, np.ndarray]:
-    """Build the minimal spatial state consumed by the Switcher."""
 
     count = len(observations)
     arpe = np.asarray(arpe_actions, dtype=np.int64).reshape(-1)
@@ -123,21 +107,6 @@ def build_switcher_state(
         "caar_action": _one_hot(arpe),
         "aoreplan_action": _one_hot(aoreplan),
     }
-    expected_shapes = {
-        "obs": (count, *SWITCHER_SPATIAL_SHAPE),
-        "xy": (count, SWITCHER_COORD_DIM),
-        "target_xy": (count, SWITCHER_COORD_DIM),
-        "caar_action": (count, NUM_PRIMITIVE_ACTIONS),
-        "aoreplan_action": (count, NUM_PRIMITIVE_ACTIONS),
-    }
-    for key, expected in expected_shapes.items():
-        if state[key].shape != expected:
-            raise AssertionError(
-                f"Switcher field {key!r} has shape {state[key].shape}, "
-                f"expected {expected}."
-            )
-        if not np.all(np.isfinite(state[key])):
-            raise RuntimeError(f"Switcher field {key!r} is non-finite.")
     return state
 
 
@@ -161,8 +130,6 @@ class ResolvedSwitcherStep:
 
 
 class SwitcherController:
-    """Own both branches and route only AORePlan moves through Switcher."""
-
     selector_kind = "ppo_two_branch_categorical"
     decision_scope = SWITCHER_DECISION_SCOPE
     wait_detection_enabled = True
@@ -422,7 +389,6 @@ class SwitcherController:
 
     def get_stats(self) -> dict:
         return {
-            "switcher_feature_schema": SWITCHER_FEATURE_SCHEMA,
             "selector_kind": self.selector_kind,
             "switcher_decision_scope": self.decision_scope,
             "wait_detection_enabled": self.wait_detection_enabled,
@@ -461,13 +427,11 @@ class SwitcherController:
 __all__ = [
     "AO_BRANCH",
     "ARPE_BRANCH",
-    "FEATURE_DIM",
     "SWITCHER_DECISION_SCOPE",
     "NUM_BRANCHES",
     "NUM_PRIMITIVE_ACTIONS",
     "SWITCHER_COORD_DIM",
     "SWITCHER_CROP_SIZE",
-    "SWITCHER_FEATURE_SCHEMA",
     "SWITCHER_FIELD_SHAPES",
     "SWITCHER_SPATIAL_SHAPE",
     "SWITCHER_VECTOR_DIM",

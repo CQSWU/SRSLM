@@ -1,9 +1,6 @@
-"""Common inference configuration and episode metric collection."""
-
 from typing import Optional
 
 from pydantic import BaseModel
-
 
 SUPPORTED_COLLISION_SYSTEMS = ("block_both", "soft", "priority")
 

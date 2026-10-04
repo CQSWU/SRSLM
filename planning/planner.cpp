@@ -1,7 +1,6 @@
 // cppimport
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/stl_bind.h>
 #include <vector>
 #include <queue>
 #include <cmath>
@@ -18,23 +17,12 @@ struct Node {
     int g;
     int h;
     int f;
-    bool operator<(const Node& other) const
-    {
-        return this->f < other.f or
-               (this->f == other.f and (this->g < other.g or
-                                       (this->g == other.g and (this->i < other.i or
-                                                               (this->i == other.i and this->j < other.j)))));
-    }
     bool operator>(const Node& other) const
     {
         return this->f > other.f or
                (this->f == other.f and (this->g > other.g or
                                        (this->g == other.g and (this->i > other.i or
                                                                (this->i == other.i and this->j > other.j)))));
-    }
-    bool operator==(const Node& other) const
-    {
-        return this->i == other.i and this->j == other.j;
     }
     bool operator==(const std::pair<int, int> &other) const
     {
@@ -61,8 +49,6 @@ class planner {
                                     bool cache_failed_action)
     {
         if(desired_position != s) {
-            // The seeded Python-side controller makes the randomized
-            // admission decision. Once admitted, cache lifetime is unchanged.
             if(cache_failed_action)
                 bad_actions.insert(desired_position);
             if (start == s)
@@ -146,9 +132,6 @@ public:
     }
     void plan_path(std::pair<int, int> s, std::pair<int, int> g)
     {
-        // update_obstacles() refreshes other_agents on every global step.
-        // Re-apply failures recorded at the same start so a skipped planning
-        // step does not erase execution feedback before the next query.
         if(start == s)
             for (auto bad_a: bad_actions)
                 other_agents.insert(bad_a);
@@ -165,19 +148,7 @@ public:
     }
     void release_failed_actions()
     {
-        // Only AO's exhausted-search branch calls this. Keep the current
-        // observation and proposal untouched; update_obstacles() refreshes
-        // dynamic occupancy before the next planning step.
         bad_actions.clear();
-    }
-    void update_path(std::pair<int, int> s, std::pair<int, int> g,
-                     bool cache_failed_action=true)
-    {
-        if(has_desired_position())
-            consume_execution_feedback(s, cache_failed_action);
-        else
-            bad_actions.clear();
-        plan_path(s, g);
     }
     void update_static_path(std::pair<int, int> s, std::pair<int, int> g)
     {
@@ -187,27 +158,6 @@ public:
         goal = g;
         reset();
         compute_shortest_path();
-    }
-    std::list<std::pair<int, int>> get_path(bool use_best_node = true)
-    {
-        std::list<std::pair<int, int>> path;
-        std::pair<int, int> next_node(INF,INF);
-        if(CLOSED.find(goal) != CLOSED.end())
-            next_node = goal;
-        else if(use_best_node)
-            next_node = {best_node.i, best_node.j};
-        if(next_node.first < INF and (next_node.first != start.first or next_node.second != start.second))
-        {
-            while (CLOSED[next_node] != start) {
-                path.push_back(next_node);
-                next_node = CLOSED[next_node];
-            }
-            path.push_back(next_node);
-            path.push_back(start);
-            path.reverse();
-        }
-        desired_position = next_node;
-        return path;
     }
     std::pair<std::pair<int, int>, std::pair<int, int>> get_next_node(bool use_best_node = true)
     {
@@ -236,11 +186,7 @@ PYBIND11_MODULE(planner, m) {
             .def("plan_path", &planner::plan_path)
             .def("cancel_desired", &planner::cancel_desired)
             .def("release_failed_actions", &planner::release_failed_actions)
-            .def("update_path", &planner::update_path,
-                 py::arg("start"), py::arg("goal"),
-                 py::arg("cache_failed_action")=true)
             .def("update_static_path", &planner::update_static_path)
-            .def("get_path", &planner::get_path)
             .def("get_next_node", &planner::get_next_node);
 }
 

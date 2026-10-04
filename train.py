@@ -4,11 +4,9 @@ import sys
 
 from pathlib import Path
 
-
 _LOCAL_PPU_SDK = Path("/usr/local/PPU_SDK")
 if "PPU_SDK" not in os.environ and _LOCAL_PPU_SDK.is_dir():
     os.environ["PPU_SDK"] = str(_LOCAL_PPU_SDK)
-
 
 import torch
 
@@ -22,14 +20,11 @@ from sample_factory.train import run_rl
 
 from sample_factory.utils.utils import log
 
-
 from learning.config import Environment, Experiment
 
 from learning.switcher_learner_patch import patch_switcher_learner_losses
 
-
 import learning.encoder  # noqa: F401 -- registers the Sample Factory model factories
-
 
 from pomapf_env.env import make_pomapf
 from pomapf_env.trace_routing import BonusRoutingObservation
@@ -40,7 +35,6 @@ from pomapf_env.wrappers import (
     MatrixObservationWrapper,
     TauObservationWrapper,
 )
-
 
 _CUSTOM_COMPONENTS_REGISTERED = False
 
@@ -105,9 +99,6 @@ def make_env(env_cfg: Environment | None = None):
 
 def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None):
     del render_mode
-
-    if full_env_name == "POMAPF-ST-v0":
-        raise RuntimeError("POMAPF-ST-v0 is retired; ARPE uses POMAPF-EPOM-ST-v0.")
 
     if full_env_name == "POMAPF-SRSLM-v0":
         raise RuntimeError(
@@ -202,9 +193,6 @@ def register_custom_components():
 
     global _CUSTOM_COMPONENTS_REGISTERED
 
-    # Sample Factory uses the multiprocessing "spawn" context.  Installing
-    # this at module import covers spawned learner processes, while repeating
-    # the idempotent call here also covers direct programmatic registration.
     patch_switcher_learner_losses()
 
     if _CUSTOM_COMPONENTS_REGISTERED:
@@ -262,7 +250,6 @@ def validate_config(config):
 
 
 def _sync_resume_cli_overrides(flat_config, override_keys):
-    """Keep explicit runtime overrides when Sample Factory resumes a run."""
 
     override_keys = set(override_keys)
     if not override_keys:
@@ -382,11 +369,8 @@ def main():
         explicit_overrides.add("train_for_env_steps")
 
     if params.training_population is not None:
-        allowed_populations = {100, 200, 300, 400, 500, 600}
-        if params.training_population not in allowed_populations:
-            raise ValueError(
-                f"--training_population must be one of {sorted(allowed_populations)}."
-            )
+        if params.training_population < 1:
+            raise ValueError("--training_population must be positive.")
         worker_count = int(config["async_ppo"]["num_workers"])
         config.setdefault("environment", {})["training_num_agents_by_worker"] = [
             params.training_population

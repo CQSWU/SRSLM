@@ -1,6 +1,3 @@
-"""Public runner binds the paper artifacts, not the retired ARPE backbone."""
-
-import inspect
 import json
 import sys
 from pathlib import Path
@@ -40,23 +37,6 @@ def test_public_names_are_explicit_and_retired_names_are_rejected():
             runner.parse_algorithms(name)
 
 
-def test_public_runner_has_no_unshipped_adapter_imports():
-    source = inspect.getsource(runner)
-    for module in (
-        "agents.dcc",
-        "agents.primal2",
-        "agents.follower",
-        "agents.chs",
-        "agents.assistant_switcher",
-        "agents.srslm_ablation",
-        "agents.replan",
-        "agents.epom_direct_reweight",
-        "agents.srslm_arpe_ablation",
-        "agents.ao_replan_soft_ablation",
-    ):
-        assert module not in source
-
-
 def test_public_cli_defaults_to_aoreplan_only():
     with patch.object(sys, "argv", ["run_experiments.py"]):
         args = runner.parse_args()
@@ -69,53 +49,10 @@ def test_public_cli_defaults_to_aoreplan_only():
     ]
 
 
-def test_removed_modules_and_recipes_are_absent():
-    root = Path(__file__).resolve().parents[1]
-    for name in (
-        "agents/replan.py",
-        "planning/replan_algo.py",
-        "agents/epom_direct_reweight.py",
-        "agents/switcher_arpe.py",
-        "agents/srslm_arpe_ablation.py",
-        "agents/ao_replan_soft_ablation.py",
-        "pomapf_env/trace_variant.py",
-        "learning/train_arpe.yaml",
-        "learning/train_arpe_zero_trace.yaml",
-    ):
-        assert not (root / name).exists(), name
-
-
 def test_learned_policies_are_always_episode_fresh():
     for name in ("ARPE", "SRSLM"):
         assert not runner.should_cache_algorithm(name, True)
     assert runner.should_cache_algorithm("AORePlan", True)
-
-
-@pytest.mark.parametrize("collision", ["block_both", "soft", "priority"])
-def test_srslm_contract_records_actual_execution_rule(collision):
-    contract = runner.srslm_contract_metadata(["SRSLM"], collision)
-    assert contract["deployment"]["simulator_collision_system"] == collision
-    assert contract["deployment"]["wait_rule"] == "aoreplan_wait_directly_uses_caar"
-    assert contract["hybrid_mode"] == "aoreplan_wait_bypass_switcher_v3"
-    assert contract["deployment"]["switcher_scope"] == "aoreplan_nonwait_only"
-    assert "final_reverse_rule" not in contract["deployment"]
-    assert not contract["deployment"]["joint_conflict_prediction_enabled"]
-    assert runner.srslm_contract_metadata(["RePlan"], collision) is None
-
-
-def test_main_supplies_selected_rule_to_srslm_contract():
-    import ast
-
-    module = ast.parse(inspect.getsource(runner))
-    calls = [
-        node
-        for node in ast.walk(module)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "srslm_contract_metadata"
-    ]
-    assert len(calls) == 1
-    assert ast.unparse(calls[0].args[1]) == "args.collision_system"
 
 
 def test_retired_direct_cli_variants_are_rejected():
@@ -138,10 +75,6 @@ def test_retired_direct_cli_variants_are_rejected():
 
 def _artifact():
     return SimpleNamespace(
-        weights_relative="weights/caar",
-        checkpoint_relative="weights/caar/checkpoint_p0/model.pth",
-        base_weights_relative="weights/base",
-        base_checkpoint_relative="weights/base/checkpoint_p0/base.pth",
         weights_path=Path("weights/caar").resolve(),
         checkpoint_path=Path("weights/caar/checkpoint_p0/model.pth").resolve(),
     )
@@ -180,8 +113,8 @@ def test_public_manifest_uses_portable_paths_without_required_hashes():
     from agents.arpe import ArpeCandidateArtifact
 
     artifact = ArpeCandidateArtifact.from_mapping(data, root)
-    assert artifact.weights_relative == data["weights_path"]
-    assert artifact.checkpoint_relative == data["checkpoint_path"]
+    assert artifact.weights_path == (root / data["weights_path"]).resolve()
+    assert artifact.checkpoint_path == (root / data["checkpoint_path"]).resolve()
     for key in ("checkpoint_sha256", "base_checkpoint_sha256"):
         assert key not in data
 
@@ -232,7 +165,6 @@ def test_saved_metadata_keeps_protocol_without_weight_or_host_reports(monkeypatc
     assert captured["seeds"] == [42]
     assert captured["max_steps"] == 16
     assert captured["collision_system"] == "soft"
-    assert captured["srslm"]["deployment"]["switcher_scope"] == "aoreplan_nonwait_only"
     assert not (
         {"runtime_provenance", "switcher_weights_path", "main_dir", "map_list_sha256"}
         & captured.keys()

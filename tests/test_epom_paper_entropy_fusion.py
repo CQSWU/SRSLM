@@ -1,5 +1,3 @@
-"""Independent checks of the selected all-action-residual v2 training equation."""
-
 from pathlib import Path
 
 import numpy as np
@@ -18,14 +16,12 @@ from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence
 from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
     EPOMTraceMultiplierActorCritic,
-    INDEPENDENT_CRITIC_KIND,
     PAPER_ENTROPY_FUSION_ARCHITECTURE,
     RESIDUAL_SCALE,
     bounded_centered_residual,
     select_top2_low_pressure,
 )
 from train import register_custom_components, validate_config
-
 
 ROOT = Path(__file__).resolve().parents[1]
 FORMAL = ROOT / "learning" / "train_arpe_final.yaml"
@@ -104,9 +100,8 @@ def test_network_restores_independent_trace_critic_and_605638_parameters(full_mo
     assert model.trace_value_head.out_features == 1
     assert sum(p.numel() for p in model.trace_multiplier_head.parameters()) == 1_285
     assert sum(p.numel() for p in model.trace_value_head.parameters()) == 257
-    assert sum(p.numel() for p in model.trainable_parameters()) == 605_638
-    assert model.expected_trainable_parameters == 605_638
-    assert model.head_extra_size == 89
+    assert sum(p.numel() for p in model.parameters() if p.requires_grad) == 605_638
+    assert model.head_extra_size == 84
     for key, expected in (
         ("paper_entropy_gate_version", 0),
         ("independent_critic_version", 1),
@@ -318,23 +313,28 @@ def test_full_forward_retains_direct_and_zero_initial_residual(full_model):
         {key: value.detach().clone() for key, value in module.state_dict().items()}
         for module in model._frozen_base_modules
     ]
-    outputs = model(batch, torch.zeros(len(batch["obs"]), cfg.hidden_size))
+    captured = {}
+    hook = model.action_parameterization.register_forward_hook(
+        lambda _module, _inputs, output: captured.update(base=output[0].detach())
+    )
+    try:
+        outputs = model(batch, torch.zeros(len(batch["obs"]), cfg.hidden_size))
+    finally:
+        hook.remove()
     assert outputs["action_logits"].shape == (len(batch["obs"]), 5)
     assert outputs["values"].shape == (len(batch["obs"]),)
-    assert model.critic_kind == INDEPENDENT_CRITIC_KIND
     for module, expected in zip(model._frozen_base_modules, frozen_states):
         assert all(not parameter.requires_grad for parameter in module.parameters())
         for key, value in module.state_dict().items():
             torch.testing.assert_close(value, expected[key], rtol=0, atol=0)
-    torch.testing.assert_close(
-        model.last_learned_delta, torch.zeros_like(model.last_learned_delta)
+    pressure = model.centered_trace_candidates(batch["tau"])
+    legal = model.centered_trace_candidates(batch["tau_free_mask"]) > 0.5
+    route = select_top2_low_pressure(
+        captured["base"], pressure, legal, batch["bonus_tie_ranks"]
     )
-    torch.testing.assert_close(model.last_final_logits, model.last_direct_logits)
-    torch.testing.assert_close(
-        model.last_direct_logits, model.last_base_logits + model.last_rule_delta
-    )
-    assert (model.last_rule_delta >= 0).all()
-    assert (model.last_rule_delta.sum(dim=-1) <= 1).all()
+    torch.testing.assert_close(outputs["action_logits"], captured["base"] + route)
+    assert (route >= 0).all()
+    assert (route.sum(dim=-1) <= 1).all()
 
 
 def test_actor_and_critic_have_independent_parameters(full_model):
@@ -361,14 +361,11 @@ def test_actor_and_critic_have_independent_parameters(full_model):
 
 
 def test_packed_rollout_keeps_critic_and_tie_metadata_and_backpropagates(full_model):
-    """Exercise the learner's recurrent path with differently sized sequences."""
 
     model, batch, cfg = full_model
     model.zero_grad(set_to_none=True)
     with torch.no_grad():
         model.trace_multiplier_head[-1].weight.normal_(0.0, 0.01)
-    # Unsorted lengths force PyTorch to reorder packed rows and retain both
-    # sorted_indices and unsorted_indices, as in a recurrent PPO minibatch.
     lengths = torch.tensor([3, 1, 2])
     sequence_count, padded_length = 3, 3
     observations = TensorDict({key: value[:9] for key, value in batch.items()})
@@ -378,23 +375,21 @@ def test_packed_rollout_keeps_critic_and_tie_metadata_and_backpropagates(full_mo
     packed_core, new_states = model.forward_core(packed_head, states)
 
     assert isinstance(packed_core, PackedSequence)
-    assert packed_core.data.shape == (6, 512 + 89)
+    assert packed_core.data.shape == (6, 512 + 84)
     assert new_states.shape == states.shape
     for name in ("batch_sizes", "sorted_indices", "unsorted_indices"):
         torch.testing.assert_close(
             getattr(packed_core, name), getattr(packed_head, name)
         )
-    torch.testing.assert_close(packed_core.data[:, -89:], packed_head.data[:, -89:])
+    torch.testing.assert_close(packed_core.data[:, -84:], packed_head.data[:, -84:])
     with torch.no_grad():
         reference_input = model._packed_like(
-            packed_head, packed_head.data[:, :-89].detach()
+            packed_head, packed_head.data[:, :-84].detach()
         )
         reference_core, reference_states = model.core(reference_input, states)
     torch.testing.assert_close(packed_core.data[:, :512], reference_core.data)
     torch.testing.assert_close(new_states, reference_states)
 
-    # Sample Factory supplies unpacked row data to forward_tail. The full 89
-    # extra fields must survive, including the stored 2x5 Direct tie ranks.
     result = model.forward_tail(
         packed_core.data, values_only=False, sample_actions=False
     )

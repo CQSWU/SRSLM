@@ -25,12 +25,9 @@ from pogema.wrappers.persistence import PersistentWrapper
 
 from copy import deepcopy
 
-
 from pomapf_env.wrappers import EnvAttributesWrapper, RewardShaping, MultiMapWrapper
 
-
 import gymnasium as _gymnasium
-
 
 if not hasattr(_gymnasium.logger, "info"):
 
@@ -42,7 +39,6 @@ if not hasattr(_gymnasium.logger, "info"):
 
 
 def _patch_persistent_wrapper():
-    """PersistentWrapper assumes old-gym attribute forwarding which gymnasium removed."""
 
     if hasattr(PersistentWrapper, "_patched_for_gymnasium"):
         return
@@ -103,8 +99,6 @@ _patch_animation_monitor()
 
 
 class _MetricCompatMixin:
-    """Restore direct metadata access for Pogema metrics under Gymnasium wrappers."""
-
     @property
     def grid_config(self):
 

@@ -1,17 +1,7 @@
-"""Pure-Python fallback for the local AORePlan planner binding.
-
-Linux experiments continue to import :mod:`planning.planner`, the compiled
-pybind11 implementation.  ``planning.ao_replan_algo`` imports this module only
-on Windows, where the Linux extension cannot be loaded.  The class below
-mirrors the small public interface and state transitions of ``planner.cpp``;
-it is intended for tests and local demonstrations, not high-throughput runs.
-"""
-
 from __future__ import annotations
 
 import heapq
 from collections.abc import Iterable, Sequence
-
 
 INF = 1_000_000_000
 _NEIGHBOR_DELTAS = ((0, 1), (1, 0), (-1, 0), (0, -1))
@@ -24,8 +14,6 @@ def _pair(value: Sequence[int]) -> tuple[int, int]:
 
 
 class planner:
-    """Interface-compatible Python implementation of ``planner.cpp``."""
-
     def __init__(self, steps: int = 10_000):
         self.obstacles: set[tuple[int, int]] = set()
         self.other_agents: set[tuple[int, int]] = set()
@@ -70,7 +58,7 @@ class planner:
         self._closed.clear()
         self._open.clear()
         start_h = self._heuristic(self.start)
-        # C++ Node ordering is f, then g, then i, then j.
+
         heapq.heappush(
             self._open,
             (start_h, 0, self.start[0], self.start[1]),
@@ -108,7 +96,7 @@ class planner:
                         neighbor[1],
                     ),
                 )
-                # planner.cpp records the parent when a node is discovered.
+
                 self._closed[neighbor] = current
 
     def update_obstacles(
@@ -118,8 +106,7 @@ class planner:
         cur_pos: Sequence[int],
     ) -> None:
         cur_pos = _pair(cur_pos)
-        # Static obstacles accumulate as the partially observed map is
-        # revealed; dynamic agent positions are refreshed every step.
+
         for obstacle in obstacles:
             oi, oj = _pair(obstacle)
             self.obstacles.add((cur_pos[0] + oi, cur_pos[1] + oj))
@@ -161,20 +148,7 @@ class planner:
         self.desired_position = (INF, INF)
 
     def release_failed_actions(self) -> None:
-        """Expire exhausted failure memory, not current observed occupancy."""
         self.bad_actions.clear()
-
-    def update_path(
-        self,
-        start: Sequence[int],
-        goal: Sequence[int],
-        cache_failed_action: bool = True,
-    ) -> None:
-        if self._has_desired_position():
-            self._consume_execution_feedback(start, cache_failed_action)
-        else:
-            self.bad_actions.clear()
-        self.plan_path(start, goal)
 
     def update_static_path(
         self,
@@ -194,22 +168,6 @@ class planner:
         if use_best_node:
             return self._best_node[0], self._best_node[1]
         return INF, INF
-
-    def get_path(self, use_best_node: bool = True) -> list[tuple[int, int]]:
-        endpoint = self._selected_endpoint(bool(use_best_node))
-        path: list[tuple[int, int]] = []
-        if endpoint[0] < INF and endpoint != self.start:
-            next_node = endpoint
-            while self._closed[next_node] != self.start:
-                path.append(next_node)
-                next_node = self._closed[next_node]
-            path.append(next_node)
-            path.append(self.start)
-            path.reverse()
-        # Execution feedback describes one primitive step, not the final goal.
-        # Match planner.cpp, which backtracks before recording this position.
-        self.desired_position = path[1] if path else endpoint
-        return path
 
     def get_next_node(
         self,

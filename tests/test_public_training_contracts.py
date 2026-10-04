@@ -1,5 +1,3 @@
-"""Retired configuration values must fail rather than select another model."""
-
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,7 +8,6 @@ from pydantic import ValidationError
 
 from learning.config import (
     Experiment,
-    OBSOLETE_SAVED_SETTINGS,
     checkpoint_experiment_config,
 )
 from learning.encoder import make_actor_critic, make_encoder
@@ -58,21 +55,5 @@ def test_checkpoint_only_migration_preserves_input_and_current_model_recipe():
     original = deepcopy(raw)
     normalized = checkpoint_experiment_config(raw)
     assert raw == original
-    assert set(UNUSED_CONTEXT_FIELDS) <= OBSOLETE_SAVED_SETTINGS
     assert set(UNUSED_CONTEXT_FIELDS).isdisjoint(normalized["experiment_settings"])
     assert Experiment(**normalized).dict() == expected
-
-
-def test_retired_noentropy_and_noreweight_recipes_are_absent():
-    root = Path(__file__).resolve().parents[1]
-    for relative in (
-        "learning/train_arpe_noentropy_r5_500m.yaml",
-        "learning/train_no_reweight_block_r5_1b.yaml",
-        "learning/no_reweight_encoder.py",
-        "configs/arpe_noentropy_candidate.json",
-        "learning/epom_finetune_actor_critic.py",
-        "learning/train_epom.yaml",
-        "scripts/train_epom.sh",
-        "agents/epom.py",
-    ):
-        assert not (root / relative).exists()

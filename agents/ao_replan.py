@@ -14,8 +14,6 @@ class AORePlanConfig(AlgoBase, extra=Extra.forbid):
 
 
 class AORePlan:
-    """Standalone AORePlan with one fixed planning policy."""
-
     WRAPPER_CLASS = AORePlanWrapper
 
     def __init__(self, cfg: AORePlanConfig):

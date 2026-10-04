@@ -1,12 +1,5 @@
-"""Stored Direct tie rankings, shared by ARPE rollout and inference.
-
-These are routing metadata, not neural features. Saving them in observations
-ensures PPO recomputes the same route instead of drawing new randomness.
-"""
-
 import gymnasium as gym
 import numpy as np
-
 
 TIE_KEY = "bonus_tie_ranks"
 
@@ -17,7 +10,7 @@ def bonus_rng(seed):
 
 def draw_tie_ranks(rng, count):
     ranks = []
-    # Keep two separate draws: this is also Direct's random-number order.
+
     for _ in range(2):
         values = rng.random((count, 5))
         ranks.append(
@@ -29,8 +22,6 @@ def draw_tie_ranks(rng, count):
 
 
 class BonusRoutingObservation(gym.Wrapper):
-    """Attach reproducible tie ranks once per environment observation."""
-
     def __init__(self, env, routing_seed=0):
         super().__init__(env)
         spaces = dict(env.observation_space.spaces)

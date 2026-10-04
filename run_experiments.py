@@ -1,5 +1,3 @@
-"""Unified lifelong MAPF benchmark runner."""
-
 import argparse
 
 import json
@@ -10,11 +8,9 @@ import multiprocessing
 
 import os
 
-
 import random
 
 import time
-
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -24,10 +20,8 @@ from datetime import datetime
 
 from pathlib import Path
 
-
 import numpy as np
 import torch
-
 
 from agents.utils_agents import ResultsHolder
 from pogema.svg_animation.animation_wrapper import (
@@ -37,7 +31,6 @@ from pogema.svg_animation.animation_wrapper import (
 from pomapf_env.env import make_pomapf
 from pomapf_env.pomapf_config import POMAPFConfig
 
-
 DEFAULT_MAPS = {
     "mazes": "mazes-s0_wc8_od55",
     "random": "random-s0_d0.15",
@@ -45,7 +38,6 @@ DEFAULT_MAPS = {
     "street": "street-Berlin_0",
     "wc3": "wc3-Battleground",
 }
-
 
 SUPPORTED_ALGORITHMS = ("AORePlan", "ARPE", "SRSLM")
 DEFAULT_ALGORITHMS = ("AORePlan",)
@@ -55,11 +47,9 @@ ALGORITHM_ALIASES = {
     "srslm": "SRSLM",
 }
 
-
 ALGORITHM_COLUMN_WIDTH = max(
     13, *(len(algorithm) for algorithm in SUPPORTED_ALGORITHMS)
 )
-
 
 _worker_algo_cache = {}
 
@@ -67,32 +57,6 @@ _worker_algo_cache = {}
 def canonical_algorithm_name(value):
 
     return ALGORITHM_ALIASES.get(value.strip().lower())
-
-
-def srslm_contract_metadata(algorithms, collision_system="block_both"):
-    """Describe the wait-only bypass and learned Switcher."""
-    if "SRSLM" not in algorithms:
-        return None
-    return {
-        "strategy_kind": "hybrid_switching",
-        "hybrid_mode": "aoreplan_wait_bypass_switcher_v3",
-        "branch_algorithms": ["ARPE", "AORePlan"],
-        "hybrid_components": {
-            "learning_branch": "ARPE",
-            "planning_branch": "AORePlan",
-            "selector": "Switcher",
-        },
-        "action_policy": "ARPE-or-AORePlan",
-        "guide_algorithm": "AORePlan",
-        "deployment": {
-            "wait_rule": "aoreplan_wait_directly_uses_caar",
-            "switcher_scope": "aoreplan_nonwait_only",
-            "switcher_output": "two_branch_categorical_logits",
-            "selection": "softmax_sampling",
-            "joint_conflict_prediction_enabled": False,
-            "simulator_collision_system": collision_system,
-        },
-    }
 
 
 def quiet_model_logs():
@@ -137,7 +101,6 @@ def _project_path(main_dir, value):
 
 
 def _load_arpe_candidate_artifact(main_dir, manifest_path):
-    """Load ARPE paths from the supplied or repository-default declaration."""
 
     if manifest_path is None:
         manifest_path = str(
@@ -162,7 +125,6 @@ _EPISODE_FRESH_ALGORITHMS = frozenset(("ARPE", "SRSLM"))
 
 
 def should_cache_algorithm(algorithm, requested):
-    """Return whether an inference instance is safe to reuse across episodes."""
     canonical = canonical_algorithm_name(algorithm) or algorithm
     return bool(requested) and canonical not in _EPISODE_FRESH_ALGORITHMS
 
@@ -250,8 +212,6 @@ def build_algorithm(
 
 
 class _MoveFailureTracker:
-    """Track movement outcomes and agent contention without changing actions."""
-
     METRIC_VERSION = "submitted_nonwait_no_position_change_v1"
     CONTENTION_METRIC_VERSION = "agent_contention_participation_v1"
     VERTEX_FLOW_METRIC_VERSION = "submitted_one_step_vertex_flow_pairs_v1"
@@ -505,7 +465,6 @@ def run_algorithm(
     agents_xy=None,
     targets_xy=None,
 ):
-    """Run one episode and attach environment-level congestion metrics."""
 
     gc_kwargs = {
         "max_episode_steps": max_episode_steps,
@@ -532,9 +491,7 @@ def run_algorithm(
         gc_kwargs["targets_xy"] = [list(position) for position in targets_xy]
 
     grid_config = POMAPFConfig(**gc_kwargs)
-    # A single-episode evaluator must observe the true final transition.
-    # Auto-resetting inside env.step replaces final positions before the
-    # movement tracker can commit step 512 and silently drops those failures.
+
     env = make_pomapf(
         grid_config=grid_config,
         with_animations=False,
@@ -667,8 +624,7 @@ def run_algorithm(
                     global_positions=global_positions(),
                 )
                 observations, rewards, terminated, truncated, infos = env.step(actions)
-                # Same event as LifeLongAverageThroughputMetric; goals have already
-                # been reassigned here, so do not infer completion from rewards/goals.
+
                 if on_target == "restart":
                     completed_targets += int(sum(env.unwrapped.was_on_goal))
                 tracker.commit(
@@ -744,7 +700,6 @@ def run_single_experiment(task):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    # Recurrent and trace state must never cross episode boundaries.
     use_cache = should_cache_algorithm(
         algo_name,
         task.get("cache_algorithms", False),
@@ -799,11 +754,6 @@ def run_single_experiment(task):
             hybrid_stats = algo.get_switch_stats()
         else:
             hybrid_stats = {}
-        correction_stats = (
-            algo.get_action_correction_stats()
-            if hasattr(algo, "get_action_correction_stats")
-            else {}
-        )
         result_record = {
             "algorithm": algo_name,
             "map_name": task["map_name"],
@@ -819,14 +769,11 @@ def run_single_experiment(task):
                     "task_id": task["task_id"],
                     "family_id": task["family_id"],
                     "density_percent": task["density_percent"],
-                    "placement_sha256": task["placement_sha256"],
-                    "target_sequences_sha256": task.get("target_sequences_sha256"),
                 }
             )
         result_record.update(
             {key: value for key, value in result.items() if key != "algorithm"}
         )
-        result_record.update(correction_stats)
 
         result_record.update(hybrid_stats)
 
@@ -872,8 +819,6 @@ def run_single_experiment(task):
                     "task_id": task["task_id"],
                     "family_id": task["family_id"],
                     "density_percent": task["density_percent"],
-                    "placement_sha256": task["placement_sha256"],
-                    "target_sequences_sha256": task.get("target_sequences_sha256"),
                 }
             )
         return error_record
@@ -1075,7 +1020,6 @@ def load_map_text(path_or_url, trim_border=False):
 
 
 def load_map_list_snapshot(path, registry_path=None):
-    """Snapshot selected names and the exact grids sent to workers."""
 
     import yaml
 
@@ -1220,233 +1164,26 @@ def format_duration(seconds):
     return f"{int(hours)}h{int(minutes):02d}m"
 
 
-def _journal_task_key(value):
-    """Return the stable identity of one experiment task/result row."""
-
-    try:
-        return (
-            str(value["algorithm"]),
-            str(value["map_name"]),
-            int(value["num_agents"]),
-            int(value["seed"]),
-            str(value.get("task_id") or ""),
-        )
-
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError("Experiment journal entry has an invalid task key") from error
-
-
-def _append_journal_record(path, record):
-
-    encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(
-        "utf-8"
-    )
-
-    with Path(path).open("ab", buffering=0) as stream:
-        stream.write(encoded)
-
-        os.fsync(stream.fileno())
-
-
-def _initialize_result_journal(path, contract, total):
-
-    path = Path(path)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    record = {
-        "record_type": "header",
-        "schema": "experiment_result_journal_v1",
-        "contract_sha256": contract,
-        "expected_tasks": int(total),
-    }
-
-    encoded = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode(
-        "utf-8"
-    )
-
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
-
-    try:
-        os.write(descriptor, encoded)
-
-        os.fsync(descriptor)
-
-    finally:
-        os.close(descriptor)
-
-
-def _load_result_journal(path, contract, tasks, *, repair_final_record=False):
-
-    path = Path(path)
-
-    raw = path.read_bytes()
-    repair_needed = False
-
-    if raw and not raw.endswith(b"\n"):
-        last_newline = raw.rfind(b"\n")
-
-        if not repair_final_record or last_newline < 0:
-            raise ValueError("Result journal has a truncated final record")
-
-        raw = raw[: last_newline + 1]
-        repair_needed = True
-
-    lines = raw.splitlines()
-
-    if not lines:
-        raise ValueError("Result journal is empty")
-
-    try:
-        header = json.loads(lines[0])
-
-    except json.JSONDecodeError as error:
-        raise ValueError("Result journal header is malformed") from error
-
-    if header != {
-        "record_type": "header",
-        "schema": "experiment_result_journal_v1",
-        "contract_sha256": contract,
-        "expected_tasks": len(tasks),
-    }:
-        raise ValueError("Result journal contract/header differs from this run")
-
-    expected_keys = {_journal_task_key(task) for task in tasks}
-
-    if len(expected_keys) != len(tasks):
-        raise ValueError("Experiment tasks are not uniquely journalable")
-
-    successful = {}
-
-    ordered = []
-
-    for line_number, line in enumerate(lines[1:], 2):
-        try:
-            record = json.loads(line)
-
-        except json.JSONDecodeError as error:
-            raise ValueError(
-                f"Result journal record {line_number} is malformed"
-            ) from error
-
-        if record.get("record_type") != "result":
-            raise ValueError(f"Unexpected result journal record {line_number}")
-
-        result = record.get("result")
-
-        if not isinstance(result, dict):
-            raise ValueError(f"Result journal record {line_number} has no result")
-
-        key = _journal_task_key(result)
-
-        if record.get("task_key") != list(key) or key not in expected_keys:
-            raise ValueError(f"Result journal record {line_number} has a foreign task")
-
-        if result.get("error"):
-            # Failed attempts remain as audit events but are safe to retry.
-
-            continue
-
-        if key in successful:
-            raise ValueError(f"Result journal repeats successful task {key}")
-
-        successful[key] = result
-
-        ordered.append(result)
-
-    # Never rewrite even a damaged tail until identity and all retained rows
-    # have passed validation. Invalid historical journals remain evidence.
-    if repair_needed:
-        temporary = path.with_name(f".{path.name}.{os.getpid()}.repair")
-        with temporary.open("wb") as stream:
-            stream.write(raw)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    return ordered
-
-
-def run_experiments(
-    tasks,
-    workers,
-    *,
-    result_journal=None,
-    journal_contract=None,
-    resume_result_journal=False,
-):
-
+def run_experiments(tasks, workers):
     results = []
-
     total = len(tasks)
-
     start_time = time.time()
-
-    elapsed_offset = 0.0
-
-    journal_path = Path(result_journal) if result_journal is not None else None
-
-    if journal_path is not None:
-        if (
-            not isinstance(journal_contract, str)
-            or len(journal_contract) != 64
-            or any(char not in "0123456789abcdef" for char in journal_contract)
-        ):
-            raise ValueError("A lowercase SHA256 --result-journal-contract is required")
-
-        if journal_path.exists():
-            if not resume_result_journal:
-                raise FileExistsError(
-                    f"Result journal already exists without resume permission: {journal_path}"
-                )
-
-            results = _load_result_journal(
-                journal_path,
-                journal_contract,
-                tasks,
-                repair_final_record=True,
-            )
-
-            elapsed_offset = max(
-                (float(row.get("elapsed_since_start_seconds", 0.0)) for row in results),
-                default=0.0,
-            )
-
-        else:
-            _initialize_result_journal(journal_path, journal_contract, total)
-
-        completed_keys = {_journal_task_key(row) for row in results}
-
-        tasks_to_run = [
-            task for task in tasks if _journal_task_key(task) not in completed_keys
-        ]
-
-    else:
-        if resume_result_journal:
-            raise ValueError("--resume-result-journal requires --result-journal")
-
-        tasks_to_run = list(tasks)
-
     print(f"Starting experiments: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    print(
-        f"Total: {total} | Workers: {workers} | "
-        f"Recovered: {len(results)} | Remaining: {len(tasks_to_run)}"
-    )
+    print(f"Total: {total} | Workers: {workers}")
 
     print("-" * 110, flush=True)
 
-    if not tasks_to_run:
-        return results, elapsed_offset
+    if not tasks:
+        return results, 0.0
 
     with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = [
-            executor.submit(run_single_experiment, task) for task in tasks_to_run
-        ]
+        futures = [executor.submit(run_single_experiment, task) for task in tasks]
 
         for index, future in enumerate(as_completed(futures), start=len(results) + 1):
             result = future.result()
 
-            elapsed = elapsed_offset + time.time() - start_time
+            elapsed = time.time() - start_time
 
             eta = elapsed / index * (total - index) if index else 0.0
 
@@ -1461,16 +1198,6 @@ def run_experiments(
             result["finished_at"] = datetime.now().isoformat(timespec="seconds")
 
             results.append(result)
-
-            if journal_path is not None:
-                _append_journal_record(
-                    journal_path,
-                    {
-                        "record_type": "result",
-                        "task_key": list(_journal_task_key(result)),
-                        "result": result,
-                    },
-                )
 
             if result.get("error"):
                 status = f"ERROR: {result['error']}"
@@ -1513,7 +1240,7 @@ def run_experiments(
                 flush=True,
             )
 
-    return results, elapsed_offset + time.time() - start_time
+    return results, time.time() - start_time
 
 
 def save_results(results, metadata, output_dir, filename=None):
@@ -1718,29 +1445,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--result-journal",
-        type=str,
-        default=None,
-        help=(
-            "Append every completed tuple to a fsync-backed JSONL journal so "
-            "an interrupted formal run can be resumed"
-        ),
-    )
-
-    parser.add_argument(
-        "--result-journal-contract",
-        type=str,
-        default=None,
-        help="Lowercase SHA256 binding a result journal to one frozen protocol",
-    )
-
-    parser.add_argument(
-        "--resume-result-journal",
-        action="store_true",
-        help="Reuse successful tuples from an existing matching result journal",
-    )
-
-    parser.add_argument(
         "--save",
         dest="save",
         action="store_true",
@@ -1787,7 +1491,6 @@ def main():
         args.trim_border = False
 
     algorithms = args.algorithms
-    srslm_contract = srslm_contract_metadata(algorithms, args.collision_system)
 
     agent_counts = parse_agent_counts(args)
 
@@ -1836,8 +1539,6 @@ def main():
         "on_target": args.on_target,
         "collision_system": args.collision_system,
     }
-    if srslm_contract is not None:
-        metadata["srslm"] = srslm_contract
 
     print("Configuration")
 
@@ -1862,9 +1563,6 @@ def main():
     results, elapsed = run_experiments(
         tasks,
         args.workers,
-        result_journal=args.result_journal,
-        journal_contract=args.result_journal_contract,
-        resume_result_journal=args.resume_result_journal,
     )
 
     metadata["finished_at"] = datetime.now().isoformat(timespec="seconds")

@@ -1,21 +1,3 @@
-"""Sample Factory loss guards plus SRSLM Switcher actor masking.
-
-The Switcher does not make a policy decision when AORePlan returns wait.  Such
-transitions still train the critic, but they must not enter PPO advantage
-normalization or any actor loss.  Sample Factory has only one validity mask,
-so this module narrows that mask while computing the actor losses and then
-recomputes the value loss with the original mask.
-
-Sample Factory 2.1.1 also normalizes advantages with the default unbiased
-``torch.std_mean`` estimator.  One valid row therefore yields NaN, while zero
-valid rows make every masked mean undefined.  The project-level wrapper keeps
-the upstream implementation byte-for-byte for two or more valid rows.  Only
-the degenerate boundary is handled specially: one row uses the population
-standard deviation (necessarily zero), and zero rows are rejected before a
-forward or optimizer step. This applies to both training entry points and does
-not alter ordinary PPO minibatches.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -24,15 +6,12 @@ from typing import Any
 
 import torch
 
-
 _PATCH_ATTRIBUTE = "_srslm_switcher_actor_mask_patch"
 _VALID_COUNT_ATTRIBUTE = "_srslm_valid_count_guard"
 _STD_MEAN_PATCH_LOCK = RLock()
 
 
 class _DegenerateStdMeanTorchProxy:
-    """Forward every torch API except the default std_mean boundary case."""
-
     def __init__(self, base: Any):
         self._base = base
 
@@ -40,8 +19,6 @@ class _DegenerateStdMeanTorchProxy:
         return getattr(self._base, name)
 
     def std_mean(self, inputs, *args, **kwargs):
-        # Intercept only Sample Factory's default unbiased call.  Explicit
-        # correction/unbiased requests elsewhere retain their exact meaning.
         if not args and not kwargs and inputs.numel() <= 1:
             if inputs.numel() == 1:
                 return self._base.std_mean(inputs, correction=0)
@@ -70,13 +47,6 @@ def _call_with_degenerate_std_guard(
     mb: Any,
     num_invalids: int,
 ):
-    """Run the unmodified upstream loss with a module-local torch proxy.
-
-    A Python function resolves ``torch`` through its own globals dictionary.
-    Replacing that one binding avoids modifying the process-wide torch module.
-    The lock makes restoration deterministic even if a test calls the learner
-    from more than one thread.
-    """
 
     function_globals = original.__globals__
     with _STD_MEAN_PATCH_LOCK:
@@ -99,7 +69,6 @@ def _calculate_with_valid_count_guard(
     mb: Any,
     num_invalids: int,
 ):
-    """Preserve upstream for >=2 rows; define the exact 1/0-row boundary."""
 
     valid_count = int(mb.valids.bool().sum().item())
     if valid_count >= 2:
@@ -145,10 +114,6 @@ def _build_switcher_calculate_losses(original: Callable) -> Callable:
         actor_num_invalids = _invalid_count(actor_valids)
         actor_sample_count = int(actor_valids.sum().item())
 
-        # torch.std_mean uses the unbiased estimator in Sample Factory 2.1.1,
-        # so zero or one selected actor sample would produce NaN.  In that
-        # degenerate case we perform the full forward pass and deliberately
-        # make the actor update zero; the critic still uses every valid row.
         if actor_sample_count >= 2:
             mb.valids = actor_valids
             try:
@@ -184,13 +149,10 @@ def _build_switcher_calculate_losses(original: Callable) -> Callable:
             )
 
         if actor_sample_count < 2:
-            # Keep the zero connected to the model graph so loss.backward()
-            # remains valid even when the minibatch contains only waits.
             zero = loss_summaries["values"].sum() * 0.0
             policy_loss = zero
             exploration_loss = zero
             kl_loss = zero
-            # _train() always takes mean/max of kl_old for LR scheduling.
             kl_old = zero.detach().reshape(1)
             loss_summaries = dict(loss_summaries)
             loss_summaries["adv"] = torch.zeros_like(loss_summaries["adv"])
@@ -214,7 +176,6 @@ def _build_switcher_calculate_losses(original: Callable) -> Callable:
 
 
 def patch_switcher_learner_losses() -> None:
-    """Install the valid-count guard and Switcher mask once per process."""
 
     from sample_factory.algo.learning.learner import Learner
 

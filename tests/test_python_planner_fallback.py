@@ -1,6 +1,5 @@
 from planning.python_planner import INF, planner
 
-
 START = (0, 0)
 GOAL = (0, 2)
 FIRST_STEP = (0, 1)
@@ -12,22 +11,18 @@ def _new_planner():
     return result
 
 
-def test_python_planner_returns_cpp_compatible_path_and_next_node():
+def test_python_planner_returns_cpp_compatible_next_node():
     local_planner = _new_planner()
     local_planner.plan_path(START, GOAL)
 
-    assert local_planner.get_path(False) == [START, FIRST_STEP, GOAL]
-
-    assert local_planner.desired_position == FIRST_STEP
-    local_planner.cancel_desired()
-    local_planner.plan_path(START, GOAL)
     assert local_planner.get_next_node(False) == (START, FIRST_STEP)
+    assert local_planner.desired_position == FIRST_STEP
 
 
 def test_path_execution_feedback_caches_the_failed_first_step_not_goal():
     local_planner = _new_planner()
     local_planner.plan_path(START, GOAL)
-    local_planner.get_path(False)
+    local_planner.get_next_node(False)
     local_planner.observe_position(START)
     assert FIRST_STEP in local_planner.bad_actions
     assert GOAL not in local_planner.bad_actions
@@ -80,4 +75,3 @@ def test_no_exact_path_uses_cpp_inf_sentinel():
     local_planner.plan_path(START, GOAL)
 
     assert local_planner.get_next_node(False) == (START, (INF, INF))
-    assert local_planner.get_path(False) == []

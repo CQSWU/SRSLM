@@ -1,5 +1,3 @@
-"""Two-action actor-critic used by the SRSLM Switcher."""
-
 from __future__ import annotations
 
 import math
@@ -25,8 +23,6 @@ from agents.switcher_core import (
 
 
 class SwitcherEncoder(Encoder):
-    """Encode local maps separately from coordinates and candidate actions."""
-
     def __init__(self, cfg, obs_space):
         super().__init__(cfg)
         if tuple(obs_space["obs"].shape) != SWITCHER_SPATIAL_SHAPE:
@@ -72,8 +68,6 @@ class SwitcherEncoder(Encoder):
 
 
 class SwitcherActorCritic(ActorCriticSharedWeights):
-    """Small categorical actor with a conservative ARPE initialization."""
-
     def __init__(self, model_factory, obs_space, action_space, cfg):
         if not cfg.actor_critic_share_weights:
             raise ValueError("Switcher requires shared actor-critic weights.")
@@ -106,7 +100,6 @@ class SwitcherActorCritic(ActorCriticSharedWeights):
 
     def forward_head(self, normalized_obs_dict):
         encoded = self.encoder(normalized_obs_dict)
-        # Old checkpoints/rollouts omit this execution-only metadata.
         switch_allowed = normalized_obs_dict.get("switch_allowed")
         if switch_allowed is None:
             switch_allowed = normalized_obs_dict["aoreplan_action"][:, :1] < 0.5
@@ -155,9 +148,3 @@ class SwitcherActorCritic(ActorCriticSharedWeights):
             result["actions"] = actions
             result["log_prob_actions"] = log_probs
         return result
-
-
-__all__ = [
-    "SwitcherActorCritic",
-    "SwitcherEncoder",
-]

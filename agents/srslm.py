@@ -1,5 +1,3 @@
-"""Deployed SRSLM with a learned probabilistic Switcher."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,7 +8,6 @@ from pydantic import Extra, Field
 
 from agents.switcher import Switcher, SwitcherConfig
 from agents.arpe import (
-    ARPE_CANDIDATE_LABEL,
     ARPE,
     ARPEConfig,
     ArpeCandidateArtifact,
@@ -18,9 +15,6 @@ from agents.arpe import (
 from agents.switcher_core import SwitcherController
 from agents.utils_agents import AlgoBase
 from planning.aoreplan_branch import AORePlanBranch
-
-
-SRSLM_MODE = "aoreplan_wait_bypass_switcher_v3"
 
 
 class SRSLMConfig(AlgoBase, extra=Extra.forbid):
@@ -31,8 +25,6 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
 
 
 class SRSLM:
-    """Use ARPE for AORePlan waits and Switcher for AORePlan moves."""
-
     def set_grid_config(self, grid_config):
         self.controller.set_grid_config(grid_config)
 
@@ -44,9 +36,6 @@ class SRSLM:
 
     def get_additional_info(self):
         return self.get_switch_stats()
-
-    def get_action_correction_stats(self):
-        return self.candidate.get_action_correction_stats()
 
     def __init__(
         self,
@@ -112,18 +101,12 @@ class SRSLM:
         return list(self.controller.resolve_actions(branches).actions)
 
     def get_switch_stats(self):
-        result = {
-            "hybrid_mode": SRSLM_MODE,
-            "switch_pair": [ARPE_CANDIDATE_LABEL, "AORePlan"],
-            "switcher_training": "PPO",
-        }
-        result.update(self.controller.get_stats())
+        result = self.controller.get_stats()
         result.update(self.switcher.get_stats())
         return result
 
 
 __all__ = [
-    "SRSLM_MODE",
     "SRSLM",
     "SRSLMConfig",
 ]

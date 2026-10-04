@@ -1,5 +1,3 @@
-"""Switcher environments using a frozen ARPE policy."""
-
 from __future__ import annotations
 
 from copy import deepcopy
@@ -12,7 +10,6 @@ from agents.arpe import (
     ARPE,
 )
 from agents.switcher_core import (
-    SWITCHER_FEATURE_SCHEMA,
     SwitcherController,
     switcher_observation_space,
 )
@@ -21,16 +18,10 @@ from planning.aoreplan_branch import AORePlanBranch
 from pomapf_env.env import make_pomapf
 
 
-ARPE_SWITCHER_ENV_SCHEMA = "srslm_switcher_caar_candidate_env_v1"
-
-
 class ArpeSwitcherEnv(gym.Env):
-    """Train the Switcher with frozen ARPE and AORePlan branches."""
-
     metadata = {"render_modes": []}
 
     controller_class = SwitcherController
-    integration_schema = ARPE_SWITCHER_ENV_SCHEMA
 
     def __init__(
         self,
@@ -40,14 +31,11 @@ class ArpeSwitcherEnv(gym.Env):
         candidate_device: str = "cuda",
         max_planning_steps: int = 10_000,
         team_reward_coefficient: float = 1.0,
-        feature_schema: str = SWITCHER_FEATURE_SCHEMA,
         candidate_factory=ARPE.load,
         planner_factory=AORePlanBranch,
         base_env_factory=make_pomapf,
     ):
         super().__init__()
-        if feature_schema != SWITCHER_FEATURE_SCHEMA:
-            raise ValueError(f"Unsupported Switcher feature schema {feature_schema!r}.")
         collision_system = getattr(grid_config, "collision_system", None)
         if collision_system not in SUPPORTED_COLLISION_SYSTEMS:
             raise ValueError(
@@ -73,7 +61,6 @@ class ArpeSwitcherEnv(gym.Env):
         self.candidate = candidate
         self.candidate_artifact = candidate_artifact
         self.team_reward_coefficient = float(team_reward_coefficient)
-        self.feature_schema = feature_schema
         self.observation_space = switcher_observation_space()
         self.action_space = gym.spaces.Discrete(2)
         self.num_agents = int(grid_config.num_agents)
@@ -118,9 +105,6 @@ class ArpeSwitcherEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         del options
         if seed is not None:
-            # POGEMA uses the seed stored in its grid config.  Sample Factory
-            # normally leaves this unset, but accepting it keeps Gymnasium's
-            # reset contract intact.
             self.base_env.grid_config.seed = int(seed)
         observations, infos = self.base_env.reset()
         return self._start_policy_episode(observations, infos), infos
@@ -168,8 +152,7 @@ class ArpeSwitcherEnv(gym.Env):
         episode_finished = bool(done.size and np.all(done))
         if episode_finished:
             self._append_episode_stats(infos)
-            # make_pomapf includes AutoResetWrapper, so observations already
-            # belong to the next episode here.
+
             next_features = self._start_policy_episode(observations, infos)
         else:
             self._prepared = self.controller.prepare_actions(
@@ -194,7 +177,6 @@ class ArpeSwitcherEnv(gym.Env):
 
 
 __all__ = [
-    "ARPE_SWITCHER_ENV_SCHEMA",
     "ArpeSwitcherEnv",
     "switcher_observation_space",
 ]

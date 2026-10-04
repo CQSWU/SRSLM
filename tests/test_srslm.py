@@ -25,9 +25,6 @@ class _FakeCandidate:
     def after_reset(self):
         pass
 
-    def verify_frozen(self):
-        return {"verified": True}
-
 
 class _FakeSwitcher:
     candidate_artifact = SimpleNamespace(

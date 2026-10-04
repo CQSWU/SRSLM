@@ -1,15 +1,10 @@
-"""Keep retired inference variants out of the current, portable loader."""
-
 import pytest
 import torch
-from types import SimpleNamespace
-from unittest.mock import Mock
 from pydantic import ValidationError
 
 from agents.epom_trace_context import (
     EPOMTraceContext,
     EPOMTraceContextConfig,
-    _validate_r5_trace_contract,
 )
 from agents.policy_backbone import PolicyBackbone, PolicyBackboneConfig
 
@@ -67,34 +62,6 @@ def test_an_explicit_checkpoint_can_be_stored_outside_its_config_directory(tmp_p
     assert adapter.checkpoint_path == candidate.resolve()
 
 
-def _trace_config():
-    return {
-        "experiment_settings": {"trace_context_architecture": "paper_entropy_fusion"},
-        "environment": {"tau_radius": 5, "tau_raw": False, "trace_variant": "real"},
-    }
-
-
-@pytest.mark.parametrize("architecture", ["context", "paper_entropy_multiplier", None])
-def test_trace_contract_does_not_infer_a_legacy_architecture(architecture):
-    config = _trace_config()
-    if architecture is None:
-        del config["experiment_settings"]["trace_context_architecture"]
-    else:
-        config["experiment_settings"]["trace_context_architecture"] = architecture
-    with pytest.raises(RuntimeError):
-        _validate_r5_trace_contract(config)
-
-
-def test_trace_contract_preserves_centered_real_input():
-    config = _trace_config()
-    for variant in ("real",):
-        config["environment"]["trace_variant"] = variant
-        contract = _validate_r5_trace_contract(config)
-        assert contract["tau_raw"] is False
-        assert contract["tau_size"] == 11
-        assert contract["trace_variant"] == variant
-
-
 def test_historical_action_sampling_is_explicit_and_unchanged():
     assert EPOMTraceContextConfig(path_to_weights="unused").action_sampling == "torch"
     assert (
@@ -103,23 +70,3 @@ def test_historical_action_sampling_is_explicit_and_unchanged():
         ).action_sampling
         == "direct_numpy"
     )
-
-
-def test_constructor_does_not_require_external_backbone_hash_binding(monkeypatch):
-    verifier = Mock(side_effect=RuntimeError("backbone differs"))
-    config = _trace_config()
-    config["environment"]["grid_memory_obs_radius"] = 5
-
-    def fake_backbone_init(self, algo_cfg):
-        self.cfg = SimpleNamespace(full_config=config)
-        self.saved_config = {"full_config": config}
-        self.tau_radius = 5
-        self.ppo = SimpleNamespace(
-            trace_radius=5, verify_frozen_actor_backbone=verifier
-        )
-
-    monkeypatch.setattr(PolicyBackbone, "__init__", fake_backbone_init)
-    cfg = EPOMTraceContextConfig(path_to_weights="unused", seed=42)
-    policy = EPOMTraceContext(cfg)
-    assert not hasattr(policy, "_actor_backbone_verification")
-    verifier.assert_not_called()

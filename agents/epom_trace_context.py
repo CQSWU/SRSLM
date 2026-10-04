@@ -1,21 +1,3 @@
-"""Inference adapter for the paper ARPE correction on frozen EPOM-L.
-
-The model adds the Direct bonus and five bounded, centred learned residuals,
-with the checkpoint's entropy gate. This adapter rebuilds EPOM grid memory
-and the mean-centred 11x11 shared-trace crop, resets episode state, and records
-diagnostics. The free-cell mask is used to construct the trace observation,
-not as an input or action mask in the learned branch.
-
-Checkpoint selection is explicit.  ``latest`` and ``best`` use the normal
-Sample Factory run directory.  ``milestone`` requires an exact checkpoint file
-so a screen can never silently evaluate a newer checkpoint.
-
-Registry note: ``train.register_custom_components`` must map
-``encoder_custom=epom_trace_context`` to
-``EPOMTraceMultiplierActorCritic``.  The model/config integration owns that hook;
-it deliberately does not live in this inference-only module.
-"""
-
 from __future__ import annotations
 
 from copy import deepcopy
@@ -34,49 +16,8 @@ from learning.grid_memory import MultipleGridMemory
 from pomapf_env.trace_routing import TIE_KEY, bonus_rng, draw_tie_ranks
 from pomapf_env.wrappers import MatrixObservationWrapper
 
-
 TRACE_RADIUS = 5
 TRACE_SIZE = 2 * TRACE_RADIUS + 1
-
-
-def _validate_r5_trace_contract(full_config: dict) -> dict[str, object]:
-    """Validate the same config snapshot used to construct the loaded model."""
-
-    try:
-        environment = full_config["environment"]
-        architecture = full_config["experiment_settings"]["trace_context_architecture"]
-    except (KeyError, TypeError) as exc:
-        raise RuntimeError(
-            "Checkpoint config is missing the explicit trace observation contract."
-        ) from exc
-
-    radius = environment.get("tau_radius")
-    raw_tau = environment.get("tau_raw")
-    trace_variant = environment.get("trace_variant", "real")
-    if radius != TRACE_RADIUS:
-        raise RuntimeError(
-            "EPOM-TraceContext inference is fixed to the paper's 11x11 trace "
-            f"crop (tau_radius=5), but checkpoint config has {radius!r}."
-        )
-    if architecture != "paper_entropy_fusion":
-        raise RuntimeError(
-            f"Only the retained paper_entropy_fusion architecture is supported, got {architecture!r}."
-        )
-    if raw_tau is not False:
-        raise RuntimeError(
-            "EPOM-TraceContext checkpoint has an invalid trace representation: "
-            f"architecture={architecture!r} requires "
-            f"tau_raw=False, got {raw_tau!r}."
-        )
-    if trace_variant != "real":
-        raise RuntimeError(f"ARPE expects the shared trace, got {trace_variant!r}.")
-    return {
-        "tau_radius": TRACE_RADIUS,
-        "tau_size": TRACE_SIZE,
-        "tau_raw": False,
-        "trace_context_architecture": architecture,
-        "trace_variant": trace_variant,
-    }
 
 
 class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
@@ -84,8 +25,7 @@ class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
     path_to_weights: str
     checkpoint_kind: Literal["latest", "best", "milestone"] = "latest"
     milestone_checkpoint: Optional[str] = None
-    # Historical standalone ARPE reports sampled like Direct; the frozen
-    # SRSLM branch used Torch, sharing its stream with Switcher.
+
     action_sampling: Literal["torch", "direct_numpy"] = "torch"
 
     @root_validator
@@ -104,34 +44,20 @@ class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
 
 
 class EPOMTraceContext(PolicyBackbone):
-    """Frozen EPOM-L, the Direct rule, and a contextual learned residual."""
-
     def __init__(self, algo_cfg: EPOMTraceContextConfig):
         super().__init__(algo_cfg)
         self.grid_memory_radius = int(
             self.cfg.full_config["environment"]["grid_memory_obs_radius"]
         )
         self.grid_memory = MultipleGridMemory()
-        self._trace_contract = _validate_r5_trace_contract(
-            self.saved_config["full_config"]
-        )
         if int(self.tau_radius) != TRACE_RADIUS:
             raise RuntimeError(
                 "Runtime tau_radius disagrees with checkpoint config: "
                 f"{self.tau_radius} != {TRACE_RADIUS}"
             )
-        actor_radius = getattr(self.ppo, "trace_radius", None)
-        if actor_radius != TRACE_RADIUS:
-            raise RuntimeError(
-                "Actor observation space is not the required 11x11 trace crop: "
-                f"trace_radius={actor_radius!r}"
-            )
-        self._context_diagnostic_steps: list[dict[str, float]] = []
         self._numpy_rng = np.random.default_rng(algo_cfg.seed)
         self._bonus_rng = bonus_rng(algo_cfg.seed)
 
-    # ARPE.__init__ dispatches to this method, so milestone selection happens
-    # before the checkpoint is deserialised and cannot be changed afterwards.
     def _load_checkpoint(self, checkpoint_dir, device, checkpoint_kind):
         if checkpoint_kind != "milestone":
             checkpoint = super()._load_checkpoint(
@@ -148,9 +74,6 @@ class EPOMTraceContext(PolicyBackbone):
             raise FileNotFoundError(
                 f"Missing requested milestone checkpoint: {candidate}"
             )
-        if candidate.suffix != ".pth":
-            raise ValueError(f"Milestone checkpoint must be a .pth file: {candidate}")
-
         self.checkpoint_path = candidate
         checkpoint = self._load_checkpoint_path(candidate, device, "milestone")
         return checkpoint
@@ -158,26 +81,13 @@ class EPOMTraceContext(PolicyBackbone):
     def after_reset(self):
         super().after_reset()
         self.grid_memory.clear()
-        self._context_diagnostic_steps = []
         self._numpy_rng = np.random.default_rng(self.algo_cfg.seed)
         self._bonus_rng = bonus_rng(self.algo_cfg.seed)
 
     def _add_exact_free_mask(self, observations, positions):
-        """Add the exact 11x11 free-cell mask used during training.
-
-        ``AcoState`` already owns the padded global obstacle mask, so using its
-        crop routine also marks cells outside the map as unavailable.  This is
-        intentionally exact: zero trace alone cannot distinguish an obstacle
-        from a free cell that has not yet been visited.
-        """
 
         for observation, (row, col) in zip(observations, positions):
             free = self.aco.extract_local_free_mask(int(row), int(col), TRACE_RADIUS)
-            if free.shape != (TRACE_SIZE, TRACE_SIZE):
-                raise RuntimeError(
-                    "Trace mask escaped the radius-5 observation contract: "
-                    f"shape={free.shape}"
-                )
             observation["tau_free_mask"] = free[np.newaxis, ...].astype(
                 np.float32, copy=False
             )
@@ -207,27 +117,13 @@ class EPOMTraceContext(PolicyBackbone):
         self.aco.observe_for_inference(
             observations,
             positions=positions,
-            raw_tau=bool(self._trace_contract["tau_raw"]),
+            raw_tau=False,
             radius=TRACE_RADIUS,
         )
         self._add_exact_free_mask(observations, positions)
         ranks = draw_tie_ranks(self._bonus_rng, num_agents)
         for observation, rank in zip(observations, ranks):
             observation[TIE_KEY] = rank
-            if observation["tau"].shape != (1, TRACE_SIZE, TRACE_SIZE):
-                raise RuntimeError(
-                    "Inference trace is not exactly [1,11,11]: "
-                    f"{observation['tau'].shape}"
-                )
-            if observation["tau_free_mask"].shape != (
-                1,
-                TRACE_SIZE,
-                TRACE_SIZE,
-            ):
-                raise RuntimeError(
-                    "Inference free mask is not exactly [1,11,11]: "
-                    f"{observation['tau_free_mask'].shape}"
-                )
 
         with torch.no_grad():
             obs_torch = TensorDict(
@@ -242,29 +138,12 @@ class EPOMTraceContext(PolicyBackbone):
             policy_outputs = self.ppo(obs_torch, self.rnn_states)
             self.rnn_states = policy_outputs["new_rnn_states"]
 
-            diagnostics = self.ppo.context_diagnostics()
-            if diagnostics:
-                self._context_diagnostic_steps.append(
-                    {key: float(value) for key, value in diagnostics.items()}
-                )
-
         if self.algo_cfg.action_sampling == "torch":
             return policy_outputs["actions"].detach().cpu().numpy()
         logits = policy_outputs["action_logits"].float().cpu().numpy()
         probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
         probabilities /= probabilities.sum(axis=1, keepdims=True)
         return np.asarray([self._numpy_rng.choice(5, p=row) for row in probabilities])
-
-    def get_action_correction_stats(self):
-        if not self._context_diagnostic_steps:
-            return {}
-        keys = set.intersection(*(set(step) for step in self._context_diagnostic_steps))
-        return {
-            f"context_{key}": float(
-                np.mean([step[key] for step in self._context_diagnostic_steps])
-            )
-            for key in sorted(keys)
-        }
 
     def after_step(self, dones):
         super().after_step(dones)

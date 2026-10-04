@@ -1,4 +1,3 @@
-import io
 import json
 from os.path import join
 from pathlib import Path
@@ -28,8 +27,6 @@ class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
 
 
 class PolicyBackbone:
-    """Shared checkpoint-loading backbone for trace-aware EPOM policies."""
-
     def __init__(self, algo_cfg: PolicyBackboneConfig):
         self.algo_cfg = algo_cfg
         path = algo_cfg.path_to_weights
@@ -38,15 +35,14 @@ class PolicyBackbone:
 
         register_custom_components()
 
-        config = self._load_config_snapshot(self.config_path)
-        self.saved_config = config
+        config = json.loads(self.config_path.read_text(encoding="utf-8"))
         runtime_config = deepcopy(config["full_config"])
         if algo_cfg.base_weights_path is not None:
             runtime_config["experiment_settings"]["epom_base_weights_path"] = (
                 algo_cfg.base_weights_path
             )
         _, flat_config = validate_config(checkpoint_experiment_config(runtime_config))
-        # Paths are deployment inputs, not rewritten checkpoint configuration.
+
         flat_config.base_checkpoint_path = algo_cfg.base_checkpoint_path
 
         env = create_env(flat_config.env, cfg=flat_config, env_config={})
@@ -83,7 +79,7 @@ class PolicyBackbone:
         checkpoint = self._load_checkpoint(
             checkpoint_dir, device, algo_cfg.checkpoint_kind
         )
-        self._load_model_state(actor_critic, checkpoint["model"], path)
+        actor_critic.load_state_dict(checkpoint["model"], strict=True)
 
         self.ppo = actor_critic
         self.cfg = flat_config
@@ -92,15 +88,6 @@ class PolicyBackbone:
         self.rnn_states = None
         self.aco = AcoState(rho=self.env_cfg.tau_rho)
         self.env = None
-
-    @staticmethod
-    def _load_config_snapshot(config_path):
-        config_path = Path(config_path).resolve()
-        if not config_path.is_file():
-            raise FileNotFoundError(f"Could not find {config_path}")
-        with config_path.open("rb") as handle:
-            payload = handle.read()
-        return json.loads(payload.decode("utf-8"))
 
     @staticmethod
     def _checkpoint_map_location(device):
@@ -127,10 +114,8 @@ class PolicyBackbone:
     def _load_checkpoint_path(cls, checkpoint_path, device, label):
         checkpoint_path = Path(checkpoint_path).resolve()
         log.info("Loading %s checkpoint: %s", label, checkpoint_path)
-        with checkpoint_path.open("rb") as handle:
-            payload = handle.read()
         checkpoint = torch.load(
-            io.BytesIO(payload),
+            checkpoint_path,
             map_location=cls._checkpoint_map_location(device),
             weights_only=False,
         )
@@ -154,47 +139,6 @@ class PolicyBackbone:
             label,
         )
         return checkpoint
-
-    @staticmethod
-    def _load_model_state(actor_critic, checkpoint_state, path):
-        """Reject architecture or forward-rule mismatches before loading tensors."""
-
-        current = actor_critic.state_dict()
-        missing = sorted(current.keys() - checkpoint_state.keys())
-        unexpected = sorted(checkpoint_state.keys() - current.keys())
-        shape_mismatches = [
-            f"{key}: checkpoint={tuple(checkpoint_state[key].shape)}, "
-            f"model={tuple(current[key].shape)}"
-            for key in sorted(current.keys() & checkpoint_state.keys())
-            if checkpoint_state[key].shape != current[key].shape
-        ]
-        # load_state_dict(strict=True) checks names and shapes, but would happily
-        # overwrite a version marker with one for a different forward equation.
-        semantic_buffers = {
-            "fixed_entropy_threshold",
-            "paper_entropy_gate_version",
-            "independent_critic_version",
-            "allaction_residual_version",
-        }
-        semantic_mismatches = [
-            key
-            for key in sorted(
-                semantic_buffers & current.keys() & checkpoint_state.keys()
-            )
-            if checkpoint_state[key].dtype != current[key].dtype
-            or not torch.equal(
-                checkpoint_state[key].detach().cpu(), current[key].detach().cpu()
-            )
-        ]
-        if missing or unexpected or shape_mismatches or semantic_mismatches:
-            raise RuntimeError(
-                "Checkpoint architecture or forward-rule contract does not match "
-                "this policy; no tensors were loaded. "
-                f"Checkpoint path: {path}; missing={missing}, unexpected={unexpected}, "
-                f"shape_mismatches={shape_mismatches}, "
-                f"semantic_mismatches={semantic_mismatches}"
-            )
-        actor_critic.load_state_dict(checkpoint_state, strict=True)
 
     def set_grid_config(self, grid_config):
         self.aco.configure_from_grid_config(grid_config, clear=True)

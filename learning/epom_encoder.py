@@ -6,8 +6,6 @@ from torch import nn
 
 
 class EPOMEncoder(Encoder):
-    """Sample Factory 2 adapter for the official EPOM v0 encoder."""
-
     def __init__(self, cfg, obs_space):
         super().__init__(cfg)
         settings = cfg.full_config["experiment_settings"]

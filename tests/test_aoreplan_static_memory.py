@@ -1,9 +1,3 @@
-"""Static probes use each agent's observed walls, not just its latest crop.
-
-Every input below is an 11x11 observation. No full-map API is passed to the
-policy. On Linux the same assertions also exercise the native planner.
-"""
-
 import sys
 
 import numpy as np
@@ -13,7 +7,6 @@ import planning.ao_replan_algo as ao
 from agents.ao_replan import AORePlan, AORePlanConfig
 from planning.aoreplan_branch import AORePlanBranch
 from planning.python_planner import planner as PythonPlanner
-
 
 BACKENDS = [("python", PythonPlanner)]
 if sys.platform != "win32":
@@ -32,7 +25,6 @@ WALLS = NEAR_WALLS | {REMOTE_WALL}
 
 
 def observation(position=CURRENT, target=GOAL, *, walls=WALLS, occupied=()):
-    """Crop a synthetic scene into the only map information the policy sees."""
     position = tuple(position)
     obstacles = np.zeros((11, 11), dtype=np.int8)
     agents = np.zeros_like(obstacles)
@@ -99,7 +91,7 @@ class SequenceBase:
 def test_remote_previously_observed_wall_changes_static_first_step(backend):
     current = observation()
     seen = observation(HISTORY)
-    # The remote wall is present in history but lies beyond the current crop.
+
     assert seen["obstacles"][5, 6] == 1
     assert REMOTE_WALL[1] - CURRENT[1] > 5
     check = new_check()
@@ -107,8 +99,8 @@ def test_remote_previously_observed_wall_changes_static_first_step(backend):
     planner_id = check._planners[0]
     check.observe([current])
     assert check._planners[0] is planner_id
-    assert fresh_action(current) == 1  # Up into the apparently open corridor.
-    assert check.get_action(0, current) == 2  # Down around its remembered end.
+    assert fresh_action(current) == 1
+    assert check.get_action(0, current) == 2
 
 
 def test_observed_walls_are_private_to_each_agent(backend):
@@ -127,8 +119,7 @@ def test_observed_walls_are_private_to_each_agent(backend):
 
 
 def test_non_probe_steps_accumulate_walls_before_first_reverse(backend):
-    # A physically possible leftward walk through the upper corridor, then
-    # down to CURRENT. Only the final, upward proposal is a reverse.
+
     wrapper = ao.AORePlanWrapper(SequenceBase([3] * 5 + [2, 1]), max_steps=MAX_STEPS)
     for col in range(5, -1, -1):
         assert wrapper.act([observation((-1, col))]) == [3 if col else 2]
@@ -181,7 +172,6 @@ def test_episode_reset_discards_previous_episode_walls(backend, adapter):
         reset = policy.reset
         get_wrapper = lambda: policy._wrapper
 
-    # Goal observations are sufficient to acquire walls, without any probe.
     step(observation(HISTORY, HISTORY))
     old = get_wrapper().static_astar
     old.observe([observation()])
@@ -192,7 +182,7 @@ def test_episode_reset_discards_previous_episode_walls(backend, adapter):
     assert current._planners is None
     step(observation())
     assert current.get_action(0, observation()) == 1
-    # Reset created new storage rather than mutating another episode's object.
+
     assert old.get_action(0, observation()) == 2
 
 
@@ -201,12 +191,12 @@ def test_static_query_ignores_current_agent_positions_and_failure_cache(backend)
     check = new_check()
     check.observe([obs])
     local = check._planners[0]
-    # Deliberately seed a failed eastward proposal in this private planner.
+
     local.update_obstacles([], [], (-5, -5))
     local.plan_path(CURRENT, (0, 2))
     assert first_action(local) == 4
     local.observe_position(CURRENT)
-    # Also add transient occupancy without relying on backend-private fields.
+
     local.update_obstacles([], [(4, 5), (6, 5)], (-5, -5))
     local.plan_path(CURRENT, (0, 2))
     assert first_action(local) != 4
@@ -233,8 +223,7 @@ def test_static_query_leaves_no_pending_execution_feedback(backend):
     check.observe([obs])
     assert check.get_action(0, obs) == 4
     local = check._planners[0]
-    # A static query is not a submitted dynamic proposal. If its desired
-    # position survived, this non-movement would incorrectly blacklist east.
+
     local.observe_position(CURRENT)
     local.update_obstacles([], [], (-5, -5))
     local.plan_path(CURRENT, (0, 2))

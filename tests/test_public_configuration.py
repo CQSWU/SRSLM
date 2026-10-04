@@ -1,10 +1,6 @@
-"""Public runs accept custom recipes without paper-audit registration."""
-
 from copy import deepcopy
-import inspect
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 import torch
@@ -13,7 +9,6 @@ import yaml
 from agents.arpe import ARPE
 from learning.config import Environment, Experiment
 from agents.switcher_core import switcher_observation_space
-import run_experiments as runner
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,25 +41,13 @@ def test_training_recipe_can_use_custom_maps_populations_and_hardware():
     assert config == saved
 
 
-def test_arpe_freezes_parameters_without_a_file_hash_audit():
+def test_arpe_freezes_base_parameters():
     model = torch.nn.Linear(2, 5)
-    artifact = SimpleNamespace(
-        inference=None, inspect_files=Mock(side_effect=AssertionError("audit called"))
-    )
+    artifact = SimpleNamespace(inference=None)
     adapter = ARPE(SimpleNamespace(ppo=model, device="cpu"), artifact)
     assert adapter.ppo is model
     assert not model.training
     assert all(not parameter.requires_grad for parameter in model.parameters())
-    artifact.inspect_files.assert_not_called()
-
-
-def test_runner_does_not_require_private_source_or_result_audits():
-    main_source = inspect.getsource(runner.main)
-    episode_source = inspect.getsource(runner.run_single_experiment)
-    assert "srslm_integrity_metadata" not in main_source
-    assert "epom_lifelong_result_manifest" not in main_source
-    assert "validate_srslm_stats" not in episode_source
-    assert "validate_final_srslm_ablation_stats" not in episode_source
 
 
 @pytest.mark.parametrize(

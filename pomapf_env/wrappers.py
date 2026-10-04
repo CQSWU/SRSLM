@@ -4,7 +4,6 @@ from copy import deepcopy
 
 from pathlib import Path
 
-
 import numpy as np
 import gymnasium as gym
 from gymnasium import ObservationWrapper
@@ -51,8 +50,6 @@ class RewardShaping(gym.Wrapper):
 
 
 class EnvAttributesWrapper(gym.Wrapper):
-    """Expose Pogema metadata through Gymnasium wrapper stacks."""
-
     @property
     def grid_config(self):
 
@@ -243,13 +240,6 @@ class MatrixObservationWrapper(ObservationWrapper):
 
 
 class GridMemoryObservationWrapper(gym.Wrapper):
-    """Expand raw POGEMA observations with EPOM's per-agent grid memory.
-
-    The official EPOM policy observes an 11x11 live crop but feeds a 15x15
-    remembered obstacle crop to its encoder.  This stateful wrapper mirrors the
-    inference-time ``MultipleGridMemory`` path during Sample Factory rollouts.
-    """
-
     def __init__(self, env, memory_radius=7):
         super().__init__(env)
         self.memory_radius = int(memory_radius)
@@ -313,8 +303,6 @@ class GridMemoryObservationWrapper(gym.Wrapper):
 
 
 class TauObservationWrapper(gym.Wrapper):
-    """Add a signed local mean-centered traffic observation."""
-
     def __init__(
         self,
         env,
@@ -374,8 +362,7 @@ class TauObservationWrapper(gym.Wrapper):
 
     def step(self, action):
         observations, rewards, terminated, truncated, infos = self.env.step(action)
-        # POGEMA creates a new grid on reset, including an inner auto-reset.
-        # A terminal observation without auto-reset still uses the old grid.
+
         reset = self._grid() is not self._trace_grid
         if reset:
             self._configure_trace(clear=True)
@@ -383,7 +370,6 @@ class TauObservationWrapper(gym.Wrapper):
         return observations, rewards, terminated, truncated, infos
 
     def _observe(self, observations, reset):
-        """Read the local shared trace."""
         true_positions = self._global_positions()
         if reset:
             self.aco.reset_episode(

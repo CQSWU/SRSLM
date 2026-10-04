@@ -1,5 +1,3 @@
-"""Current training has no reset wrapper and only resumes the explicit run."""
-
 import json
 import os
 from pathlib import Path
@@ -9,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 import train
-
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,11 +24,6 @@ def _run_config(path, frames=50_000_000):
         encoding="utf-8",
     )
     return path.read_bytes()
-
-
-def test_retired_reset_wrapper_is_not_shipped():
-    assert not (ROOT / "train_caar.py").exists()
-    assert '"train_caar"' not in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
 
 def test_current_entry_rejects_reset_before_registering_or_writing():

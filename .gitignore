@@ -1,4 +1,3 @@
-# Python bytecode and test caches
 __pycache__/
 *.py[cod]
 *.pyo
@@ -6,7 +5,6 @@ __pycache__/
 .ruff_cache/
 .pytest_tmp*/
 
-# Local environments and build products
 .venv/
 venv/
 env/
@@ -15,13 +13,11 @@ env/
 dist/
 build/
 
-# Compiled extensions and local planner builds
 *.so
 *.dylib
 *.pyd
 planning/.rendered.*
 
-# Model artifacts are distributed separately from source
 weights/
 *.pth
 *.pt
@@ -30,7 +26,6 @@ weights/
 *.ckpt*
 *.7z
 
-# Experiment outputs and local-only data backups
 results/
 reproduction/
 logs/
@@ -43,16 +38,13 @@ single_task_logs/
 *.pid
 *.job
 
-# Upstream repositories and comparison implementations
 external/
 third_party/
 otherpolicy/
 
-# Generated data and renders
 data/
 renders/
 
-# IDE and operating-system files
 .idea/
 .vscode/
 *.swp
@@ -60,7 +52,6 @@ renders/
 .DS_Store
 Thumbs.db
 
-# LaTeX build products
 *.aux
 *.fdb_latexmk
 *.fls
@@ -69,5 +60,4 @@ Thumbs.db
 PDF/tmp/
 PDF/render_check*/
 
-# Local release staging
 release_contents.tar

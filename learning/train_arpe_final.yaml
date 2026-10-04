@@ -1,6 +1,3 @@
-# Native always-gate / Direct1 training example with the final 1B hyperparameters.
-# The released checkpoint resumed a 500M optimizer state; this fresh-run recipe
-# does not claim exact historical replay. Inference H>.01/x12/Direct0 is separate.
 name: ARPE-Always-1B-Example-S0
 global_settings:
   train_dir: weights/arpe_training_example

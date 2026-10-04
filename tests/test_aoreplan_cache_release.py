@@ -1,5 +1,3 @@
-"""Failure-cache lifetime regressions for both planner backends."""
-
 import sys
 
 import numpy as np
@@ -7,7 +5,6 @@ import pytest
 
 import planning.ao_replan_algo as ao
 from planning.python_planner import planner as PythonPlanner
-
 
 MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 BACKENDS = [("python", PythonPlanner)]
@@ -45,7 +42,7 @@ def observation(target=(0, 2), *, occupied=(), walls=()):
 def base(request, monkeypatch):
     monkeypatch.setattr(ao, "planner", request.param[1])
     result = ao.AORePlanBase(max_steps=1000, seed=0)
-    # These tests isolate cache lifetime and release from admission sampling.
+
     result.failure_cache_rnd = FixedCacheRng(0.0)
     return result
 
@@ -62,7 +59,7 @@ def test_randomized_failure_cache_admission_controls_retry(backend, monkeypatch)
     declined.failure_cache_rnd = FixedCacheRng(0.75)
     assert declined.act(observation()) == [4]
     declined.commit_proposals([True])
-    # The failed right move was not admitted, so it can be proposed again.
+
     assert declined.act(observation()) == [4]
     assert declined.failure_cache_rnd.calls == 1
 
@@ -70,14 +67,14 @@ def test_randomized_failure_cache_admission_controls_retry(backend, monkeypatch)
     admitted.failure_cache_rnd = FixedCacheRng(0.25)
     assert admitted.act(observation()) == [4]
     admitted.commit_proposals([True])
-    # The same physical failure was admitted and is avoided on the retry.
+
     retry = admitted.act(observation())[0]
     assert retry is not None and retry != 4
     assert admitted.failure_cache_rnd.calls == 1
 
 
 def exhaust_four_directions(base):
-    # All proposals are submitted, but the observed position never changes.
+
     for action in range(1, 5):
         di, dj = MOVES[action]
         assert base.act(observation((2 * di, 2 * dj))) == [action]
@@ -96,7 +93,7 @@ def test_exhausted_cache_returns_none_now_but_recovers_next_query(base):
 
     base._get_next_node = counted
     exhaust_four_directions(base)
-    # No hidden retry or extra search within the no-action decision.
+
     assert len(queries) == 5
     assert base.act(observation()) == [4]
     assert len(queries) == 6
@@ -115,7 +112,7 @@ def test_exhaustion_does_not_remove_accumulated_static_obstacles(base):
     exhaust_four_directions(base)
     assert base.act(observation(walls=(1, 2, 3, 4))) == [None]
     base.commit_proposals([False])
-    # Even if omitted from a later crop, learned static walls remain.
+
     assert base.act(observation()) == [None]
 
 
@@ -142,7 +139,7 @@ def test_cancelled_valid_proposal_keeps_prior_failure_but_not_fake_failure(base)
     assert base.act(observation()) == [4]
     base.commit_proposals([True])
     assert base.act(observation((2, 0))) == [2]
-    # This viable proposal was replaced by static A* / the learning branch.
+
     base.commit_proposals([False])
     assert base.act(observation((2, 0))) == [2]
     base.commit_proposals([False])
@@ -156,12 +153,12 @@ def test_release_is_per_agent_not_shared_between_planners(base):
         batch = observation((2 * di, 2 * dj)) + observation()
         candidates = base.act(batch)
         assert candidates[0] == action
-        # Agent1's first submitted right fails; later proposals are cancelled.
+
         if action == 1:
             base.commit_proposals([True, True])
         else:
             base.commit_proposals([True, False])
-    # Agent0 exhausts its four failed exits; agent1's right failure remains.
+
     candidates = base.act(observation() + observation())
     assert candidates[0] is None
     assert candidates[1] is not None and candidates[1] != 4

@@ -1,5 +1,3 @@
-"""The public recipe exposes only the retained ARPE model."""
-
 from copy import deepcopy
 from pathlib import Path
 

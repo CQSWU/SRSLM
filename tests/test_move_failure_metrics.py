@@ -110,8 +110,6 @@ class MoveFailureTrackerTests(unittest.TestCase):
         tracker.commit(pending, before)
         metrics = tracker.metrics()
 
-        # Three proposals enter (0, 1), contributing C(3, 2) = 3 pairs.
-        # Two proposals enter (3, 1), contributing C(2, 2) = 1 pair.
         self.assertEqual(metrics["vertex_flow_pair_count"], 4)
         self.assertEqual(metrics["vertex_flow_move_denominator"], 5)
         self.assertEqual(metrics["vertex_flow_pair_cost_per_move"], 0.8)
@@ -140,8 +138,6 @@ class MoveFailureTrackerTests(unittest.TestCase):
         tracker.commit(pending, before)
         metrics = tracker.metrics()
 
-        # All three remain ordinary movement attempts, but the first two target
-        # an obstacle and the third leaves the map, so none is a graph-edge flow.
         self.assertEqual(metrics["move_attempt_count"], 3)
         self.assertEqual(metrics["vertex_flow_move_denominator"], 0)
         self.assertEqual(metrics["vertex_flow_pair_count"], 0)

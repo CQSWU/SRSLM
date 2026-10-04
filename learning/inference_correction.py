@@ -1,5 +1,3 @@
-"""Explicit deployment correction; never part of checkpoint training state."""
-
 from dataclasses import asdict, dataclass
 import math
 
@@ -8,8 +6,6 @@ import torch
 
 @dataclass(frozen=True)
 class InferenceCorrection:
-    """Use only the learned residual when raw base entropy exceeds a threshold."""
-
     entropy_threshold: float = 0.01
     residual_scale: float = 12.0
     action_sampling: str = "direct_numpy"

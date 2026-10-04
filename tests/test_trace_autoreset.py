@@ -1,9 +1,3 @@
-"""Real-factory regression tests for trace state at episode boundaries.
-
-No models or checkpoints are loaded. All environments use the actual POGEMA
-and training observation-wrapper stack, including its inner auto-reset.
-"""
-
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -51,8 +45,7 @@ def environment_factory(monkeypatch):
 
     def factory(grid=None, *, auto_reset=True, raw_tau=False, trace_variant="real"):
         grid = _grid() if grid is None else grid
-        # Keep the actual training factory/observation stack; only select the
-        # already-supported inner environment reset contract for this test.
+
         monkeypatch.setattr(
             train,
             "make_env",
@@ -87,7 +80,6 @@ def environment_factory(monkeypatch):
 
 
 def _assert_first_frame(trace, observations):
-    """A new episode contains exactly one deposit at each occupied cell."""
     grid = trace._grid()
     obstacles = np.asarray(grid.obstacles, dtype=bool)
     positions = trace._global_positions()
@@ -99,7 +91,6 @@ def _assert_first_frame(trace, observations):
     np.testing.assert_array_equal(trace.aco._obstacle_mask, obstacles)
     np.testing.assert_array_equal(trace.aco.prev_positions, positions)
 
-    # Check the returned crop and free-cell mask, not only the global buffer.
     reference = AcoState(rho=0.1)
     reference.configure_from_obstacle_mask(obstacles, clear=True)
     reference.tau[:] = expected
@@ -165,7 +156,6 @@ def test_autoreset_rebinds_changed_map_mask_and_shape(
     assert not np.array_equal(trace._grid().obstacles, old_mask)
     _assert_first_frame(trace, obs)
 
-    # The following normal step must retain the new support and evaporate once.
     new_grid = trace._grid()
     before = trace.aco.tau.copy()
     obs, _, _, truncated, _ = env.step([0, 0])
@@ -211,7 +201,7 @@ def test_lifelong_target_change_keeps_trace_and_grid(environment_factory):
     for xy in {tuple(position) for position in trace._global_positions()}:
         expected[xy] += 1.0
     np.testing.assert_allclose(trace.aco.tau, expected, atol=1e-6)
-    assert np.count_nonzero(trace.aco.tau) == 3  # old cell is still remembered
+    assert np.count_nonzero(trace.aco.tau) == 3
 
 
 def test_partial_termination_does_not_reset_trace(environment_factory):

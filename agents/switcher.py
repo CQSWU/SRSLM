@@ -1,8 +1,5 @@
-"""Checkpoint-backed inference policy for the SRSLM Switcher."""
-
 from __future__ import annotations
 
-import io
 import json
 from copy import deepcopy
 from os.path import join
@@ -38,8 +35,6 @@ class SwitcherConfig(AlgoBase, extra=Extra.forbid):
 
 
 class Switcher:
-    """Choose between ARPE and AORePlan for non-wait AORePlan actions."""
-
     expected_encoder_custom = "switcher"
     policy_label = "Switcher"
 
@@ -48,8 +43,7 @@ class Switcher:
         path = Path(cfg.path_to_weights)
         self.config_path = (path / "config.json").resolve()
         register_custom_components()
-        payload = self.config_path.read_bytes()
-        config = json.loads(payload.decode("utf-8"))
+        config = json.loads(self.config_path.read_text(encoding="utf-8"))
         full_config = deepcopy(config["full_config"])
         declaration = full_config.pop("candidate_policy", None)
         if declaration is not None and not isinstance(declaration, dict):
@@ -90,10 +84,9 @@ class Switcher:
             checkpoint_dir,
             cfg.checkpoint_kind,
         )
-        checkpoint_payload = checkpoint_path.read_bytes()
         self.checkpoint_path = checkpoint_path
         checkpoint = torch.load(
-            io.BytesIO(checkpoint_payload),
+            checkpoint_path,
             map_location=self.device,
             weights_only=False,
         )

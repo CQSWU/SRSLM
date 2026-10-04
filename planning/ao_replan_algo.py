@@ -20,7 +20,6 @@ else:
             "Rebuild planning/planner.cpp with cppimport before running AORePlan."
         )
 
-
 INF = 1_000_000_000
 FAILURE_CACHE_PROBABILITY = 0.5
 _FAILURE_CACHE_SEED_SALT = 0xFA11CA
@@ -29,8 +28,6 @@ _ACTION_BY_DELTA = {move: index for index, move in enumerate(_MOVES)}
 
 
 class AORePlanBase:
-    """Dynamic C++ replanner with explicit proposal feedback."""
-
     def __init__(self, max_steps: int = INF, seed=None):
         self.planner = None
         self.max_steps = int(max_steps)
@@ -40,8 +37,7 @@ class AORePlanBase:
             if seed is None
             else np.random.SeedSequence([int(seed), _FAILURE_CACHE_SEED_SALT])
         )
-        # Keep cache admission independent from the original no-path fallback
-        # RNG, so the new coin does not change that fallback's random stream.
+
         self.failure_cache_rnd = np.random.default_rng(cache_seed)
 
     def act(self, observations, skip_agents=None):
@@ -76,10 +72,7 @@ class AORePlanBase:
                     position[1] - radius,
                 ),
             )
-            # A physically failed submitted proposal is admitted to the local
-            # failure cache with probability 0.5. Cancelled proposals have no
-            # desired position, and successful proposals clear the cache, so a
-            # coin is drawn only for real execution failures.
+
             cache_failed_action = True
             if local_planner.proposal_failed(position):
                 cache_failed_action = bool(
@@ -94,9 +87,6 @@ class AORePlanBase:
             local_planner.plan_path(position, target)
             path = self._get_next_node(local_planner)
             if path is None or path[1][0] >= INF:
-                # This search exhausted the temporary failure constraints.
-                # Keep this step's original fallback; let the next observed
-                # planning step retry without stale failed destinations.
                 local_planner.release_failed_actions()
                 actions.append(None)
                 continue
@@ -109,12 +99,10 @@ class AORePlanBase:
 
     @staticmethod
     def _get_next_node(local_planner):
-        """Return an exact-path step or the dynamic planner's BestMove."""
 
         return local_planner.get_next_node(True)
 
     def commit_proposals(self, executed_mask):
-        """Retain feedback only for dynamic proposals that physically ran."""
 
         if self.planner is None:
             raise RuntimeError("AORePlan must act before proposals can be committed.")
@@ -128,7 +116,6 @@ class AORePlanBase:
 
 
 def _local_cell_is_free(observation, action, moves=_MOVES):
-    """Return whether a movement target is free in the current local view."""
 
     if action in (None, 0):
         return False
@@ -151,15 +138,6 @@ def _local_cell_is_free(observation, action, moves=_MOVES):
 
 
 def original_random_or_stay(observation, rnd, moves=_MOVES):
-    """Mirror the original RePlan no-path fallback: 50% wait, 50% random.
-
-    This reproduces ``NoPathSoRandomOrStayWrapper`` from the upstream RePlan
-    exactly, including its obstacle-only screening: the sampled move may still
-    enter a visible agent, which under ``block_both`` simply does not move the
-    agent. AORePlan deliberately keeps this branch identical to the original
-    so that the static A* check on the reverse branch is the single difference
-    between the two planners.
-    """
 
     if rnd.random() <= 0.5:
         return 0
@@ -177,13 +155,6 @@ def original_random_or_stay(observation, rnd, moves=_MOVES):
 
 
 class StaticAStarCheck:
-    """Query each agent's accumulated observed walls, without traffic memory.
-
-    Observe every step, not only when a reverse triggers a query. Each private
-    planner keeps walls across target changes and is discarded with the wrapper
-    at episode reset. Unobserved cells retain the planner's free-cell default.
-    """
-
     def __init__(self, max_steps: int = INF):
         self.max_steps = int(max_steps)
         self._planners = None
@@ -210,8 +181,7 @@ class StaticAStarCheck:
         if self._planners is None:
             raise RuntimeError("Observe the agent batch before querying static A*.")
         local_planner = self._planners[index]
-        # Reuse observed walls, but restart the search without dynamic agents
-        # or failed destinations. A static query is not an executed proposal.
+
         local_planner.update_static_path(
             tuple(observation["xy"]),
             tuple(observation["target_xy"]),
@@ -228,24 +198,6 @@ class StaticAStarCheck:
 
 
 class AORePlanWrapper:
-    """Apply the fixed AORePlan reverse/static-A* policy.
-
-    AORePlan differs from the original RePlan in exactly one place.  When the
-    dynamic planner fails to produce a move at all -- goal unreachable and
-    BestMove unavailable -- both planners fall back to the original 50% wait /
-    50% random rule.  When the dynamic proposal is a reverse, RePlan applies
-    that same coin flip while AORePlan runs a static-map A* check and only
-    waits if the check has no complete path or its first step is locally
-    blocked.
-
-    A reverse is measured against the position held at the *previous*
-    timestep, recorded on every step including waits and blocked moves.  After
-    a step in which the agent did not move, the previous position equals the
-    current one, so no move action can be a reverse and the dynamic proposal is
-    executed directly.  That breaks a repeated static-A* wait without a wait
-    counter or a random escape action.
-    """
-
     def __init__(
         self,
         agent,
@@ -288,12 +240,6 @@ class AORePlanWrapper:
         return int(raw_action)
 
     def _returns_to_previous_position(self, position, action, previous):
-        """Return whether ``action`` moves back onto the previous position.
-
-        ``previous`` is the position held one timestep ago, recorded whether or
-        not the agent actually moved.  A wait therefore makes ``previous`` equal
-        to ``position``, and no move action can then be a reverse.
-        """
 
         if action in (None, 0) or previous is None:
             return False
@@ -314,7 +260,7 @@ class AORePlanWrapper:
     def act(self, observations, skip_agents=None):
         actions = list(self.agent.act(observations, skip_agents=skip_agents))
         self._ensure_state(len(actions))
-        # Even skipped planning and at-goal steps contribute observed walls.
+
         self.static_astar.observe(observations)
         self._reset_diagnostics(actions)
 
@@ -327,15 +273,12 @@ class AORePlanWrapper:
 
             position = tuple(int(value) for value in observation["xy"])
             previous = self.previous_position[index]
-            # The previous position is recorded on every step, whether or not
-            # the agent moved, and is only read before being overwritten here.
+
             self.previous_position[index] = position
 
             if skip_agents is not None and bool(skip_agents[index]):
                 continue
 
-            # Reaching a goal is not a dynamic no-path event. AORePlan still
-            # returns a complete primitive action, namely wait.
             if position == target:
                 actions[index] = 0
                 continue

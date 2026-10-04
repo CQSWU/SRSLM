@@ -1,8 +1,5 @@
-# Editable fresh-run example; the saved run archive retains the historical curriculum.
 name: SRSLM-Switcher-Example-S0
 candidate_policy:
-  kind: epom_trace_context_caar_milestone
-  schema: switcher_candidate_caar_v1
   weights_path: weights/ARPE-Final-1B
   checkpoint_path: weights/ARPE-Final-1B/checkpoint_p0/checkpoint_000244175_1000140800.pth
   base_weights_path: weights/EPOM-L
@@ -11,7 +8,6 @@ candidate_policy:
     entropy_threshold: 0.01
     residual_scale: 12.0
     action_sampling: direct_numpy
-  frozen: true
 global_settings:
   train_dir: weights/switcher_training_example
   device: gpu
@@ -51,12 +47,9 @@ async_ppo:
   with_pbt: false
 environment:
   name: POMAPF-SRSLM-v0
-  switcher_caar_weights_path: weights/ARPE-Final-1B
-  switcher_caar_checkpoint_kind: latest
   switcher_caar_device: auto
   switcher_max_planning_steps: 10000
   switcher_team_reward_coefficient: 1.0
-  switcher_feature_schema: srslm_switcher_state_v3
   training_num_agents_by_worker: [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200]
   grid_config:
     on_target: restart

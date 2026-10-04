@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from planning.aoreplan_branch import AO_PLANNER_POLICY, AORePlanBranch
+from planning.aoreplan_branch import AORePlanBranch
 
 
 class SequenceBase:
@@ -48,8 +48,6 @@ def make_branch(sequences, static_action=3):
 
 def test_branch_has_one_fixed_policy_and_minimal_step_fields():
     branch, _ = make_branch([[1]])
-    assert AO_PLANNER_POLICY == "reverse_static_astar_with_original_no_path_fallback"
-    assert branch.planner_policy == AO_PLANNER_POLICY
     step = branch.propose([obs()])
     assert set(step.__dataclass_fields__) == {
         "actions",

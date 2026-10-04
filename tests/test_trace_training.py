@@ -1,5 +1,3 @@
-"""Regression tests for the selected ARPE checkpoint's training reward."""
-
 from types import SimpleNamespace
 
 import gymnasium as gym

@@ -1,5 +1,3 @@
-"""Train the current wait-rule Switcher with a frozen ARPE branch."""
-
 from __future__ import annotations
 
 import argparse
@@ -14,16 +12,11 @@ from sample_factory.train import run_rl
 import train as base_train
 from agents.arpe import ArpeCandidateArtifact
 from learning.config import Environment
-from pomapf_env.switcher_arpe_env import (
-    ARPE_SWITCHER_ENV_SCHEMA,
-    ArpeSwitcherEnv,
-)
-
+from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 ENV_NAME = "POMAPF-SRSLM-v0"
-ENTRYPOINT_SCHEMA = "srslm_switcher_wait_caar_training_entrypoint_v1"
 
 
 def create_switcher_env(
@@ -46,7 +39,6 @@ def create_switcher_env(
         candidate_device=environment.switcher_caar_device,
         max_planning_steps=environment.switcher_max_planning_steps,
         team_reward_coefficient=environment.switcher_team_reward_coefficient,
-        feature_schema=environment.switcher_feature_schema,
     )
 
 
@@ -62,12 +54,6 @@ def prepare_switcher_config(config: dict) -> tuple[object, object]:
         raise ValueError("Switcher config requires candidate_policy.")
     artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
 
-    # Keep the duplicated environment field in sync automatically.  Users only
-    # need to edit candidate_policy when selecting another ARPE checkpoint.
-    payload.setdefault("environment", {})["switcher_caar_weights_path"] = (
-        artifact.weights_relative
-    )
-
     experiment, flat_config = base_train.validate_config(payload)
     if flat_config.encoder_custom != "switcher":
         raise ValueError("Switcher requires encoder_custom='switcher'.")
@@ -76,10 +62,8 @@ def prepare_switcher_config(config: dict) -> tuple[object, object]:
     if bool(flat_config.use_rnn):
         raise ValueError("Switcher must remain feed-forward.")
     flat_config.full_config = deepcopy(flat_config.full_config)
-    flat_config.full_config["candidate_policy"] = deepcopy(declaration)
-    flat_config.candidate_policy = deepcopy(declaration)
-    flat_config.switcher_integration_schema = ARPE_SWITCHER_ENV_SCHEMA
-    flat_config.switcher_training_entrypoint_schema = ENTRYPOINT_SCHEMA
+    flat_config.full_config["candidate_policy"] = artifact.as_dict()
+    flat_config.candidate_policy = artifact.as_dict()
     return experiment, flat_config
 
 
@@ -101,7 +85,7 @@ def _apply_overrides(config: dict, args) -> set[str]:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="Train Switcher")
     parser.add_argument("--config_path", required=True)
     parser.add_argument("--run_name")
     parser.add_argument("--train_dir")
@@ -120,13 +104,10 @@ def main(argv=None) -> int:
             json.dumps(
                 {
                     "validated": True,
-                    "schema": ENTRYPOINT_SCHEMA,
-                    "integration_schema": ARPE_SWITCHER_ENV_SCHEMA,
                     "experiment": flat_config.experiment,
                     "target_frames": int(flat_config.train_for_env_steps),
                     "workers": int(flat_config.num_workers),
                     "candidate_policy": flat_config.candidate_policy,
-                    "decision_scope": "aoreplan_nonwait_only",
                 },
                 sort_keys=True,
             )

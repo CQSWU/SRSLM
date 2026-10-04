@@ -1,20 +1,18 @@
 # SRSLM
 
-This repository provides the implementation of **SRSLM: Switch and Reweight
-with Shared Trace for Lifelong Partially Observable Multi-Agent Pathfinding**.
-SRSLM combines the search-based AORePlan policy with the learned ARPE policy
-and uses a Switcher to select between their actions. When AORePlan proposes
-wait, SRSLM uses ARPE directly; otherwise, the Switcher chooses the branch.
+**Switch and Reweight with Shared Trace for Lifelong Partially Observable
+Multi-Agent Pathfinding.**
+
+SRSLM combines AORePlan and ARPE with a learned Switcher. When AORePlan
+returns wait, ARPE is used directly; otherwise, the Switcher selects a branch.
 
 | RePlan | AORePlan |
 | :---: | :---: |
 | <img src="docs/assets/replan.svg" alt="RePlan animation" width="420"> | <img src="docs/assets/aoreplan.svg" alt="AORePlan animation" width="420"> |
 
-An illustrative two-agent example.
+## Install
 
-## Installation
-
-Python 3.10 or 3.11 and a C++ compiler are required.
+Linux, Python 3.10 or 3.11, and a C++ compiler:
 
 ```bash
 git clone https://github.com/CQSWU/SRSLM.git
@@ -22,56 +20,44 @@ cd SRSLM
 uv sync
 ```
 
-The planner extension is compiled automatically on first use.
-
-## Inference Example
-
-AORePlan does not require pretrained weights:
+## Run
 
 ```bash
-uv run python run_experiments.py \
-  --algorithms AORePlan \
-  --map-types wc3 --map wc3=wc3-128x64-TimbermawHold
+uv run python run_experiments.py --algorithms AORePlan
 ```
 
-The public methods are AORePlan, ARPE and SRSLM. Baseline and ablation entry
-points are not included; EPOM-L is retained only as the learned methods' base.
-
-For learned methods, place the separately supplied `weights/` directory in
-the project root. Current settings are listed in
-[CURRENT_VERSION.md](CURRENT_VERSION.md).
-Use your own compatible weights by editing the paths in
-`configs/arpe_final_candidate.json` and setting `--switcher-weights-path`.
-No hash registration or audit manifest is required.
-
-## Training
-
-Configurable entry points; exact saved training configurations and curriculum
-drivers are retained with the experiment backup:
+For ARPE and SRSLM, put the supplied `EPOM-L`, `ARPE-Final-1B` and
+`SRSLM-Switcher-Final-1B` folders in `weights/`, keeping their `config.json`
+and checkpoint files. Edit `configs/arpe_final_candidate.json` to change ARPE
+weight paths or inference settings; use `--switcher-weights-path` for Switcher.
 
 ```bash
-# ARPE
-uv run python train.py --config_path learning/train_arpe_final.yaml
+uv run python run_experiments.py --algorithms SRSLM
+```
 
-# Switcher
+ARPE uses the learned correction at 12 times its training scale when base-policy
+entropy exceeds 0.01, without Direct's bonus. The supplied ARPE was trained with
+Direct bonus 1 and always-on correction. The supplied Switcher was trained with
+the earlier ARPE and wait/reverse rules; it has not been retrained for the current
+ARPE replacement and wait-only rule.
+
+## Train
+
+```bash
+uv run python train.py --config_path learning/train_arpe_final.yaml
 uv run python train_switcher.py --config_path learning/train_switcher.yaml
 ```
 
-Training maps are listed in `maps/train.yaml`, and evaluation maps are listed
-in `maps/test.yaml`.
-Training YAMLs are editable examples: choose your own maps, agent counts,
-workers and PPO settings for your hardware.
+Edit the YAML files to set maps, populations, workers and PPO parameters.
+They are fresh-run examples, not the original multi-stage training schedule.
+Weights and experiment results are distributed separately from the source.
 
-ARPE loads the supplied EPOM-L backbone; standalone EPOM fine-tuning code is
-not included. AORePlan builds on RePlan, and ARPE builds on EPOM; the original
-authors' notices are preserved in [LICENSE](LICENSE).
-
-## Documentation
-
-- [Reproducibility guide](docs/REPRODUCIBILITY.md)
-- [Current implementation](CURRENT_VERSION.md)
-- [Map sets](docs/MAPS.md)
+`maps/train.yaml` contains 186 training maps; `maps/test.yaml` contains 36 test
+maps. Four [MovingAI WC3 maps](https://www.movingai.com/benchmarks/wc3maps512/index.html)
+were reduced from 512×512 to 128×64 using 4×8 blocks, marking a cell free when
+at least half its source cells are free.
 
 ## License
 
-This project is released under the [MIT License](LICENSE).
+[MIT](LICENSE). AORePlan builds on RePlan, and ARPE uses EPOM as its base policy;
+the original authors' notices are preserved in the license.

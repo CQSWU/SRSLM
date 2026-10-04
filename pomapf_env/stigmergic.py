@@ -1,11 +1,7 @@
-"""Mean-centered traffic-trace state for ARPE."""
-
 import numpy as np
 
 
 class AcoState:
-    """Tracks a decaying ACO occupancy trace."""
-
     def __init__(self, rho=0.1):
         self.rho = float(rho)
         if not 0.0 < self.rho <= 1.0:
@@ -103,12 +99,6 @@ class AcoState:
         return local
 
     def extract_local_free_mask(self, x, y, radius):
-        """Return the true local map support used by a trace crop.
-
-        Free in-map cells are one. Obstacles and padding beyond the map are
-        zero. Keeping this crop beside raw ``tau`` lets a learned trace encoder
-        distinguish a genuine zero trace from an obstacle or map boundary.
-        """
         _, free_mask = self._local_tau_and_free_mask(x, y, int(radius))
         return free_mask.astype(np.float32, copy=False)
 

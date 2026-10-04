@@ -1,17 +1,9 @@
-"""Reverse-action statistics based on executed position history."""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
 
 
 class ExecutedPositionReverseCounter:
-    """Count proposals that return to the previous timestep's position.
-
-    The observed position is recorded every step, including waits and blocked
-    moves, and is reset when the target assignment changes.
-    """
-
     METRIC_VERSION = "previous_timestep_position_target_segment_v3"
 
     def __init__(self, moves: Sequence[Sequence[int]]):

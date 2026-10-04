@@ -4,7 +4,6 @@ import pytest
 from agents.switcher_core import (
     AO_BRANCH,
     ARPE_BRANCH,
-    SWITCHER_FEATURE_SCHEMA,
     SwitcherController,
 )
 from planning.aoreplan_branch import AORePlanStep
@@ -73,7 +72,6 @@ def test_wait_actions_bypass_switcher_and_directly_use_arpe():
     assert result.selected_branches == (ARPE_BRANCH, AO_BRANCH, ARPE_BRANCH)
     assert result.wait_bypass_mask == (True, False, True)
     stats = controller.get_stats()
-    assert stats["switcher_feature_schema"] == SWITCHER_FEATURE_SCHEMA
     assert stats["switcher_choice_count"] == 1
     assert stats["aoreplan_wait_bypass_count"] == 2
     assert stats["executed_ao_count"] == 1

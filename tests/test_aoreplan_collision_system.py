@@ -1,5 +1,3 @@
-"""Conservative paper planner and its explicit standalone soft exception."""
-
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -131,12 +129,6 @@ class Candidate:
     def act(self, observations, *_args):
         return [3] * len(observations)
 
-    def verify_frozen(self):
-        return {"verified": True}
-
-    def get_model_provenance(self):
-        return {"test_candidate": "fixed"}
-
 
 @pytest.mark.parametrize("collision", ["block_both", "soft"])
 def test_srslm_default_static_collision_uses_wait_bypass_under_both_rules(collision):
@@ -184,7 +176,7 @@ def test_training_env_reset_uses_same_planner_rule_as_deployment(collision):
         assert env.controller.resolve_actions([]).actions == (3,)
 
 
-def test_supported_pogema_rules_do_not_require_an_audit():
+def test_supported_pogema_collision_rules():
     policy = AORePlan(AORePlanConfig())
     branch = AORePlanBranch(base_factory=SequenceBase)
     controller = SwitcherController(Candidate(), branch)

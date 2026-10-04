@@ -147,7 +147,7 @@ def test_mixed_batch_normalizes_and_trains_actor_only_on_non_wait_rows():
         summaries["adv_std"],
         torch.tensor(2.0).sqrt(),
     )
-    # The critic uses all four targets: mean([1, 4, 9, 16]) == 7.5.
+
     assert torch.allclose(value_loss, torch.tensor(7.5))
 
 
@@ -427,8 +427,7 @@ def test_component_registration_repairs_a_missing_patch(monkeypatch):
     patched = Learner._calculate_losses
     original = patched._srslm_original_calculate_losses
     monkeypatch.setattr(Learner, "_calculate_losses", original)
-    # Exercise the early-return path too: registration must still repair the
-    # learner method after components have already been registered.
+
     monkeypatch.setattr(train, "_CUSTOM_COMPONENTS_REGISTERED", True)
 
     train.register_custom_components()

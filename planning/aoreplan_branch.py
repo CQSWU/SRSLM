@@ -1,14 +1,9 @@
-"""AORePlan branch actions for SRSLM deployment."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper, INF
-
-
-AO_PLANNER_POLICY = "reverse_static_astar_with_original_no_path_fallback"
 
 
 @dataclass(frozen=True)
@@ -20,8 +15,6 @@ class AORePlanStep:
 
 
 class AORePlanBranch:
-    """Generate AORePlan actions and synchronize the dynamic planner."""
-
     def __init__(
         self,
         *,
@@ -30,7 +23,6 @@ class AORePlanBranch:
         base_factory: Callable[..., AORePlanBase] = AORePlanBase,
         wrapper_factory: Callable[..., AORePlanWrapper] = AORePlanWrapper,
     ):
-        self.planner_policy = AO_PLANNER_POLICY
         self.max_steps = int(max_steps)
         self.seed = seed
         self._base_factory = base_factory
@@ -93,7 +85,6 @@ class AORePlanBranch:
         self,
         executed_mask: Sequence[bool],
     ) -> None:
-        """Tell the dynamic planner which proposed actions physically ran."""
 
         if self._pending is None:
             raise RuntimeError("propose() must be called before commit().")
@@ -108,10 +99,7 @@ class AORePlanBranch:
             for matched, planned in zip(physical, self._pending.planned_mask)
         ):
             raise ValueError("A missing AORePlan proposal cannot be committed.")
-        # The static A* check is not the only branch that can replace the
-        # dynamic proposal: the no-path
-        # fallback does too, and crediting the planner for an action it did not
-        # produce would feed it false execution feedback.
+
         overridden = tuple(
             bool(value) for value in self._wrapper.last_dynamic_override_mask
         )
@@ -121,9 +109,5 @@ class AORePlanBranch:
         self._base.commit_proposals(base_mask)
         self._pending = None
 
-    @property
-    def pending(self) -> AORePlanStep | None:
-        return self._pending
 
-
-__all__ = ["AO_PLANNER_POLICY", "AORePlanBranch", "AORePlanStep"]
+__all__ = ["AORePlanBranch", "AORePlanStep"]
