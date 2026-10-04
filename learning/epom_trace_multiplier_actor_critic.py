@@ -270,7 +270,7 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         self.actor_trace_embedding_size = self.actor_trace_encoder.OUTPUT_SIZE
         self.critic_trace_embedding_size = self.critic_trace_encoder.OUTPUT_SIZE
         self.head_extra_size = (
-            2 * self.NUM_ACTIONS
+            3 * self.NUM_ACTIONS
             + self.actor_trace_embedding_size
             + self.critic_trace_embedding_size
             + 10
@@ -296,6 +296,7 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
                 base_context.detach(),
                 centred_trace,
                 legal,
+                centred_trace,
                 actor_trace,
                 critic_trace,
                 ranks.flatten(1),
@@ -321,16 +322,20 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         return torch.cat([core_output.detach(), extras], dim=-1), new_states
 
     def _split_core(self, core_output):
-        return core_output.split(
-            (
-                self.core_out_size,
-                self.NUM_ACTIONS,
-                self.NUM_ACTIONS,
-                self.actor_trace_embedding_size,
-                self.critic_trace_embedding_size,
-            ),
-            dim=-1,
+        hidden, pressure, legal, _pressure_copy, actor_trace, critic_trace = (
+            core_output.split(
+                (
+                    self.core_out_size,
+                    self.NUM_ACTIONS,
+                    self.NUM_ACTIONS,
+                    self.NUM_ACTIONS,
+                    self.actor_trace_embedding_size,
+                    self.critic_trace_embedding_size,
+                ),
+                dim=-1,
+            )
         )
+        return hidden, pressure, legal, actor_trace, critic_trace
 
     def _critic_values(
         self,
