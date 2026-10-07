@@ -12,8 +12,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import yaml
 
-from agents.utils_agents import ResultsHolder
 from pogema.svg_animation.animation_wrapper import (
     AnimationConfig,
     AnimationMonitor,
@@ -36,11 +36,6 @@ ALGORITHM_ALIASES = {
     "arpe": "ARPE",
     "srslm": "SRSLM",
 }
-
-ALGORITHM_COLUMN_WIDTH = max(
-    13, *(len(algorithm) for algorithm in SUPPORTED_ALGORITHMS)
-)
-
 
 def canonical_algorithm_name(value):
 
@@ -144,245 +139,6 @@ def build_algorithm(
         )
 
 
-class _MoveFailureTracker:
-    METRIC_VERSION = "submitted_nonwait_no_position_change_v1"
-    CONTENTION_METRIC_VERSION = "agent_contention_participation_v1"
-    VERTEX_FLOW_METRIC_VERSION = "submitted_one_step_vertex_flow_pairs_v1"
-
-    def __init__(self, moves, obstacle_mask=None):
-        self.moves = tuple(tuple(int(value) for value in move) for move in moves)
-        self.obstacle_mask = (
-            None
-            if obstacle_mask is None
-            else np.asarray(obstacle_mask, dtype=bool).copy()
-        )
-        self.environment_step_count = 0
-        self.active_agent_step_count = 0
-        self.wait_action_count = 0
-        self.move_attempt_count = 0
-        self.successful_move_count = 0
-        self.conflict_count = 0
-        self.agent_conflict_count = 0
-        self.other_or_unattributed_conflict_count = 0
-        self.conflict_step_count = 0
-        self.contention_participant_count = 0
-        self.contention_step_count = 0
-        self.vertex_flow_pair_count = 0
-        self.vertex_flow_move_denominator = 0
-        self.vertex_flow_contested_destination_count = 0
-        self.vertex_flow_step_count = 0
-        self.vertex_flow_max_inflow = 0
-
-    @staticmethod
-    def _point(observation):
-        value = observation["xy"]
-        return int(value[0]), int(value[1])
-
-    def _is_valid_flow_target(self, target):
-        if self.obstacle_mask is None:
-            return True
-        x, y = target
-        height, width = self.obstacle_mask.shape
-        return 0 <= x < height and 0 <= y < width and not bool(self.obstacle_mask[x, y])
-
-    def capture(
-        self,
-        actions,
-        observations,
-        dones,
-        infos,
-        global_positions=None,
-    ):
-        positions = (
-            [tuple(int(value) for value in position) for position in global_positions]
-            if global_positions is not None
-            else [self._point(observation) for observation in observations]
-        )
-        active = [
-            not bool(dones[index]) and bool(infos[index].get("is_active", True))
-            for index in range(len(observations))
-        ]
-        attempts = []
-        flow_attempts = []
-        waits = 0
-        for index, is_active in enumerate(active):
-            if not is_active:
-                continue
-            try:
-                action = int(actions[index])
-                delta = self.moves[action]
-            except (IndexError, TypeError, ValueError):
-                waits += 1
-                continue
-            if delta == (0, 0):
-                waits += 1
-                continue
-            position = positions[index]
-            target = position[0] + delta[0], position[1] + delta[1]
-            attempts.append((index, position, target))
-            if self._is_valid_flow_target(target):
-                flow_attempts.append((index, position, target))
-        return {
-            "positions": positions,
-            "active": active,
-            "active_count": sum(active),
-            "wait_count": waits,
-            "attempts": attempts,
-            "flow_attempts": flow_attempts,
-        }
-
-    def commit(self, pending, observations, global_positions=None):
-        after_positions = (
-            [tuple(int(value) for value in position) for position in global_positions]
-            if global_positions is not None
-            else [self._point(observation) for observation in observations]
-        )
-        occupied = {}
-        for index, position in enumerate(pending["positions"]):
-            occupied.setdefault(position, set()).add(index)
-        target_counts = {}
-        for _, _, target in pending["attempts"]:
-            target_counts[target] = target_counts.get(target, 0) + 1
-
-        attempts_by_agent = {
-            index: (before, target) for index, before, target in pending["attempts"]
-        }
-        contention_participants = set()
-
-        target_groups = {}
-        for index, _, target in pending["attempts"]:
-            target_groups.setdefault(target, []).append(index)
-        for group in target_groups.values():
-            if len(group) > 1:
-                contention_participants.update(group)
-
-        flow_target_counts = {}
-        for _, _, target in pending["flow_attempts"]:
-            flow_target_counts[target] = flow_target_counts.get(target, 0) + 1
-        vertex_flow_pairs = sum(
-            count * (count - 1) // 2 for count in flow_target_counts.values()
-        )
-        contested_flow_destinations = sum(
-            count > 1 for count in flow_target_counts.values()
-        )
-        max_inflow = max(flow_target_counts.values(), default=0)
-
-        position_to_agents = {}
-        for index, position in enumerate(pending["positions"]):
-            position_to_agents.setdefault(position, []).append(index)
-
-        for index, before, target in pending["attempts"]:
-            for other in position_to_agents.get(target, ()):
-                if other == index:
-                    continue
-                other_attempt = attempts_by_agent.get(other)
-                if other_attempt is not None and other_attempt[1] == before:
-                    contention_participants.add(index)
-                    if pending["active"][other]:
-                        contention_participants.add(other)
-                if after_positions[other] == pending["positions"][other]:
-                    contention_participants.add(index)
-                    if pending["active"][other]:
-                        contention_participants.add(other)
-
-        failed_this_step = 0
-        agent_conflicts = 0
-        successes = 0
-        for index, before, target in pending["attempts"]:
-            if after_positions[index] != before:
-                successes += 1
-                continue
-            failed_this_step += 1
-            occupied_by_other = any(
-                other != index for other in occupied.get(target, ())
-            )
-            if occupied_by_other or target_counts[target] > 1:
-                agent_conflicts += 1
-
-        self.environment_step_count += 1
-        self.active_agent_step_count += pending["active_count"]
-        self.wait_action_count += pending["wait_count"]
-        self.move_attempt_count += len(pending["attempts"])
-        self.successful_move_count += successes
-        self.conflict_count += failed_this_step
-        self.agent_conflict_count += agent_conflicts
-        self.other_or_unattributed_conflict_count += failed_this_step - agent_conflicts
-        if failed_this_step:
-            self.conflict_step_count += 1
-        self.contention_participant_count += len(contention_participants)
-        if contention_participants:
-            self.contention_step_count += 1
-        self.vertex_flow_pair_count += vertex_flow_pairs
-        self.vertex_flow_move_denominator += len(pending["flow_attempts"])
-        self.vertex_flow_contested_destination_count += contested_flow_destinations
-        if vertex_flow_pairs:
-            self.vertex_flow_step_count += 1
-        self.vertex_flow_max_inflow = max(
-            self.vertex_flow_max_inflow,
-            max_inflow,
-        )
-
-    @staticmethod
-    def _rate(numerator, denominator):
-        return float(numerator / denominator) if denominator else 0.0
-
-    def metrics(self):
-        return {
-            "congestion_metric_version": self.METRIC_VERSION,
-            "environment_step_count_observed": self.environment_step_count,
-            "active_agent_step_count": self.active_agent_step_count,
-            "wait_action_count": self.wait_action_count,
-            "move_attempt_count": self.move_attempt_count,
-            "successful_move_count": self.successful_move_count,
-            "conflict_count": self.conflict_count,
-            "move_failure_count": self.conflict_count,
-            "agent_conflict_count": self.agent_conflict_count,
-            "other_or_unattributed_conflict_count": (
-                self.other_or_unattributed_conflict_count
-            ),
-            "conflict_step_count": self.conflict_step_count,
-            "contention_metric_version": self.CONTENTION_METRIC_VERSION,
-            "contention_participant_count": self.contention_participant_count,
-            "contention_step_count": self.contention_step_count,
-            "contention_participation_rate": self._rate(
-                self.contention_participant_count,
-                self.active_agent_step_count,
-            ),
-            "contention_step_rate": self._rate(
-                self.contention_step_count,
-                self.environment_step_count,
-            ),
-            "vertex_flow_metric_version": self.VERTEX_FLOW_METRIC_VERSION,
-            "vertex_flow_pair_count": self.vertex_flow_pair_count,
-            "vertex_flow_move_denominator": self.vertex_flow_move_denominator,
-            "vertex_flow_pair_cost_per_move": self._rate(
-                self.vertex_flow_pair_count,
-                self.vertex_flow_move_denominator,
-            ),
-            "vertex_flow_contested_destination_count": (
-                self.vertex_flow_contested_destination_count
-            ),
-            "vertex_flow_step_count": self.vertex_flow_step_count,
-            "vertex_flow_max_inflow": self.vertex_flow_max_inflow,
-            "congestion_rate": self._rate(
-                self.conflict_count,
-                self.move_attempt_count,
-            ),
-            "agent_conflict_rate": self._rate(
-                self.agent_conflict_count,
-                self.move_attempt_count,
-            ),
-            "conflict_agent_step_rate": self._rate(
-                self.conflict_count,
-                self.active_agent_step_count,
-            ),
-            "conflict_step_rate": self._rate(
-                self.conflict_step_count,
-                self.environment_step_count,
-            ),
-        }
-
-
 def run_algorithm(
     algo,
     *,
@@ -441,177 +197,24 @@ def run_algorithm(
             AnimationConfig(directory=str(directory)),
         )
 
-    def environment_grid():
-        current = env
-        while current is not None:
-            grid = getattr(current, "grid", None)
-            if grid is not None:
-                return grid
-            current = getattr(current, "env", None)
-        raise RuntimeError("Could not locate the environment grid")
-
-    def global_positions():
-        grid = environment_grid()
-        positions = getattr(grid, "positions_xy", None)
-        if positions is None and hasattr(grid, "get_agents_xy"):
-            positions = grid.get_agents_xy()
-        if positions is not None:
-            return np.asarray(positions, dtype=np.int64).copy()
-        raise RuntimeError(
-            "Contention participation requires global agent positions from "
-            "the environment grid."
-        )
-
-    def global_obstacles():
-        grid = environment_grid()
-        obstacles = getattr(grid, "obstacles", None)
-        if obstacles is not None:
-            return np.asarray(obstacles, dtype=bool).copy()
-        raise RuntimeError(
-            "Vertex flow evaluation requires the environment obstacle grid."
-        )
-
     try:
         observations, _ = env.reset()
-        if agents_xy is not None:
-            grid = environment_grid()
-            expected_agents = np.asarray(agents_xy, dtype=np.int64)
-            if (
-                targets_xy
-                and isinstance(targets_xy[0], (list, tuple))
-                and targets_xy[0]
-                and isinstance(targets_xy[0][0], (list, tuple))
-            ):
-                expected_targets = np.asarray(
-                    [sequence[0] for sequence in targets_xy],
-                    dtype=np.int64,
-                )
-            else:
-                expected_targets = np.asarray(targets_xy, dtype=np.int64)
-            actual_agents = np.asarray(
-                grid.get_agents_xy(ignore_borders=True),
-                dtype=np.int64,
-            )
-            actual_targets = np.asarray(
-                grid.get_targets_xy(ignore_borders=True),
-                dtype=np.int64,
-            )
-            expected_obstacles = np.asarray(
-                [
-                    [character == "#" for character in row]
-                    for row in map_text.splitlines()
-                ],
-                dtype=bool,
-            )
-            actual_obstacles = np.asarray(
-                grid.get_obstacles(ignore_borders=True),
-                dtype=bool,
-            )
-            if not np.array_equal(actual_agents, expected_agents):
-                raise RuntimeError("Environment changed the explicit start coordinates")
-            if not np.array_equal(actual_targets, expected_targets):
-                raise RuntimeError("Environment changed the explicit goal coordinates")
-            if not np.array_equal(actual_obstacles, expected_obstacles):
-                raise RuntimeError("Environment changed the explicit obstacle grid")
-            padding = int(grid_config.obs_radius)
-            if not np.array_equal(
-                np.asarray(grid.positions_xy, dtype=np.int64),
-                expected_agents + padding,
-            ):
-                raise RuntimeError("Unexpected padded start coordinates")
-            if not np.array_equal(
-                np.asarray(grid.finishes_xy, dtype=np.int64),
-                expected_targets + padding,
-            ):
-                raise RuntimeError("Unexpected padded goal coordinates")
-        tracker = _MoveFailureTracker(
-            grid_config.MOVES,
-            obstacle_mask=global_obstacles(),
-        )
         algo.after_reset()
         if hasattr(algo, "set_grid_config"):
             algo.set_grid_config(env.grid_config)
         if hasattr(algo, "set_env"):
             algo.set_env(env)
-        results_holder = ResultsHolder()
+        results = {}
         dones = [False for _ in observations]
         infos = [{"is_active": True} for _ in observations]
         rewards = [0 for _ in observations]
-        decision_seconds = 0.0
-        decision_calls = 0
-        completed_targets = 0
-        previous_segment_targets = 0
-        previous_segment_end = 0
-        throughput_segments = []
         with torch.no_grad():
-            while True:
-                decision_started = time.perf_counter()
+            while not all(dones):
                 actions = algo.act(observations, rewards, dones, infos)
-                decision_seconds += time.perf_counter() - decision_started
-                decision_calls += 1
-                pending = tracker.capture(
-                    actions,
-                    observations,
-                    dones,
-                    infos,
-                    global_positions=global_positions(),
-                )
                 observations, rewards, terminated, truncated, infos = env.step(actions)
-
-                if on_target == "restart":
-                    completed_targets += int(sum(env.unwrapped.was_on_goal))
-                tracker.commit(
-                    pending,
-                    observations,
-                    global_positions=global_positions(),
-                )
-                dones = [
-                    terminated_value or truncated_value
-                    for terminated_value, truncated_value in zip(
-                        terminated,
-                        truncated,
-                    )
-                ]
-                results_holder.after_step(infos)
+                dones = [done or limit for done, limit in zip(terminated, truncated)]
+                results.update(infos[0].get("metrics", {}))
                 algo.after_step(dones)
-                if on_target == "restart" and (decision_calls % 512 == 0 or all(dones)):
-                    segment_steps = decision_calls - previous_segment_end
-                    segment_targets = completed_targets - previous_segment_targets
-                    throughput_segments.append(
-                        {
-                            "start_step": previous_segment_end + 1,
-                            "end_step": decision_calls,
-                            "step_count": segment_steps,
-                            "completed_targets": segment_targets,
-                            "throughput": segment_targets / segment_steps,
-                            "cumulative_throughput": completed_targets / decision_calls,
-                        }
-                    )
-                    previous_segment_end = decision_calls
-                    previous_segment_targets = completed_targets
-                if all(dones):
-                    break
-        results = results_holder.get_final()
-        results.update(tracker.metrics())
-        results["policy_decision_seconds"] = decision_seconds
-        results["policy_decision_calls"] = decision_calls
-        results["policy_decision_ms_per_joint_action"] = (
-            1000.0 * decision_seconds / decision_calls if decision_calls else None
-        )
-        results["policy_decision_timing_scope"] = "algo.act_only_perf_counter_v1"
-        results["throughput_segments"] = throughput_segments
-        results["completed_targets_observed"] = (
-            completed_targets if on_target == "restart" else None
-        )
-        if on_target == "restart":
-            reported_targets = float(results["avg_throughput"]) * max_episode_steps
-            if (
-                not np.isfinite(reported_targets)
-                or abs(reported_targets - completed_targets) > 1e-6
-            ):
-                raise RuntimeError(
-                    "Segment goal events disagree with POGEMA throughput"
-                )
         results["algorithm"] = type(algo).__name__
         return results
     finally:
@@ -619,108 +222,37 @@ def run_algorithm(
 
 
 def run_single_experiment(task):
-
     quiet_model_logs()
-
-    algo_name = canonical_algorithm_name(task["algorithm"]) or task["algorithm"]
-
-    main_dir = task["main_dir"]
-
     seed = task["seed"]
-
     random.seed(seed)
-
     np.random.seed(seed)
     torch.manual_seed(seed)
-
+    record = {
+        "algorithm": canonical_algorithm_name(task["algorithm"]) or task["algorithm"],
+        "map_name": task["map_name"],
+        "num_agents": task["num_agents"],
+        "max_steps": task["max_steps"],
+        "seed": seed,
+        "on_target": task.get("on_target", "restart"),
+    }
     try:
         algo = build_algorithm(
-            algo_name,
-            main_dir,
-            seed,
+            record["algorithm"], task["main_dir"], seed,
             arpe_candidate_manifest=task.get("arpe_candidate_manifest"),
             switcher_weights_path=task.get("switcher_weights_path"),
         )
-
-        start = time.time()
-
         result = run_algorithm(
-            algo,
-            map_name=task["map_name"],
-            max_episode_steps=task["max_steps"],
-            seed=seed,
-            num_agents=task["num_agents"],
-            obs_radius=task.get("obs_radius"),
-            animate=task["animate"],
-            on_target=task.get("on_target", "restart"),
-            collision_system=task.get("collision_system"),
-            map_text=task.get("map_text"),
-            agents_xy=task.get("agents_xy"),
-            targets_xy=task.get("targets_xy"),
+            algo, map_name=task["map_name"], max_episode_steps=task["max_steps"],
+            seed=seed, num_agents=task["num_agents"], obs_radius=task.get("obs_radius"),
+            animate=task["animate"], on_target=record["on_target"],
+            collision_system=task.get("collision_system"), map_text=task.get("map_text"),
+            agents_xy=task.get("agents_xy"), targets_xy=task.get("targets_xy"),
         )
-
-        run_time = time.time() - start
-
-        on_target = task.get("on_target", "restart")
-        is_restart = on_target == "restart"
-        is_replan = algo_name == "AORePlan"
-
-        if hasattr(algo, "get_switch_stats"):
-            hybrid_stats = algo.get_switch_stats()
-        else:
-            hybrid_stats = {}
-        result_record = {
-            "algorithm": algo_name,
-            "map_name": task["map_name"],
-            "num_agents": task["num_agents"],
-            "max_steps": task["max_steps"],
-            "seed": seed,
-            "on_target": on_target,
-            "run_time_seconds": run_time,
-        }
-        result_record.update(
-            {key: value for key, value in result.items() if key != "algorithm"}
-        )
-
-        result_record.update(hybrid_stats)
-
-        if is_restart and is_replan:
-            for key in (
-                "reverse_action_rate",
-                "reverse_action_count",
-                "reverse_action_denominator",
-                "reverse_metric_version",
-                "static_astar_query_count",
-                "static_astar_query_denominator",
-                "static_astar_query_rate",
-                "no_path_fallback_count",
-            ):
-                result_record[key] = getattr(algo, key, None)
-
-        return result_record
-
-    except Exception as exc:
+        record.update({key: value for key, value in result.items() if key != "algorithm"})
+    except Exception as error:
         import traceback
-
-        error_record = {
-            "algorithm": algo_name,
-            "map_name": task["map_name"],
-            "num_agents": task["num_agents"],
-            "max_steps": task["max_steps"],
-            "seed": seed,
-            "on_target": task.get("on_target", "restart"),
-            "avg_throughput": None,
-            "run_time_seconds": 0.0,
-            "policy_decision_seconds": None,
-            "policy_decision_calls": 0,
-            "policy_decision_ms_per_joint_action": None,
-            "policy_decision_timing_scope": "algo.act_only_perf_counter_v1",
-            "throughput_segments": [],
-            "completed_targets_observed": None,
-            "error": str(exc),
-            "traceback": traceback.format_exc(),
-        }
-        return error_record
+        record.update(error=str(error), traceback=traceback.format_exc())
+    return record
 
 
 def parse_algorithms(value):
@@ -761,97 +293,22 @@ def parse_algorithms(value):
     return algorithms
 
 
+def _integers(value):
+    numbers = sorted({int(item.strip()) for item in value.split(",") if item.strip()})
+    if not numbers:
+        raise ValueError("At least one value is required")
+    return numbers
+
+
 def parse_agent_counts(args):
-
-    if args.agents:
-        counts = [int(item.strip()) for item in args.agents.split(",") if item.strip()]
-
-    else:
-        if args.agent_step <= 0:
-            raise ValueError("--agent-step must be positive")
-
-        counts = list(range(args.agent_start, args.agent_stop + 1, args.agent_step))
-
-    counts = sorted(set(counts))
-
-    if not counts:
-        raise ValueError("No agent counts selected")
-
-    if any(count <= 0 for count in counts):
-        raise ValueError("Agent counts must all be positive")
-
+    counts = _integers(args.agents)
+    if counts[0] <= 0:
+        raise ValueError("Agent counts must be positive")
     return counts
 
 
 def parse_seeds(args):
-
-    if args.seeds:
-        seeds = [int(item.strip()) for item in args.seeds.split(",") if item.strip()]
-
-        seeds = sorted(set(seeds))
-
-        if not seeds:
-            raise ValueError("No seeds selected")
-
-        return seeds
-
-    return [args.seed]
-
-
-def parse_maps(map_types_value, map_overrides):
-
-    if map_types_value.strip().lower() == "custom":
-        maps = {}
-
-        for item in map_overrides:
-            map_name = item.strip()
-
-            if not map_name:
-                continue
-
-            maps[map_name] = map_name
-
-        if not maps:
-            raise ValueError(
-                "When --map-types=custom, --map must provide at least one map name"
-            )
-
-        return maps
-
-    maps = dict(DEFAULT_MAPS)
-
-    for item in map_overrides:
-        if "=" not in item:
-            raise ValueError("--map must use the format map_type=map_name")
-
-        map_type, map_name = item.split("=", 1)
-
-        map_type = map_type.strip()
-
-        map_name = map_name.strip()
-
-        if not map_type or not map_name:
-            raise ValueError("--map must use non-empty map_type=map_name values")
-
-        maps[map_type] = map_name
-
-    if map_types_value.strip().lower() == "all":
-        selected_types = list(DEFAULT_MAPS.keys())
-
-    else:
-        selected_types = [
-            item.strip() for item in map_types_value.split(",") if item.strip()
-        ]
-
-    unknown = [item for item in selected_types if item not in maps]
-
-    if unknown:
-        raise ValueError(f"Unknown map type(s): {unknown}. Available: {sorted(maps)}")
-
-    if not selected_types:
-        raise ValueError("No map types selected")
-
-    return {map_type: maps[map_type] for map_type in selected_types}
+    return _integers(args.seeds)
 
 
 def _looks_like_movingai_map(lines):
@@ -875,7 +332,7 @@ def _translate_map_rows(rows):
     ]
 
 
-def load_map_text(path, trim_border=False):
+def load_map_text(path):
 
     path = Path(path)
 
@@ -893,9 +350,6 @@ def load_map_text(path, trim_border=False):
     else:
         rows = [line.rstrip() for line in lines if line.strip()]
 
-    if trim_border and len(rows) >= 3 and len(rows[0]) >= 3:
-        rows = [row[1:-1] for row in rows[1:-1]]
-
     if not rows:
         raise ValueError(f"Map source produced no rows: {path}")
 
@@ -912,74 +366,17 @@ def load_map_text(path, trim_border=False):
     }
 
 
-def load_map_list_snapshot(path, registry_path=None):
-
-    import yaml
-
-    path = Path(path).resolve()
-
-    payload = path.read_bytes()
-
-    try:
-        data = yaml.safe_load(payload.decode("utf-8"))
-
-    except (UnicodeDecodeError, yaml.YAMLError) as error:
-        raise ValueError(f"Could not parse map list {path}: {error}") from error
-
-    if not isinstance(data, dict) or not data:
-        raise ValueError("--map-list must contain a non-empty YAML mapping")
-
-    if any(not isinstance(name, str) or not name for name in data):
-        raise ValueError("--map-list keys must be non-empty strings")
-
-    registry = data
-
-    if any(not isinstance(value, str) or not value.strip() for value in data.values()):
-        if registry_path is None:
-            raise ValueError("--map-list entries without grid text require a registry")
-
-        registry_path = Path(registry_path).resolve()
-
-        registry_payload = registry_path.read_bytes()
-
-        try:
-            registry = yaml.safe_load(registry_payload.decode("utf-8"))
-
-        except (UnicodeDecodeError, yaml.YAMLError) as error:
-            raise ValueError(
-                f"Could not parse map registry {registry_path}: {error}"
-            ) from error
-
-        if not isinstance(registry, dict) or not registry:
-            raise ValueError(
-                f"Map registry must be a non-empty mapping: {registry_path}"
-            )
-
-    map_texts = {}
-
-    for name, selected_value in data.items():
-        value = (
-            selected_value
-            if isinstance(selected_value, str) and selected_value.strip()
-            else registry.get(name)
-        )
-
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"No grid text found for map {name!r}")
-
-        rows = value.splitlines()
-
-        if (
-            not rows
-            or len({len(row) for row in rows}) != 1
-            or not rows[0]
-            or any(set(row) - {".", "#"} for row in rows)
-        ):
-            raise ValueError(f"Map {name!r} must be a non-empty rectangular .# grid")
-
-        map_texts[name] = value
-
-    return {name: name for name in data}, map_texts
+def load_map_list_snapshot(path):
+    maps = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(maps, dict) or not maps:
+        raise ValueError("--map-list requires a non-empty YAML mapping")
+    for name, text in maps.items():
+        if not isinstance(name, str) or not name or not isinstance(text, str) or not text.strip():
+            raise ValueError("Each map requires a name and grid text")
+        rows = text.splitlines()
+        if not rows[0] or any(len(row) != len(rows[0]) or set(row) - {".", "#"} for row in rows):
+            raise ValueError(f"Map {name!r} must be a rectangular .# grid")
+    return {name: name for name in maps}, maps
 
 
 def build_tasks(
@@ -1049,81 +446,26 @@ def format_duration(seconds):
 
 def run_experiments(tasks, workers):
     results = []
-    total = len(tasks)
-    start_time = time.time()
-    print(f"Starting experiments: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    print(f"Total: {total} | Workers: {workers}")
-
-    print("-" * 110, flush=True)
-
-    if not tasks:
-        return results, 0.0
-
+    start = time.monotonic()
+    print(f"Experiments: {len(tasks)} | Workers: {workers}", flush=True)
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(run_single_experiment, task) for task in tasks]
-
-        for index, future in enumerate(as_completed(futures), start=1):
+        for index, future in enumerate(as_completed(futures), 1):
             result = future.result()
-
-            elapsed = time.time() - start_time
-
-            eta = elapsed / index * (total - index)
-
-            result["completed_index"] = index
-
-            result["total_experiments"] = total
-
-            result["elapsed_since_start_seconds"] = elapsed
-
-            result["eta_after_result_seconds"] = eta
-
-            result["finished_at"] = datetime.now().isoformat(timespec="seconds")
-
             results.append(result)
-
             if result.get("error"):
                 status = f"ERROR: {result['error']}"
-
+            elif result.get("on_target", "restart") == "restart":
+                status = f"throughput={result['avg_throughput']:.4f}"
             else:
-                on_target = result.get("on_target", "restart")
-
-                diag_str = ""
-
-                if result.get("congestion_rate") is not None:
-                    diag_str += f" congestion={result['congestion_rate']:.1%}"
-
-                if on_target != "restart":
-                    if result.get("ep_length") is not None:
-                        diag_str += f" ep_len={result['ep_length']:.1f}"
-
-                    isr = result.get("ISR")
-
-                    csr = result.get("CSR")
-
-                    status = (
-                        f"isr={(0.0 if isr is None else isr):.1%} "
-                        f"csr={(0.0 if csr is None else csr):.1%}{diag_str} "
-                        f"run={format_duration(result['run_time_seconds'])}"
-                    )
-
-                else:
-                    if result.get("reverse_action_rate") is not None:
-                        diag_str += f" rev={result['reverse_action_rate']:.1%}"
-
-                    status = (
-                        f"throughput={result['avg_throughput']:.4f}{diag_str} "
-                        f"run={format_duration(result['run_time_seconds'])}"
-                    )
-
+                status = f"isr={result['ISR']:.1%} csr={result['CSR']:.1%}"
+            eta = (time.monotonic() - start) / index * (len(tasks) - index)
             print(
-                f"[{index:>3}/{total:<3}] {result['algorithm']:<{ALGORITHM_COLUMN_WIDTH}} | "
-                f"{result['map_name']:<22} | {result['num_agents']:>3} agents | "
-                f"{status:<34}",
+                f"[{index}/{len(tasks)}] {result['algorithm']} | {result['map_name']} | "
+                f"{result['num_agents']} agents | {status} | ETA {format_duration(eta)}",
                 flush=True,
             )
-
-    return results, time.time() - start_time
+    return results, time.monotonic() - start
 
 
 def save_results(results, metadata, output_dir, filename=None):
@@ -1160,271 +502,56 @@ def save_results(results, metadata, output_dir, filename=None):
 
 
 def parse_args():
-
-    parser = argparse.ArgumentParser(
-        description="Unified Lifelong MAPF experiment runner"
-    )
-
-    parser.add_argument(
-        "--algorithms",
-        type=parse_algorithms,
-        default=list(DEFAULT_ALGORITHMS),
-        help=(
-            "Comma-separated algorithms, or 'all'. "
-            f"Choices: {', '.join(SUPPORTED_ALGORITHMS)}"
-        ),
-    )
-
-    parser.add_argument(
-        "--agents",
-        type=str,
-        default=None,
-        help="Comma-separated agent counts, e.g. 50,100,200",
-    )
-
-    parser.add_argument(
-        "--agent-start",
-        type=int,
-        default=50,
-        help="First agent count when --agents is not set",
-    )
-
-    parser.add_argument(
-        "--agent-stop",
-        type=int,
-        default=500,
-        help="Last inclusive agent count when --agents is not set",
-    )
-
-    parser.add_argument(
-        "--agent-step",
-        type=int,
-        default=50,
-        help="Agent count step when --agents is not set",
-    )
-
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=8,
-        help="Parallel workers",
-    )
-
-    parser.add_argument(
-        "--obs-radius",
-        type=int,
-        default=None,
-        help="Override the local observation radius (default: environment configuration)",
-    )
-
-    parser.add_argument(
-        "--animate", action="store_true", help="Generate SVG animations"
-    )
-
-    parser.add_argument("--max-steps", type=int, default=512, help="Episode length")
-
-    parser.add_argument("--seed", type=int, default=0, help="Random seed")
-
-    parser.add_argument(
-        "--seeds", type=str, default=None, help="Comma-separated seeds, e.g. 0,1,2"
-    )
-
-    parser.add_argument(
-        "--main-dir", type=str, default="./", help="Project root directory"
-    )
-
-    parser.add_argument(
-        "--map-types",
-        type=str,
-        default="all",
-        help="Comma-separated map types, or 'all'",
-    )
-
-    parser.add_argument(
-        "--map",
-        action="append",
-        default=[],
-        help="Override one representative map with map_type=map_name. Can be repeated.",
-    )
-
-    parser.add_argument(
-        "--map-file", type=str, default=None, help="Custom local map file path."
-    )
-
-    parser.add_argument(
-        "--map-list",
-        type=str,
-        default=None,
-        help="YAML file whose top-level keys are map names (e.g. maps/test.yaml)",
-    )
-
-    parser.add_argument(
-        "--trim-border",
-        dest="trim_border",
-        action="store_true",
-        help="Trim one-cell border from custom map",
-    )
-
-    parser.add_argument(
-        "--on-target",
-        choices=("restart", "finish", "nothing"),
-        default="restart",
-        help="Override Pogema on_target mode",
-    )
-
-    parser.add_argument(
-        "--collision-system",
-        choices=("soft", "block_both", "priority"),
-        default="block_both",
-        help="Override collision system",
-    )
-
-    parser.add_argument(
-        "--arpe-candidate-manifest",
-        type=str,
-        default=None,
-        help=(
-            "Optional ARPE path declaration. Defaults to "
-            "configs/arpe_final_candidate.json"
-        ),
-    )
-
-    parser.add_argument(
-        "--switcher-weights-path",
-        type=str,
-        default=None,
-        help="Override the Switcher weights directory",
-    )
-
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="exp_result",
-        help="Directory for JSON results",
-    )
-
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=None,
-        help="Output filename (default: experiments_TIMESTAMP.json)",
-    )
-
+    parser = argparse.ArgumentParser(description="Lifelong MAPF evaluation", allow_abbrev=False)
+    parser.add_argument("--algorithms", type=parse_algorithms, default=list(DEFAULT_ALGORITHMS))
+    parser.add_argument("--agents", default=",".join(str(n) for n in range(50, 501, 50)))
+    parser.add_argument("--seeds", default="0")
+    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--obs-radius", type=int, default=None)
+    parser.add_argument("--animate", action="store_true")
+    parser.add_argument("--max-steps", type=int, default=512)
+    parser.add_argument("--main-dir", default="./")
+    maps = parser.add_mutually_exclusive_group()
+    maps.add_argument("--map-file", help="Custom text or MovingAI map")
+    maps.add_argument("--map-list", help="YAML map collection, e.g. maps/test.yaml")
+    parser.add_argument("--on-target", choices=("restart", "finish", "nothing"), default="restart")
+    parser.add_argument("--collision-system", choices=("soft", "block_both", "priority"), default="block_both")
+    parser.add_argument("--arpe-candidate-manifest", default=None)
+    parser.add_argument("--switcher-weights-path", default=None)
+    parser.add_argument("--output-dir", default="exp_result")
+    parser.add_argument("--output", default=None)
     return parser.parse_args()
 
 
 def main():
-
     multiprocessing.set_start_method("spawn", force=True)
-
     quiet_model_logs()
-
     args = parse_args()
-
-    if args.workers < 1:
-        raise ValueError("--workers must be at least 1")
-
-    if args.max_steps < 1:
-        raise ValueError("--max-steps must be at least 1")
-
+    if args.workers < 1 or args.max_steps < 1:
+        raise ValueError("Workers and max-steps must be positive")
     if args.obs_radius is not None and args.obs_radius < 1:
-        raise ValueError("--obs-radius must be at least 1")
-
-    map_sources = sum(bool(value) for value in (args.map_file, args.map_list))
-
-    if map_sources > 1:
-        raise ValueError("--map-file and --map-list are mutually exclusive")
-
-    algorithms = args.algorithms
-
-    agent_counts = parse_agent_counts(args)
-
-    seeds = parse_seeds(args)
-
-    custom_map = None
-
-    map_texts = None
-
+        raise ValueError("Observation radius must be positive")
+    counts, seeds = parse_agent_counts(args), parse_seeds(args)
+    custom_map, map_texts = None, None
     if args.map_file:
-        custom_map = load_map_text(args.map_file, trim_border=args.trim_border)
-
+        custom_map = load_map_text(_project_path(args.main_dir, args.map_file))
         maps = {"custom": custom_map["map_name"]}
-
     elif args.map_list:
-        maps, map_texts = load_map_list_snapshot(
-            _project_path(args.main_dir, args.map_list),
-            registry_path=_project_path(
-                args.main_dir,
-                "maps/test.yaml",
-            ),
-        )
-
+        maps, map_texts = load_map_list_snapshot(_project_path(args.main_dir, args.map_list))
     else:
-        maps = parse_maps(args.map_types, args.map)
-
-    tasks = build_tasks(
-        algorithms,
-        maps,
-        agent_counts,
-        seeds,
-        args,
-        custom_map=custom_map,
-        map_texts=map_texts,
+        maps = dict(DEFAULT_MAPS)
+    tasks = build_tasks(args.algorithms, maps, counts, seeds, args, custom_map, map_texts)
+    metadata = dict(
+        algorithms=args.algorithms, agent_counts=counts, seeds=seeds, maps=maps,
+        workers=args.workers, obs_radius=args.obs_radius, max_steps=args.max_steps,
+        on_target=args.on_target, collision_system=args.collision_system,
     )
-
-    metadata = {
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "algorithms": algorithms,
-        "agent_counts": agent_counts,
-        "seeds": seeds,
-        "maps": maps,
-        "workers": args.workers,
-        "obs_radius": args.obs_radius,
-        "max_steps": args.max_steps,
-        "on_target": args.on_target,
-        "collision_system": args.collision_system,
-    }
-
-    print("Configuration")
-
-    print(f"  algorithms: {', '.join(algorithms)}")
-
-    print(
-        f"  agent_counts: {agent_counts[0]}..{agent_counts[-1]} ({len(agent_counts)} values)"
-    )
-
-    print(f"  maps: {', '.join(maps.values())}")
-
-    print(
-        f"  obs_radius: {args.obs_radius if args.obs_radius is not None else 'default'}"
-    )
-
-    print(
-        f"  max_steps: {args.max_steps} | seeds: {', '.join(str(seed) for seed in seeds)} | animate: {args.animate}"
-    )
-
-    print(f"  on_target: {args.on_target} | collision: {args.collision_system}")
-
-    results, elapsed = run_experiments(
-        tasks,
-        args.workers,
-    )
-
-    metadata["finished_at"] = datetime.now().isoformat(timespec="seconds")
-
-    metadata["total_elapsed_seconds"] = elapsed
-
-    print(f"\nTotal elapsed: {format_duration(elapsed)}")
-
+    results, elapsed = run_experiments(tasks, args.workers)
     save_results(results, metadata, args.output_dir, args.output)
-
-    failed = [result for result in results if result.get("error")]
-
-    if failed:
-        raise RuntimeError(
-            f"{len(failed)} of {len(results)} experiments failed; "
-            f"first error: {failed[0]['error']}"
-        )
+    print(f"Total elapsed: {format_duration(elapsed)}")
+    failures = [row for row in results if row.get("error")]
+    if failures:
+        raise RuntimeError(f"{len(failures)} experiments failed; first error: {failures[0]['error']}")
 
 
 if __name__ == "__main__":

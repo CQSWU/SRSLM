@@ -25,13 +25,14 @@ def test_inference_gate_is_strict_and_uses_raw_correction():
     profile = InferenceCorrection()
     entropy = torch.tensor([0.0, 0.01, 0.010001, 1.0], dtype=torch.float64)
     logits = torch.arange(20, dtype=torch.float64).reshape(4, 5)
-    raw = logits / 3
-    final, learned, direct_gate, _ = profile.apply(logits, raw, entropy)
+    raw = (logits / 3).requires_grad_()
+    final = profile.apply(logits, raw, entropy)
     assert profile.gate(entropy).flatten().tolist() == [False, False, True, True]
     assert torch.equal(final[:2], logits[:2])
-    assert torch.equal(learned[2:], raw[2:])
     assert torch.equal(final[2:], logits[2:] + raw[2:])
-    assert torch.count_nonzero(direct_gate) == 0
+    final.sum().backward()
+    assert torch.equal(raw.grad[:2], torch.zeros_like(raw[:2]))
+    assert torch.equal(raw.grad[2:], torch.ones_like(raw[2:]))
 
 
 def test_native_training_keeps_direct_and_all_action_correction():
@@ -45,17 +46,15 @@ def test_native_training_keeps_direct_and_all_action_correction():
         _base_entropy=EPOMTraceMultiplierActorCritic._base_entropy,
     )
     apply = EPOMTraceMultiplierActorCritic._apply_configured_correction_rule
-    native, _, gate, _ = apply(model, logits, raw, pressure, legal, ranks)
-    assert torch.equal(gate, torch.ones(2, 1))
+    native = apply(model, logits, raw, pressure, legal, ranks)
     route = select_top2_low_pressure(logits, pressure, legal, ranks)
     torch.testing.assert_close(
-        native, logits + gate * route + gate * raw
+        native, logits + route + raw, rtol=0, atol=0
     )
     model.inference_correction = InferenceCorrection()
-    final, delta, direct_gate, _ = apply(model, logits, raw, pressure, legal, ranks)
+    final = apply(model, logits, raw, pressure, legal, ranks)
     assert torch.equal(final[0], logits[0])
-    assert torch.equal(delta[1], raw[1])
-    assert not direct_gate.any()
+    assert torch.equal(final[1], logits[1] + raw[1])
     model.training = True
     with pytest.raises(RuntimeError, match="training"):
         apply(model, logits, raw, pressure, legal, ranks)

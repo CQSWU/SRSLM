@@ -133,10 +133,9 @@ def test_residual_keeps_raw_magnitude_and_mean(correction_model):
     raw = torch.tensor([[20.62, -30.0, 0.0, 2.0, -1.0], [4.0] * 5], requires_grad=True)
     base = torch.zeros_like(raw)
     pressure, legal, ranks = _routing(2)
-    final, delta, _, _ = correction_model._apply_configured_correction_rule(
+    final = correction_model._apply_configured_correction_rule(
         base, raw, pressure, legal, ranks
     )
-    assert torch.equal(delta, raw)
     route = select_top2_low_pressure(base, pressure, legal, ranks)
     assert torch.equal(final, raw + route)
     final.sum().backward()
@@ -153,17 +152,19 @@ def test_training_keeps_actor_gradient_for_all_rows_and_actions(correction_model
     )
     pressure, legal, ranks = _routing(2)
     legal[0, 4] = 0
-    final, delta, gate, _ = correction_model._apply_configured_correction_rule(
+    final = correction_model._apply_configured_correction_rule(
         base, raw, pressure, legal, ranks
     )
     route = select_top2_low_pressure(base, pressure, legal, ranks)
-    expected = base.detach() + route + raw
-    torch.testing.assert_close(final, expected)
-    F.cross_entropy(final, torch.tensor([1, 2]), reduction="sum").backward()
+    reference_raw = raw.detach().clone().requires_grad_()
+    expected = base.detach() + route + reference_raw
+    torch.testing.assert_close(final, expected, rtol=0, atol=0)
+    targets = torch.tensor([1, 2])
+    F.cross_entropy(expected, targets, reduction="sum").backward()
+    F.cross_entropy(final, targets, reduction="sum").backward()
+    torch.testing.assert_close(raw.grad, reference_raw.grad, rtol=0, atol=0)
     assert torch.count_nonzero(raw.grad).item() == 10
     assert base.grad is None
-    torch.testing.assert_close(gate, torch.ones(2, 1))
-    torch.testing.assert_close(delta, raw)
 
 
 def test_direct_rewards_low_pressure_of_top_two_legal_moves_only():
@@ -192,28 +193,24 @@ def test_stored_tie_ranks_make_repeated_ppo_forward_identical():
 def test_zero_output_keeps_direct_bonus_at_all_entropies(correction_model):
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     pressure, legal, ranks = _routing(2)
-    final, learned_delta, gate, _ = correction_model._apply_configured_correction_rule(
+    final = correction_model._apply_configured_correction_rule(
         base, torch.zeros_like(base), pressure, legal, ranks
     )
     expected = base.clone()
     expected[:, 2] += 1.0
     torch.testing.assert_close(final, expected)
-    torch.testing.assert_close(learned_delta, torch.zeros_like(base))
-    torch.testing.assert_close(gate, torch.ones(2, 1))
 
 
 def test_training_formula_is_direct_plus_raw_correction(correction_model):
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     raw = torch.tensor([[2.0, -1.0, 0.0, 4.0, -3.0], [1.0, 2.0, 3.0, 4.0, 5.0]])
     pressure, legal, ranks = _routing(2)
-    final, delta, gate, _ = correction_model._apply_configured_correction_rule(
+    final = correction_model._apply_configured_correction_rule(
         base, raw, pressure, legal, ranks
     )
     expected = base + raw
     expected[:, 2] += 1.0
-    torch.testing.assert_close(gate, torch.ones(2, 1))
     torch.testing.assert_close(final, expected)
-    torch.testing.assert_close(delta, raw)
 
 
 def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_model):
@@ -231,7 +228,7 @@ def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_
     pressure, legal, ranks = _routing(4)
     adjusted = model._apply_configured_correction_rule(
         logits.detach(), raw, pressure, legal, ranks
-    )[0]
+    )
     values = model._critic_values(
         hidden, model.critic_trace_encoder(critic_tau), logits
     )

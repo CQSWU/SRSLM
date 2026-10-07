@@ -372,15 +372,8 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
                 self._base_entropy(base_logits),
             )
         base_logits = base_logits.detach()
-        entropy = self._base_entropy(base_logits)
-        gate = torch.ones_like(base_logits[:, :1])
         route = select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
-        return (
-            base_logits + route + raw_correction,
-            raw_correction,
-            gate,
-            entropy,
-        )
+        return base_logits + route + raw_correction
 
     def forward_tail(self, core_output, values_only: bool, sample_actions: bool):
         if isinstance(core_output, PackedSequence):
@@ -407,7 +400,7 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         )
         actor_input = self.trace_fusion_head(fusion_input)
         raw_correction = self.trace_multiplier_head(actor_input)
-        final_logits, _, _, _ = self._apply_configured_correction_rule(
+        final_logits = self._apply_configured_correction_rule(
             base_logits,
             raw_correction,
             centred_trace,
