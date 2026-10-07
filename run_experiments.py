@@ -132,7 +132,7 @@ def build_algorithm(
         from agents.arpe import ARPE
 
         artifact = _load_arpe_candidate_artifact(main_dir, arpe_candidate_manifest)
-        return ARPE.load(
+        return ARPE(
             artifact,
             seed=int(seed),
             device="auto",

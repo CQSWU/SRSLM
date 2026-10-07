@@ -15,6 +15,17 @@ MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 TIE_KEY = "bonus_tie_ranks"
 
 
+class InferenceCorrection:
+    @staticmethod
+    def gate(entropy):
+        return (entropy > 0.01).unsqueeze(-1)
+
+    def apply(self, base_logits, residual, entropy):
+        gate = self.gate(entropy).to(base_logits)
+        learned_delta = gate * residual
+        return base_logits + learned_delta
+
+
 def select_top2_low_pressure(logits, pressure, legal, tie_ranks):
     if logits.ndim != 2 or logits.shape[-1] != 5:
         raise ValueError("logits must have shape [B,5]")

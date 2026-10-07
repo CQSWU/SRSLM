@@ -39,7 +39,7 @@ class SRSLM:
         cfg: SRSLMConfig,
         *,
         project_root: Path | None = None,
-        candidate_factory: Callable = ARPE.load,
+        candidate_factory: Callable = ARPE,
         planner_factory: Callable = AORePlanBranch,
         switcher_factory: Callable = Switcher,
         controller_factory: Callable = SwitcherController,

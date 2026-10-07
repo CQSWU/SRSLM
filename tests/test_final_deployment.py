@@ -13,9 +13,9 @@ from agents.switcher_core import SwitcherController
 from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
     EPOMTraceMultiplierActorCritic,
+    InferenceCorrection,
     select_top2_low_pressure,
 )
-from learning.inference_correction import InferenceCorrection
 from planning.aoreplan_branch import AORePlanStep
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -208,7 +208,7 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
     ]
     try:
         with torch.no_grad():
-            result = model(batch, torch.zeros(2, get_rnn_size(policy.candidate.policy.cfg)))
+            result = model(batch, torch.zeros(2, get_rnn_size(policy.candidate.cfg)))
     finally:
         for hook in hooks:
             hook.remove()

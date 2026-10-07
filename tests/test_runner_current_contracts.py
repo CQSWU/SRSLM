@@ -160,7 +160,7 @@ def test_arpe_loads_exact_frozen_candidate():
     artifact = _artifact()
     with (
         patch.object(runner, "_load_arpe_candidate_artifact", return_value=artifact),
-        patch("agents.arpe.ARPE.load") as load,
+        patch("agents.arpe.ARPE") as load,
     ):
         runner.build_algorithm("ARPE", ".", 42, arpe_candidate_manifest="manifest.json")
     assert load.call_args.args[0] is artifact

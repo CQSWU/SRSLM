@@ -3,10 +3,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import torch
 import yaml
 
-from agents.arpe import ARPE
+from agents.arpe import ARPEConfig, ArpeCandidateArtifact
 from learning.config import Environment, Experiment
 from agents.switcher_core import switcher_observation_space
 
@@ -40,13 +39,24 @@ def test_training_recipe_can_use_custom_maps_populations_and_hardware():
     assert config == saved
 
 
-def test_arpe_freezes_base_parameters():
-    model = torch.nn.Linear(2, 5)
-    artifact = SimpleNamespace()
-    adapter = ARPE(SimpleNamespace(ppo=model, device="cpu"), artifact)
-    assert adapter.ppo is model
-    assert not model.training
-    assert all(not parameter.requires_grad for parameter in model.parameters())
+def test_arpe_configuration_resolves_explicit_candidate_paths(tmp_path):
+    config = ARPEConfig(
+        path_to_weights="weights/arpe",
+        milestone_checkpoint="downloaded/arpe.pth",
+        base_weights_path="weights/base",
+        base_checkpoint_path="downloaded/base.pth",
+        seed=17,
+        device="cpu",
+    )
+    original = config.dict()
+    artifact = ArpeCandidateArtifact.from_config(config, tmp_path)
+    assert artifact.project_root == tmp_path.resolve()
+    assert artifact.weights_path == (tmp_path / "weights/arpe").resolve()
+    assert artifact.checkpoint_path == (tmp_path / "downloaded/arpe.pth").resolve()
+    assert artifact.base_weights_path == (tmp_path / "weights/base").resolve()
+    assert artifact.base_checkpoint_path == (tmp_path / "downloaded/base.pth").resolve()
+    assert artifact.as_dict() == config.as_mapping()
+    assert config.dict() == original
 
 
 @pytest.mark.parametrize(

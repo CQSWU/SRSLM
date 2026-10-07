@@ -31,7 +31,7 @@ class ArpeSwitcherEnv(gym.Env):
         candidate_device: str = "cuda",
         max_planning_steps: int = 10_000,
         team_reward_coefficient: float = 1.0,
-        candidate_factory=ARPE.load,
+        candidate_factory=ARPE,
         planner_factory=AORePlanBranch,
         base_env_factory=make_pomapf,
     ):

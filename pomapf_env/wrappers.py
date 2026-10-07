@@ -13,6 +13,7 @@ from pogema import GridConfig
 
 from pomapf_env.custom_maps import MAPS_REGISTRY
 from pomapf_env.stigmergic import AcoState
+from pomapf_env.target_projection import get_square_target
 from learning.grid_memory import MultipleGridMemory
 
 
@@ -199,19 +200,6 @@ class MatrixObservationWrapper(ObservationWrapper):
         self.is_multiagent = self.env.is_multiagent
 
     @staticmethod
-    def get_square_target(x, y, tx, ty, obs_radius):
-
-        full_size = obs_radius * 2 + 1
-        result = np.zeros((full_size, full_size), dtype=np.float32)
-        dx = int(round(float(x) - float(tx)))
-        dy = int(round(float(y) - float(ty)))
-
-        dx = min(dx, obs_radius) if dx >= 0 else max(dx, -obs_radius)
-        dy = min(dy, obs_radius) if dy >= 0 else max(dy, -obs_radius)
-        result[obs_radius - dx, obs_radius - dy] = 1
-        return result
-
-    @staticmethod
     def to_matrix(observations):
 
         result = []
@@ -224,7 +212,7 @@ class MatrixObservationWrapper(ObservationWrapper):
                         [
                             obs["obstacles"][None],
                             obs["agents"][None],
-                            MatrixObservationWrapper.get_square_target(
+                            get_square_target(
                                 *obs["xy"], *obs["target_xy"], obs_radius
                             )[None],
                         ]

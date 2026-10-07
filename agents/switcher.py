@@ -23,7 +23,7 @@ from agents.switcher_core import (
     switcher_observation_space,
 )
 from agents.arpe import ArpeCandidateArtifact
-from agents.utils_agents import AlgoBase
+from agents.utils_agents import AlgoBase, resolve_device
 from train import register_custom_components, validate_config
 
 
@@ -67,7 +67,7 @@ class Switcher:
         )
         action_space = gym.spaces.Discrete(NUM_BRANCHES)
         actor = create_actor_critic(flat_config, observation_space, action_space)
-        self.device = self._resolve_device(cfg.device)
+        self.device = resolve_device(str(cfg.device).lower())
         actor.model_to_device(self.device)
 
         checkpoint_dir = join(str(path), f"checkpoint_p{flat_config.policy_index}")
@@ -87,19 +87,6 @@ class Switcher:
         self.rnn_state_size = get_rnn_size(flat_config)
         self.candidate_artifact = candidate_artifact
         self.after_reset()
-
-    @staticmethod
-    def _resolve_device(requested: str) -> torch.device:
-        requested = str(requested).lower()
-        if requested == "cpu":
-            return torch.device("cpu")
-        if requested.startswith("cuda") and torch.cuda.is_available():
-            return torch.device(requested)
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
 
     @staticmethod
     def _resolve_checkpoint(checkpoint_dir) -> Path:

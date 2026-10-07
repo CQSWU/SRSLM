@@ -6,6 +6,7 @@ from typing import Mapping, Sequence
 import numpy as np
 
 from agents.utils_agents import SUPPORTED_COLLISION_SYSTEMS
+from pomapf_env.target_projection import get_square_target
 
 ARPE_BRANCH = 0
 AO_BRANCH = 1
@@ -46,17 +47,6 @@ def _one_hot(actions: np.ndarray) -> np.ndarray:
     return result
 
 
-def _target_layer(xy: np.ndarray, target_xy: np.ndarray) -> np.ndarray:
-    radius = SWITCHER_CROP_SIZE // 2
-    dx = int(round(float(xy[0]) - float(target_xy[0])))
-    dy = int(round(float(xy[1]) - float(target_xy[1])))
-    dx = min(dx, radius) if dx >= 0 else max(dx, -radius)
-    dy = min(dy, radius) if dy >= 0 else max(dy, -radius)
-    result = np.zeros((SWITCHER_CROP_SIZE, SWITCHER_CROP_SIZE), dtype=np.float32)
-    result[radius - dx, radius - dy] = 1.0
-    return result
-
-
 def build_switcher_state(
     observations: Sequence[Mapping],
     arpe_actions: Sequence[int],
@@ -91,7 +81,7 @@ def build_switcher_state(
                 [
                     np.clip(obstacles, 0.0, 1.0),
                     np.clip(agents, 0.0, 1.0),
-                    _target_layer(xy, target),
+                    get_square_target(*xy, *target, SWITCHER_CROP_SIZE // 2),
                 ],
                 axis=0,
             )
