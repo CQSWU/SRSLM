@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Extra, Field, validator
 
-from pomapf_env.pomapf_config import POMAPFConfig
+from pomapf_env.config import POMAPFConfig
 
 
 def checkpoint_experiment_config(config):

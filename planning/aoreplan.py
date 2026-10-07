@@ -6,7 +6,7 @@ import numpy as np
 from pogema import GridConfig
 
 if sys.platform == "win32":
-    from planning.python_planner import planner
+    from planning.planner_python import planner
 else:
     cppimport = importlib.import_module("cppimport")
     if shutil.which("g++") is None:

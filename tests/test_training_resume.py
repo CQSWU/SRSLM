@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-import train
+import train_arpe
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,15 +27,15 @@ def _run_config(path, frames=50_000_000):
 
 
 def test_current_entry_rejects_reset_before_registering_or_writing():
-    args = ["train.py", "--config_path", "unused.yaml", "--reset"]
+    args = ["train_arpe.py", "--config_path", "unused.yaml", "--reset"]
     with (
         patch("sys.argv", args),
-        patch.object(train, "register_custom_components") as register,
-        patch.object(train, "_sync_resume_cli_overrides") as sync,
-        patch.object(train, "run_rl") as run,
+        patch.object(train_arpe, "register_custom_components") as register,
+        patch.object(train_arpe, "_sync_resume_cli_overrides") as sync,
+        patch.object(train_arpe, "run_rl") as run,
     ):
         with pytest.raises(SystemExit) as raised:
-            train.main()
+            train_arpe.main()
         assert raised.value.code == 2
         register.assert_not_called()
         sync.assert_not_called()
@@ -52,7 +52,7 @@ def test_no_explicit_override_leaves_original_config_untouched(tmp_path):
         train_for_env_steps=100_000_000,
         cli_args={"seed": 42},
     )
-    train._sync_resume_cli_overrides(cfg, set())
+    train_arpe._sync_resume_cli_overrides(cfg, set())
     assert path.read_bytes() == original
     assert path.stat().st_mtime_ns == original_mtime
     assert cfg.cli_args == {"seed": 42}
@@ -72,7 +72,7 @@ def test_explicit_resume_updates_only_named_run_not_newest_config(tmp_path):
         train_for_env_steps=100_000_000,
         cli_args={},
     )
-    train._sync_resume_cli_overrides(cfg, {"train_for_env_steps"})
+    train_arpe._sync_resume_cli_overrides(cfg, {"train_for_env_steps"})
     saved = json.loads(selected.read_text(encoding="utf-8"))
     assert saved["train_for_env_steps"] == 100_000_000
     assert (

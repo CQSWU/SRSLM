@@ -16,14 +16,14 @@ from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.utils import log
 
-from agents.switcher_core import (
+from agents.controller import (
     NUM_BRANCHES,
     SWITCHER_FIELD_SHAPES,
     switcher_observation_space,
 )
-from agents.arpe import ArpeCandidateArtifact
-from agents.utils_agents import AlgoBase, resolve_device
-from train import register_custom_components, validate_config
+from agents.arpe import ARPEWeights
+from agents.common import AlgoBase, resolve_device
+from train_arpe import register_custom_components, validate_config
 
 
 class SwitcherConfig(AlgoBase, extra=Extra.forbid):
@@ -44,7 +44,7 @@ class Switcher:
         candidate_artifact = None
         if declaration is not None:
             project_root = Path(__file__).resolve().parents[1]
-            candidate_artifact = ArpeCandidateArtifact.from_mapping(
+            candidate_artifact = ARPEWeights.from_mapping(
                 declaration,
                 project_root,
             )

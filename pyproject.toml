@@ -36,8 +36,8 @@ packages = [
     "pomapf_env",
 ]
 py-modules = [
-    "run_experiments",
-    "train",
+    "evaluate",
+    "train_arpe",
     "train_switcher",
 ]
 

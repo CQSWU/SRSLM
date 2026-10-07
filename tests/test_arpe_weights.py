@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agents.arpe import ArpeCandidateArtifact
+from agents.arpe import ARPEWeights
 
 
 def _artifact_tree(root: Path) -> dict[str, object]:
@@ -29,7 +29,7 @@ def _artifact_tree(root: Path) -> dict[str, object]:
 
 def test_arpe_candidate_paths_roundtrip(tmp_path):
     declaration = _artifact_tree(tmp_path)
-    artifact = ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
+    artifact = ARPEWeights.from_mapping(declaration, tmp_path)
 
     assert artifact.weights_path == tmp_path / declaration["weights_path"]
     assert (
@@ -40,7 +40,7 @@ def test_arpe_candidate_paths_roundtrip(tmp_path):
     assert set(saved) == set(declaration)
 
     artifact.checkpoint_path.write_bytes(b"changed")
-    reloaded = ArpeCandidateArtifact.from_mapping(saved, tmp_path)
+    reloaded = ARPEWeights.from_mapping(saved, tmp_path)
     assert reloaded == artifact
     assert reloaded.checkpoint_path.read_bytes() == b"changed"
 
@@ -52,6 +52,6 @@ def test_arpe_artifact_accepts_absolute_paths(tmp_path):
             tmp_path / "weights" / "candidate" / "checkpoint_p0" / "checkpoint_1.pth"
         ).resolve()
     )
-    artifact = ArpeCandidateArtifact.from_mapping(declaration, tmp_path)
+    artifact = ARPEWeights.from_mapping(declaration, tmp_path)
     assert artifact.checkpoint_path.is_absolute()
     assert artifact.checkpoint_path.is_file()

@@ -22,13 +22,13 @@ from sample_factory.utils.utils import log
 
 from learning.config import Environment, Experiment
 
-from learning.switcher_learner_patch import patch_switcher_learner_losses
+from learning.ppo_losses import patch_switcher_learner_losses
 
 import learning.encoder  # noqa: F401 -- registers the Sample Factory model factories
 
 from pomapf_env.env import make_pomapf
-from pomapf_env.trace_routing import BonusRoutingObservation
-from pomapf_env.trace_training import FailedMoveCredit
+from pomapf_env.tie_breaking import BonusRoutingObservation
+from pomapf_env.rewards import FailedMoveCredit
 
 from pomapf_env.wrappers import (
     GridMemoryObservationWrapper,
@@ -97,7 +97,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
     if full_env_name == "POMAPF-SRSLM-v0":
         raise RuntimeError(
             "Switcher training uses its own ARPE path configuration. "
-            "Use train_switcher.py for Switcher training, not generic train.py."
+            "Use train_switcher.py for Switcher training, not generic train_arpe.py."
         )
 
     _ensure_patched()

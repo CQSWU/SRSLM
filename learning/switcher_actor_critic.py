@@ -14,7 +14,7 @@ from sample_factory.model.encoder import Encoder
 from sample_factory.model.model_utils import nonlinearity
 from torch import nn
 
-from agents.switcher_core import (
+from agents.controller import (
     NUM_BRANCHES,
     SWITCHER_FIELD_SHAPES,
     SWITCHER_SPATIAL_SHAPE,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper, INF
+from planning.aoreplan import AORePlanBase, AORePlanWrapper, INF
 
 
 @dataclass(frozen=True)

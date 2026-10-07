@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from unittest.mock import patch
 
-from planning.aoreplan_branch import AORePlanBranch
+from planning.branch import AORePlanBranch
 
 
 class SequenceBase:
@@ -45,7 +45,7 @@ def obs(position=(5, 5)):
 
 def make_branch(sequences, static_action=3):
     base = SequenceBase(sequences)
-    with patch("planning.aoreplan_branch.AORePlanBase", return_value=base):
+    with patch("planning.branch.AORePlanBase", return_value=base):
         branch = AORePlanBranch()
     branch._wrapper.static_astar = FixedStaticAStar(static_action)
     return branch, base

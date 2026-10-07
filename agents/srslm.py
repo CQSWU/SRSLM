@@ -8,11 +8,11 @@ from pydantic import Extra, Field
 from agents.switcher import Switcher, SwitcherConfig
 from agents.arpe import (
     ARPE,
-    ArpeCandidateArtifact,
+    ARPEWeights,
 )
-from agents.switcher_core import SwitcherController
-from agents.utils_agents import AlgoBase
-from planning.aoreplan_branch import AORePlanBranch
+from agents.controller import SwitcherController
+from agents.common import AlgoBase
+from planning.branch import AORePlanBranch
 
 
 class SRSLMConfig(AlgoBase, extra=Extra.forbid):
@@ -35,7 +35,7 @@ class SRSLM:
         self,
         cfg: SRSLMConfig,
         *,
-        candidate: ArpeCandidateArtifact | None = None,
+        candidate: ARPEWeights | None = None,
         candidate_factory: Callable = ARPE,
         planner_factory: Callable = AORePlanBranch,
         switcher_factory: Callable = Switcher,

@@ -5,12 +5,12 @@ import numpy as np
 import pytest
 from pogema import GridConfig, pogema_v0
 
-from agents.ao_replan import AORePlan, AORePlanConfig
+from agents.aoreplan import AORePlan, AORePlanConfig
 from agents.srslm import SRSLM
-from agents.switcher_core import SwitcherController
-from planning.ao_replan_algo import AORePlanWrapper
-from planning.aoreplan_branch import AORePlanBranch
-from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
+from agents.controller import SwitcherController
+from planning.aoreplan import AORePlanWrapper
+from planning.branch import AORePlanBranch
+from pomapf_env.switcher import SwitcherEnv
 
 
 class SequenceBase:
@@ -40,7 +40,7 @@ class FixedStatic:
 
 @pytest.fixture(autouse=True)
 def branch_base(monkeypatch):
-    monkeypatch.setattr("planning.aoreplan_branch.AORePlanBase", SequenceBase)
+    monkeypatch.setattr("planning.branch.AORePlanBase", SequenceBase)
 
 
 def observation(position=(5, 5), occupied=False):
@@ -57,7 +57,7 @@ def observation(position=(5, 5), occupied=False):
 def configured_policy(collision, policy_type=AORePlan):
     policy = policy_type(AORePlanConfig())
     policy.set_grid_config(SimpleNamespace(collision_system=collision))
-    with patch("agents.ao_replan.AORePlanBase", SequenceBase):
+    with patch("agents.aoreplan.AORePlanBase", SequenceBase):
         policy.after_reset()
     return policy
 
@@ -113,7 +113,7 @@ def test_branch_conservative_behavior_survives_reset(collision):
 def test_standalone_config_survives_episode_and_wrapper_recreation(collision):
     policy = configured_policy(collision)
     for _ in range(2):
-        with patch("agents.ao_replan.AORePlanBase", SequenceBase):
+        with patch("agents.aoreplan.AORePlanBase", SequenceBase):
             policy.after_reset()
         assert type(policy._ao_wrapper) is AORePlanWrapper
         policy._ao_wrapper.static_astar = FixedStatic(4)
@@ -164,7 +164,7 @@ def test_training_env_reset_uses_same_planner_rule_as_deployment(collision):
         grid_config=config,
         reset=lambda: ([observation()], [{}]),
     )
-    env = ArpeSwitcherEnv(
+    env = SwitcherEnv(
         grid_config=config,
         candidate_artifact=SimpleNamespace(),
         candidate_factory=lambda *_args, **_kwargs: Candidate(),

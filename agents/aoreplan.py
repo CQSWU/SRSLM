@@ -2,8 +2,8 @@ from typing import Literal
 
 from pydantic import Extra, Field
 
-from agents.utils_agents import AlgoBase, SUPPORTED_COLLISION_SYSTEMS
-from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper
+from agents.common import AlgoBase, SUPPORTED_COLLISION_SYSTEMS
+from planning.aoreplan import AORePlanBase, AORePlanWrapper
 
 
 class AORePlanConfig(AlgoBase, extra=Extra.forbid):

@@ -99,11 +99,11 @@ def make_actor_critic(cfg, obs_space, action_space):
         actor_critic = SwitcherActorCritic
 
     elif kind == "epom_trace_context":
-        from learning.epom_trace_multiplier_actor_critic import (
-            EPOMTraceMultiplierActorCritic,
+        from learning.arpe_actor_critic import (
+            ARPEActorCritic,
         )
 
-        actor_critic = EPOMTraceMultiplierActorCritic
+        actor_critic = ARPEActorCritic
     else:
         return default_make_actor_critic_func(cfg, obs_space, action_space)
 

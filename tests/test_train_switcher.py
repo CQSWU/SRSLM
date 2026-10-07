@@ -9,23 +9,23 @@ import pytest
 import yaml
 from sample_factory.algo.utils.context import global_env_registry
 
-import train
+import train_arpe
 import train_switcher
-from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
-from agents.arpe import ArpeCandidateArtifact
+from pomapf_env.switcher import SwitcherEnv
+from agents.arpe import ARPEWeights
 
 
 def test_training_example_uses_current_candidate_and_wait_only_controller():
     root = Path(__file__).resolve().parents[1]
-    config = yaml.safe_load((root / "learning/train_switcher.yaml").read_text())
-    manifest = json.loads((root / "configs/arpe_final_candidate.json").read_text())
+    config = yaml.safe_load((root / "configs/train_switcher.yaml").read_text())
+    manifest = json.loads((root / "configs/arpe.json").read_text())
     assert config["candidate_policy"] == manifest
     original = deepcopy(config)
     flat = train_switcher.prepare_switcher_config(config)
     assert config == original
     assert flat.env == train_switcher.ENV_NAME
     assert flat.encoder_custom == "switcher"
-    expected = ArpeCandidateArtifact.from_mapping(manifest, root).as_dict()
+    expected = ARPEWeights.from_mapping(manifest, root).as_dict()
     assert flat.candidate_policy == expected
     assert flat.full_config["candidate_policy"] == expected
     assert flat.population_curriculum == {"populations": [50, 100, 200], "cycles": 10}
@@ -105,7 +105,7 @@ def test_stage_updates_population_on_resume_without_touching_checkpoint(
     root = Path(__file__).resolve().parents[1]
     args = [
         "--config_path",
-        str(root / "learning/train_switcher.yaml"),
+        str(root / "configs/train_switcher.yaml"),
         "--run_name",
         "curriculum",
         "--train_dir",
@@ -153,7 +153,7 @@ def test_validate_only_has_no_training_or_resume_writes(tmp_path, monkeypatch, c
         train_switcher, "run_curriculum", lambda *args: pytest.fail("started training")
     )
     monkeypatch.setattr(
-        train,
+        train_arpe,
         "_sync_resume_cli_overrides",
         lambda *args: pytest.fail("wrote saved config"),
     )
@@ -161,7 +161,7 @@ def test_validate_only_has_no_training_or_resume_writes(tmp_path, monkeypatch, c
         train_switcher.main(
             [
                 "--config_path",
-                str(root / "learning/train_switcher.yaml"),
+                str(root / "configs/train_switcher.yaml"),
                 "--train_dir",
                 str(tmp_path),
                 "--validate-only",
@@ -179,7 +179,7 @@ def test_validate_only_has_no_training_or_resume_writes(tmp_path, monkeypatch, c
 def isolated_registry(monkeypatch):
     registry = global_env_registry()
     original = registry.copy()
-    monkeypatch.setattr(train, "_CUSTOM_COMPONENTS_REGISTERED", False)
+    monkeypatch.setattr(train_arpe, "_CUSTOM_COMPONENTS_REGISTERED", False)
     try:
         yield registry
     finally:
@@ -194,8 +194,8 @@ def isolated_registry(monkeypatch):
 def test_generic_switcher_factory_fails_before_configuration_or_loading(
     name, isolated_registry
 ):
-    train.register_custom_components()
-    assert isolated_registry[name] is train.create_pogema_env
+    train_arpe.register_custom_components()
+    assert isolated_registry[name] is train_arpe.create_pogema_env
     with pytest.raises(RuntimeError, match="train_switcher.py"):
         isolated_registry[name](name, cfg=None)
 
@@ -229,7 +229,7 @@ class _FrozenCandidate:
 
 def _configuration(environment_name, collision):
     root = Path(__file__).resolve().parents[1]
-    declaration = json.loads((root / "configs/arpe_final_candidate.json").read_text())
+    declaration = json.loads((root / "configs/arpe.json").read_text())
     return SimpleNamespace(
         full_config={
             "candidate_policy": declaration,
@@ -258,17 +258,17 @@ def test_dedicated_registry_constructs_real_env_and_preserves_runtime(
     monkeypatch,
 ):
 
-    env_type = ArpeSwitcherEnv
+    env_type = SwitcherEnv
     monkeypatch.setattr(
         train_switcher,
-        "ArpeSwitcherEnv",
+        "SwitcherEnv",
         partial(env_type, candidate_factory=_FrozenCandidate),
     )
-    train.register_custom_components()
-    assert isolated_registry[train_switcher.ENV_NAME] is train.create_pogema_env
+    train_arpe.register_custom_components()
+    assert isolated_registry[train_switcher.ENV_NAME] is train_arpe.create_pogema_env
     train_switcher.register_switcher_components()
     factory = isolated_registry[train_switcher.ENV_NAME]
-    assert factory is not train.create_pogema_env
+    assert factory is not train_arpe.create_pogema_env
     cfg = _configuration(train_switcher.ENV_NAME, collision)
     with pytest.raises(ValueError, match="cannot construct"):
         factory("POMAPF-v0", cfg=cfg)

@@ -2,12 +2,12 @@ import unittest
 
 import numpy as np
 
-from pomapf_env.stigmergic import AcoState
+from pomapf_env.trace import SharedTrace
 
 
 class TestOccupancyTrace(unittest.TestCase):
     def setUp(self):
-        self.state = AcoState(rho=0.1)
+        self.state = SharedTrace(rho=0.1)
         obstacles = np.zeros((5, 5), dtype=bool)
         obstacles[0, 0] = True
         self.state.configure_from_obstacle_mask(obstacles, clear=True)

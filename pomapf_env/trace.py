@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class AcoState:
+class SharedTrace:
     def __init__(self, rho=0.1):
         self.rho = float(rho)
         if not 0.0 < self.rho <= 1.0:

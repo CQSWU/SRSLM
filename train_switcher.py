@@ -11,10 +11,10 @@ import yaml
 from sample_factory.algo.utils.context import global_env_registry
 from sample_factory.train import run_rl
 
-import train as base_train
-from agents.arpe import ArpeCandidateArtifact
+import train_arpe as base_train
+from agents.arpe import ARPEWeights
 from learning.config import Environment
-from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
+from pomapf_env.switcher import SwitcherEnv
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
@@ -34,8 +34,8 @@ def create_switcher_env(
     declaration = cfg.full_config.get("candidate_policy")
     if not isinstance(declaration, dict):
         raise RuntimeError("Saved Switcher config has no candidate_policy paths.")
-    artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
-    return ArpeSwitcherEnv(
+    artifact = ARPEWeights.from_mapping(declaration, PROJECT_ROOT)
+    return SwitcherEnv(
         grid_config=environment.grid_config,
         candidate_artifact=artifact,
         candidate_device=environment.switcher_caar_device,
@@ -55,7 +55,7 @@ def prepare_switcher_config(config: dict):
     declaration = payload.pop("candidate_policy", None)
     if not isinstance(declaration, dict):
         raise ValueError("Switcher config requires candidate_policy.")
-    artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
+    artifact = ARPEWeights.from_mapping(declaration, PROJECT_ROOT)
 
     _, flat_config = base_train.validate_config(payload)
     if flat_config.encoder_custom != "switcher":

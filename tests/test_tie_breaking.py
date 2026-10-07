@@ -1,6 +1,6 @@
 import numpy as np
 
-from pomapf_env.trace_routing import bonus_rng, draw_tie_ranks
+from pomapf_env.tie_breaking import bonus_rng, draw_tie_ranks
 
 
 def test_rank_metadata_preserves_direct_two_draw_order_and_ties():

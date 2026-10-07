@@ -3,8 +3,8 @@ import sys
 import numpy as np
 import pytest
 
-import planning.ao_replan_algo as ao
-from planning.python_planner import planner as PythonPlanner
+import planning.aoreplan as ao
+from planning.planner_python import planner as PythonPlanner
 
 MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 BACKENDS = [("python", PythonPlanner)]

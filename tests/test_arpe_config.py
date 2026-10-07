@@ -10,7 +10,7 @@ from learning.config import Experiment, checkpoint_experiment_config
 
 def _recipe():
     root = Path(__file__).resolve().parents[1]
-    return yaml.safe_load((root / "learning/train_arpe_final.yaml").read_text())
+    return yaml.safe_load((root / "configs/train_arpe.yaml").read_text())
 
 
 @pytest.mark.parametrize(

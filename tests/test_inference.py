@@ -8,15 +8,15 @@ import pytest
 import torch
 import yaml
 
-from agents.arpe import ArpeCandidateArtifact
-from agents.switcher_core import SwitcherController
+from agents.arpe import ARPEWeights
+from agents.controller import SwitcherController
 from learning.config import Experiment
-from learning.epom_trace_multiplier_actor_critic import (
-    EPOMTraceMultiplierActorCritic,
+from learning.arpe_actor_critic import (
+    ARPEActorCritic,
     InferenceCorrection,
     select_top2_low_pressure,
 )
-from planning.aoreplan_branch import AORePlanStep
+from planning.branch import AORePlanStep
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,9 +43,9 @@ def test_native_training_keeps_direct_and_all_action_correction():
     ranks = torch.arange(5).float().repeat(2, 2, 1)
     model = SimpleNamespace(
         training=False,
-        _base_entropy=EPOMTraceMultiplierActorCritic._base_entropy,
+        _base_entropy=ARPEActorCritic._base_entropy,
     )
-    apply = EPOMTraceMultiplierActorCritic._apply_configured_correction_rule
+    apply = ARPEActorCritic._apply_configured_correction_rule
     native = apply(model, logits, raw, pressure, legal, ranks)
     route = select_top2_low_pressure(logits, pressure, legal, ranks)
     torch.testing.assert_close(
@@ -127,9 +127,9 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(
 def test_training_and_deployment_share_wait_only_controller():
     import inspect
     from agents.srslm import SRSLM, SRSLMConfig
-    from pomapf_env.switcher_arpe_env import ArpeSwitcherEnv
+    from pomapf_env.switcher import SwitcherEnv
 
-    assert ArpeSwitcherEnv.controller_class is SwitcherController
+    assert SwitcherEnv.controller_class is SwitcherController
     assert (
         inspect.signature(SRSLM).parameters["controller_factory"].default
         is SwitcherController
@@ -138,22 +138,22 @@ def test_training_and_deployment_share_wait_only_controller():
 
 
 def test_final_manifest_only_selects_weights():
-    mapping = json.loads((ROOT / "configs/arpe_final_candidate.json").read_text())
-    artifact = ArpeCandidateArtifact.from_mapping(mapping, ROOT)
-    assert ArpeCandidateArtifact.from_mapping(artifact.as_dict(), ROOT) == artifact
+    mapping = json.loads((ROOT / "configs/arpe.json").read_text())
+    artifact = ARPEWeights.from_mapping(mapping, ROOT)
+    assert ARPEWeights.from_mapping(artifact.as_dict(), ROOT) == artifact
     assert set(mapping) == {
         "weights_path", "checkpoint_path", "base_weights_path", "base_checkpoint_path"
     }
     assert not any("sha" in key.lower() for key in mapping)
     cfg = Experiment(
-        **yaml.safe_load((ROOT / "learning/train_arpe_final.yaml").read_text())
+        **yaml.safe_load((ROOT / "configs/train_arpe.yaml").read_text())
     )
     assert cfg.experiment_settings.train_for_env_steps == 1_000_000_000
 
 
 def test_final_weight_loading_and_small_cpu_forward_when_available():
-    mapping = json.loads((ROOT / "configs/arpe_final_candidate.json").read_text())
-    artifact = ArpeCandidateArtifact.from_mapping(mapping, ROOT)
+    mapping = json.loads((ROOT / "configs/arpe.json").read_text())
+    artifact = ARPEWeights.from_mapping(mapping, ROOT)
     switcher_dir = ROOT / "weights/SRSLM-Switcher-Final-1B"
     if (
         not artifact.checkpoint_path.is_file()
@@ -162,8 +162,8 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
         pytest.skip("Final model weights are distributed separately")
     from agents.srslm import SRSLM, SRSLMConfig
     from agents.switcher import SwitcherConfig
-    from agents.switcher_core import build_switcher_state
-    from pomapf_env.trace_routing import TIE_KEY
+    from agents.controller import build_switcher_state
+    from pomapf_env.tie_breaking import TIE_KEY
     from sample_factory.algo.utils.tensor_dict import TensorDict
     from sample_factory.model.model_utils import get_rnn_size
 

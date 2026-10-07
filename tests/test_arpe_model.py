@@ -14,14 +14,14 @@ from torch import nn
 from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence
 
 from learning.config import Experiment
-from learning.epom_trace_multiplier_actor_critic import (
-    EPOMTraceMultiplierActorCritic,
+from learning.arpe_actor_critic import (
+    ARPEActorCritic,
     select_top2_low_pressure,
 )
-from train import register_custom_components, validate_config
+from train_arpe import register_custom_components, validate_config
 
 ROOT = Path(__file__).resolve().parents[1]
-FORMAL = ROOT / "learning" / "train_arpe_final.yaml"
+FORMAL = ROOT / "configs" / "train_arpe.yaml"
 
 
 def _load(path):
@@ -38,7 +38,7 @@ def _routing(batch_size):
 
 @pytest.fixture
 def correction_model():
-    model = object.__new__(EPOMTraceMultiplierActorCritic)
+    model = object.__new__(ARPEActorCritic)
     nn.Module.__init__(model)
     return model
 
@@ -116,7 +116,7 @@ def test_fusion_input_is_trace32_h512_z5_and_detaches_frozen_epom():
     trace = torch.randn(3, 32, requires_grad=True)
     hidden = torch.randn(3, 512, requires_grad=True)
     logits = torch.randn(3, 5, requires_grad=True)
-    fused = EPOMTraceMultiplierActorCritic.compose_paper_entropy_fusion_input(
+    fused = ARPEActorCritic.compose_paper_entropy_fusion_input(
         trace, hidden, logits
     )
     assert fused.shape == (3, 549)

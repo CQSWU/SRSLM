@@ -23,7 +23,7 @@ uv sync
 ## Run
 
 ```bash
-uv run python run_experiments.py --algorithms AORePlan
+uv run python evaluate.py --algorithms AORePlan
 ```
 
 Download the [model weights](https://github.com/CQSWU/SRSLM/releases/tag/weights-v1)
@@ -31,14 +31,14 @@ and extract them into `weights/`. ARPE needs `EPOM-L` and `ARPE-Final-1B`;
 SRSLM also needs `SRSLM-Switcher-Final-1B`. Experiment data is not included.
 
 ```bash
-uv run python run_experiments.py --algorithms SRSLM
+uv run python evaluate.py --algorithms SRSLM
 ```
 
 ## Train
 
 ```bash
-uv run python train.py --config_path learning/train_arpe_final.yaml
-uv run python train_switcher.py --config_path learning/train_switcher.yaml
+uv run python train_arpe.py --config_path configs/train_arpe.yaml
+uv run python train_switcher.py --config_path configs/train_switcher.yaml
 ```
 
 ARPE trains with 200 agents. Switcher alternates between 50, 100 and 200 agents,

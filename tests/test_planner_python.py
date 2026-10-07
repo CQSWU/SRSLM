@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from planning.python_planner import INF, planner
+from planning.planner_python import INF, planner
 
 START = (0, 0)
 GOAL = (0, 2)
@@ -133,7 +133,7 @@ def _backend_trace(backend, steps, cache_failure):
 @pytest.mark.parametrize("steps", [1, 2, 8, 100])
 @pytest.mark.parametrize("cache_failure", [False, True])
 def test_native_and_python_backends_match_state_transition_trace(steps, cache_failure):
-    from planning.ao_replan_algo import planner as NativePlanner
+    from planning.aoreplan import planner as NativePlanner
 
     assert _backend_trace(planner, steps, cache_failure) == _backend_trace(
         NativePlanner, steps, cache_failure

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from learning.switcher_learner_patch import _build_switcher_calculate_losses
+from learning.ppo_losses import _build_switcher_calculate_losses
 from sample_factory.algo.learning.learner import Learner
 from sample_factory.utils.attr_dict import AttrDict
 
@@ -399,7 +399,7 @@ def test_zero_valid_rows_are_rejected_before_loss_evaluation(encoder_custom):
 
 def test_train_import_installs_patch_in_a_fresh_process():
     code = """
-import train
+import train_arpe
 from sample_factory.algo.learning.learner import Learner
 
 assert getattr(
@@ -418,16 +418,16 @@ assert getattr(
 
 
 def test_component_registration_repairs_a_missing_patch(monkeypatch):
-    import train
+    import train_arpe
     from sample_factory.algo.learning.learner import Learner
 
     patched = Learner._calculate_losses
     original = patched._srslm_original_calculate_losses
     monkeypatch.setattr(Learner, "_calculate_losses", original)
 
-    monkeypatch.setattr(train, "_CUSTOM_COMPONENTS_REGISTERED", True)
+    monkeypatch.setattr(train_arpe, "_CUSTOM_COMPONENTS_REGISTERED", True)
 
-    train.register_custom_components()
+    train_arpe.register_custom_components()
 
     assert getattr(
         Learner._calculate_losses,

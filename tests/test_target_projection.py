@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from agents.switcher_core import build_switcher_state
+from agents.controller import build_switcher_state
 from pomapf_env.target_projection import get_square_target
 from pomapf_env.wrappers import MatrixObservationWrapper
 

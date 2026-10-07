@@ -7,9 +7,9 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-import run_experiments as runner
-from agents.ao_replan import AORePlan, AORePlanConfig
-from planning.ao_replan_algo import AORePlanWrapper
+import evaluate as runner
+from agents.aoreplan import AORePlan, AORePlanConfig
+from planning.aoreplan import AORePlanWrapper
 
 
 def test_public_names_are_explicit_and_retired_names_are_rejected():
@@ -38,7 +38,7 @@ def test_public_names_are_explicit_and_retired_names_are_rejected():
 
 
 def test_public_cli_defaults_to_aoreplan_only():
-    with patch.object(sys, "argv", ["run_experiments.py"]):
+    with patch.object(sys, "argv", ["evaluate.py"]):
         args = runner.parse_args()
     assert args.algorithms == ["AORePlan"]
     assert runner.parse_agent_counts(args) == list(range(50, 501, 50))
@@ -92,7 +92,7 @@ def test_policies_are_always_episode_fresh(algorithm):
     ],
 )
 def test_retired_runner_switches_are_rejected(options):
-    with patch.object(sys, "argv", ["run_experiments.py", *options]):
+    with patch.object(sys, "argv", ["evaluate.py", *options]):
         with pytest.raises(SystemExit):
             runner.parse_args()
 
@@ -124,7 +124,7 @@ def test_invalid_seed_lists_are_rejected(value):
     ],
 )
 def test_invalid_run_protocol_is_rejected_before_execution(monkeypatch, options):
-    monkeypatch.setattr(sys, "argv", ["run_experiments.py", *options])
+    monkeypatch.setattr(sys, "argv", ["evaluate.py", *options])
     with patch.object(runner, "run_experiments") as run:
         with pytest.raises((ValueError, SystemExit)):
             runner.main()
@@ -137,7 +137,7 @@ def test_retired_direct_cli_variants_are_rejected():
             sys,
             "argv",
             [
-                "run_experiments.py",
+                "evaluate.py",
                 "--algorithms",
                 "Direct",
                 "--direct-transform",
@@ -183,10 +183,10 @@ def test_default_aoreplan_keeps_static_occupancy_check(collision):
 
 def test_public_manifest_uses_portable_paths_without_required_hashes():
     root = Path(__file__).resolve().parents[1]
-    data = json.loads((root / "configs/arpe_final_candidate.json").read_text())
-    from agents.arpe import ArpeCandidateArtifact
+    data = json.loads((root / "configs/arpe.json").read_text())
+    from agents.arpe import ARPEWeights
 
-    artifact = ArpeCandidateArtifact.from_mapping(data, root)
+    artifact = ARPEWeights.from_mapping(data, root)
     assert artifact.weights_path == (root / data["weights_path"]).resolve()
     assert artifact.checkpoint_path == (root / data["checkpoint_path"]).resolve()
     for key in ("checkpoint_sha256", "base_checkpoint_sha256"):
@@ -231,7 +231,7 @@ def test_saved_metadata_keeps_protocol_without_weight_or_host_reports(monkeypatc
         sys,
         "argv",
         [
-            "run_experiments.py",
+            "evaluate.py",
             "--algorithms",
             "SRSLM",
             "--agents",

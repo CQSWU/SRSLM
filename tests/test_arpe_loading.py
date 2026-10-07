@@ -8,14 +8,14 @@ import pytest
 import torch
 
 import agents.arpe as arpe_module
-from agents.arpe import ARPE, ArpeCandidateArtifact
-from learning.epom_trace_multiplier_actor_critic import InferenceCorrection
-from pomapf_env.trace_routing import draw_tie_ranks
+from agents.arpe import ARPE, ARPEWeights
+from learning.arpe_actor_critic import InferenceCorrection
+from pomapf_env.tie_breaking import draw_tie_ranks
 
 
 @pytest.fixture
 def arpe_runtime(tmp_path, monkeypatch):
-    artifact = ArpeCandidateArtifact.from_mapping(
+    artifact = ARPEWeights.from_mapping(
         {
             "weights_path": "run",
             "checkpoint_path": "run/checkpoint_p0/selected.pth",
@@ -105,7 +105,7 @@ def test_checkpoint_selection_never_silently_falls_back_to_best(arpe_runtime):
 
 def test_checkpoint_path_is_required(tmp_path):
     with pytest.raises(KeyError, match="checkpoint_path"):
-        ArpeCandidateArtifact.from_mapping(
+        ARPEWeights.from_mapping(
             {
                 "weights_path": "unused",
                 "base_weights_path": "base",

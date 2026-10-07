@@ -5,11 +5,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-import train
-from pomapf_env.custom_maps import MAPS_REGISTRY
+import train_arpe
+from pomapf_env.maps import MAPS_REGISTRY
 from pomapf_env.env import make_pomapf
-from pomapf_env.pomapf_config import POMAPFConfig
-from pomapf_env.stigmergic import AcoState
+from pomapf_env.config import POMAPFConfig
+from pomapf_env.trace import SharedTrace
 from pomapf_env.wrappers import TauObservationWrapper
 
 
@@ -47,7 +47,7 @@ def environment_factory(monkeypatch):
         grid = _grid() if grid is None else grid
 
         monkeypatch.setattr(
-            train,
+            train_arpe,
             "make_pomapf",
             lambda *, grid_config: make_pomapf(
                 grid_config=grid_config, auto_reset=auto_reset
@@ -65,7 +65,7 @@ def environment_factory(monkeypatch):
                 }
             },
         )
-        env = train.create_pogema_env("POMAPF-EPOM-ST-v0", cfg)
+        env = train_arpe.create_pogema_env("POMAPF-EPOM-ST-v0", cfg)
         created.append(env)
         current = env
         while not isinstance(current, TauObservationWrapper):
@@ -89,7 +89,7 @@ def _assert_first_frame(trace, observations):
     np.testing.assert_array_equal(trace.aco._obstacle_mask, obstacles)
     np.testing.assert_array_equal(trace.aco.prev_positions, positions)
 
-    reference = AcoState(rho=0.1)
+    reference = SharedTrace(rho=0.1)
     reference.configure_from_obstacle_mask(obstacles, clear=True)
     reference.tau[:] = expected
     for observation, (row, col) in zip(observations, positions):

@@ -4,10 +4,10 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-import planning.ao_replan_algo as ao
-from agents.ao_replan import AORePlan, AORePlanConfig
-from planning.aoreplan_branch import AORePlanBranch
-from planning.python_planner import planner as PythonPlanner
+import planning.aoreplan as ao
+from agents.aoreplan import AORePlan, AORePlanConfig
+from planning.branch import AORePlanBranch
+from planning.planner_python import planner as PythonPlanner
 
 BACKENDS = [("python", PythonPlanner)]
 if sys.platform != "win32":

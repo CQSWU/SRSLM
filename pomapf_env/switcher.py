@@ -6,19 +6,19 @@ import gymnasium as gym
 import numpy as np
 
 from agents.arpe import (
-    ArpeCandidateArtifact,
+    ARPEWeights,
     ARPE,
 )
-from agents.switcher_core import (
+from agents.controller import (
     SwitcherController,
     switcher_observation_space,
 )
-from agents.utils_agents import SUPPORTED_COLLISION_SYSTEMS
-from planning.aoreplan_branch import AORePlanBranch
+from agents.common import SUPPORTED_COLLISION_SYSTEMS
+from planning.branch import AORePlanBranch
 from pomapf_env.env import make_pomapf
 
 
-class ArpeSwitcherEnv(gym.Env):
+class SwitcherEnv(gym.Env):
     metadata = {"render_modes": []}
 
     controller_class = SwitcherController
@@ -27,7 +27,7 @@ class ArpeSwitcherEnv(gym.Env):
         self,
         *,
         grid_config,
-        candidate_artifact: ArpeCandidateArtifact,
+        candidate_artifact: ARPEWeights,
         candidate_device: str = "cuda",
         max_planning_steps: int = 10_000,
         team_reward_coefficient: float = 1.0,
@@ -163,6 +163,6 @@ class ArpeSwitcherEnv(gym.Env):
 
 
 __all__ = [
-    "ArpeSwitcherEnv",
+    "SwitcherEnv",
     "switcher_observation_space",
 ]

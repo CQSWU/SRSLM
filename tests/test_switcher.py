@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from agents.switcher_core import (
+from agents.controller import (
     AO_BRANCH,
     SwitcherController,
 )
-from planning.aoreplan_branch import AORePlanStep
+from planning.branch import AORePlanStep
 
 
 class FakeARPE:

@@ -53,7 +53,7 @@ def select_top2_low_pressure(logits, pressure, legal, tie_ranks):
         return route * (moves.sum(dim=-1, keepdim=True) >= 2).to(z.dtype)
 
 
-class _PaperTraceEncoder(nn.Module):
+class TraceEncoder(nn.Module):
     OUTPUT_SIZE = 32
     TRACE_SIZE = 11
 
@@ -149,7 +149,7 @@ class _FrozenEPOMActorCritic(ActorCriticSharedWeights):
         )
 
 
-class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
+class ARPEActorCritic(_FrozenEPOMActorCritic):
     TRAINABLE_PREFIXES = (
         "actor_trace_encoder.",
         "trace_fusion_head.",
@@ -207,15 +207,15 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         )
         self.core_out_size = int(self.core.get_out_size())
 
-        self.actor_trace_encoder = _PaperTraceEncoder(cfg)
+        self.actor_trace_encoder = TraceEncoder(cfg)
         if self.core_out_size != 512:
             raise ValueError("ARPE requires the 512D EPOM hidden state.")
-        self.critic_trace_encoder = _PaperTraceEncoder(cfg)
+        self.critic_trace_encoder = TraceEncoder(cfg)
         self.critic_fusion_head = nn.Sequential(nn.Linear(549, 256), nn.ReLU())
         self.trace_value_head = nn.Linear(256, 1)
         self.trace_fusion_head = nn.Sequential(
             nn.Linear(
-                _PaperTraceEncoder.OUTPUT_SIZE + self.core_out_size + self.NUM_ACTIONS,
+                TraceEncoder.OUTPUT_SIZE + self.core_out_size + self.NUM_ACTIONS,
                 256,
             ),
             nn.ReLU(),

@@ -15,20 +15,20 @@ from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.utils import log
 
-from agents.utils_agents import resolve_device
+from agents.common import resolve_device
 from learning.config import Environment, checkpoint_experiment_config
-from learning.epom_trace_multiplier_actor_critic import InferenceCorrection
+from learning.arpe_actor_critic import InferenceCorrection
 from learning.grid_memory import MultipleGridMemory
-from pomapf_env.stigmergic import AcoState
-from pomapf_env.trace_routing import TIE_KEY, bonus_rng, draw_tie_ranks
+from pomapf_env.trace import SharedTrace
+from pomapf_env.tie_breaking import TIE_KEY, bonus_rng, draw_tie_ranks
 from pomapf_env.wrappers import MatrixObservationWrapper
-from train import register_custom_components, validate_config
+from train_arpe import register_custom_components, validate_config
 
 TRACE_RADIUS = 5
 
 
 @dataclass(frozen=True)
-class ArpeCandidateArtifact:
+class ARPEWeights:
     project_root: Path
     weights_path: Path
     checkpoint_path: Path
@@ -40,7 +40,7 @@ class ArpeCandidateArtifact:
         cls,
         mapping: Mapping[str, object],
         project_root: Path,
-    ) -> "ArpeCandidateArtifact":
+    ) -> "ARPEWeights":
         root = Path(project_root).resolve()
         return cls(
             project_root=root,
@@ -75,7 +75,7 @@ class ArpeCandidateArtifact:
 class ARPE:
     def __init__(
         self,
-        artifact: ArpeCandidateArtifact,
+        artifact: ARPEWeights,
         *,
         seed: int,
         device: str,
@@ -122,7 +122,7 @@ class ARPE:
         self.grid_memory_radius = int(env_cfg.grid_memory_obs_radius)
         self.grid_memory = MultipleGridMemory()
         self.rnn_states = None
-        self.aco = AcoState(rho=env_cfg.tau_rho)
+        self.aco = SharedTrace(rho=env_cfg.tau_rho)
         self.env = None
         self._numpy_rng = np.random.default_rng(self.seed)
         self._bonus_rng = bonus_rng(self.seed)
@@ -222,6 +222,6 @@ class ARPE:
 
 
 __all__ = [
-    "ArpeCandidateArtifact",
+    "ARPEWeights",
     "ARPE",
 ]

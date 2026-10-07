@@ -6,7 +6,7 @@ import yaml
 
 from pathlib import Path
 
-from pomapf_env.trace_training import FailedMoveCredit
+from pomapf_env.rewards import FailedMoveCredit
 
 
 class _StepEnv(gym.Env):
@@ -69,6 +69,6 @@ def test_failed_move_credit_finds_grid_through_wrapper_stack():
 
 def test_current_arpe_recipe_keeps_the_final_learning_rate():
     root = Path(__file__).resolve().parents[1]
-    for name in ("train_arpe_final.yaml",):
-        recipe = yaml.safe_load((root / "learning" / name).read_text())
+    for name in ("train_arpe.yaml",):
+        recipe = yaml.safe_load((root / "configs" / name).read_text())
         assert recipe["experiment_settings"]["learning_rate"] == 0.0001

@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from agents.ao_replan import AORePlan, AORePlanConfig
-from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper, StaticAStarCheck
-from planning.aoreplan_branch import AORePlanBranch
+from agents.aoreplan import AORePlan, AORePlanConfig
+from planning.aoreplan import AORePlanBase, AORePlanWrapper, StaticAStarCheck
+from planning.branch import AORePlanBranch
 
 
 class FixedRng:

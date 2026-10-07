@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from agents.utils_agents import resolve_device
+from agents.common import resolve_device
 
 
 @pytest.mark.parametrize(

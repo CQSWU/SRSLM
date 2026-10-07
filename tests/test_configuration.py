@@ -5,15 +5,15 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from agents.arpe import ArpeCandidateArtifact
+from agents.arpe import ARPEWeights
 from learning.config import Environment, Experiment
-from agents.switcher_core import switcher_observation_space
+from agents.controller import switcher_observation_space
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_training_recipe_can_use_custom_maps_populations_and_hardware():
-    config = yaml.safe_load((ROOT / "learning/train_arpe_final.yaml").read_text())
+    config = yaml.safe_load((ROOT / "configs/train_arpe.yaml").read_text())
     config["environment"]["grid_config"].update(
         num_agents=16,
         max_episode_steps=128,
@@ -47,7 +47,7 @@ def test_arpe_configuration_resolves_explicit_candidate_paths(tmp_path):
         "base_checkpoint_path": "downloaded/base.pth",
     }
     original = config.copy()
-    artifact = ArpeCandidateArtifact.from_mapping(config, tmp_path)
+    artifact = ARPEWeights.from_mapping(config, tmp_path)
     assert artifact.project_root == tmp_path.resolve()
     assert artifact.weights_path == (tmp_path / "weights/arpe").resolve()
     assert artifact.checkpoint_path == (tmp_path / "downloaded/arpe.pth").resolve()

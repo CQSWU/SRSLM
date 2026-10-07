@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from sample_factory.algo.learning.learner import Learner
 
 from learning.grid_memory import GridMemory
-from train import _sync_resume_cli_overrides, validate_config
+from train_arpe import _sync_resume_cli_overrides, validate_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -68,7 +68,7 @@ class TrainingRegressionTests(unittest.TestCase):
                 memory.update(0, 0, np.zeros(shape, dtype=np.float32))
 
     def test_obsolete_training_keys_are_rejected(self):
-        config_path = PROJECT_ROOT / "learning" / "train_arpe_final.yaml"
+        config_path = PROJECT_ROOT / "configs" / "train_arpe.yaml"
         modern = yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
         obsolete_yaml = copy.deepcopy(modern)
@@ -88,7 +88,7 @@ class TrainingRegressionTests(unittest.TestCase):
 
     def test_corrupt_checkpoint_raises_last_root_cause_after_retries(self):
         root_cause = OSError("corrupt checkpoint")
-        with patch("train.torch.load", side_effect=root_cause) as mocked_load:
+        with patch("train_arpe.torch.load", side_effect=root_cause) as mocked_load:
             with self.assertRaises(RuntimeError) as raised:
                 Learner.load_checkpoint(
                     [Path("broken-checkpoint.pth")],

@@ -19,7 +19,7 @@ from pogema.svg_animation.animation_wrapper import (
     AnimationMonitor,
 )
 from pomapf_env.env import make_pomapf
-from pomapf_env.pomapf_config import POMAPFConfig
+from pomapf_env.config import POMAPFConfig
 
 DEFAULT_MAPS = {
     "mazes": "mazes-s0_wc8_od55",
@@ -59,7 +59,7 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
 
     if manifest_path is None:
         manifest_path = str(
-            Path(main_dir).resolve() / "configs" / "arpe_final_candidate.json"
+            Path(main_dir).resolve() / "configs" / "arpe.json"
         )
     path = _project_path(main_dir, manifest_path)
     if not path.is_file():
@@ -67,9 +67,9 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("ARPE candidate manifest must be a JSON object.")
-    from agents.arpe import ArpeCandidateArtifact
+    from agents.arpe import ARPEWeights
 
-    return ArpeCandidateArtifact.from_mapping(
+    return ARPEWeights.from_mapping(
         payload,
         Path(main_dir).resolve(),
     )
@@ -88,7 +88,7 @@ def build_algorithm(
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
 
     if algo_name == "AORePlan":
-        from agents.ao_replan import AORePlan, AORePlanConfig
+        from agents.aoreplan import AORePlan, AORePlanConfig
 
         return AORePlan(AORePlanConfig(seed=seed))
 

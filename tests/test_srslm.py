@@ -8,7 +8,7 @@ import torch
 from agents import switcher as switcher_module
 from agents.srslm import SRSLM, SRSLMConfig
 from agents.switcher import Switcher, SwitcherConfig
-from agents.switcher_core import SWITCHER_FIELD_SHAPES
+from agents.controller import SWITCHER_FIELD_SHAPES
 
 
 class _FrozenPolicy:

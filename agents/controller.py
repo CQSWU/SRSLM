@@ -5,7 +5,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
-from agents.utils_agents import SUPPORTED_COLLISION_SYSTEMS
+from agents.common import SUPPORTED_COLLISION_SYSTEMS
 from pomapf_env.target_projection import get_square_target
 
 ARPE_BRANCH = 0

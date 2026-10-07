@@ -7,7 +7,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-import train
+import train_arpe
 from learning.config import (
     Environment,
     Experiment,
@@ -26,7 +26,7 @@ UNUSED_CONTEXT_FIELDS = {
 
 
 def _recipe():
-    path = Path(__file__).resolve().parents[1] / "learning/train_arpe_final.yaml"
+    path = Path(__file__).resolve().parents[1] / "configs/train_arpe.yaml"
     return yaml.safe_load(path.read_text())
 
 
@@ -40,10 +40,10 @@ def test_environment_factory_uses_worker_grid_without_modifying_recipe(
     base, wrapped = object(), object()
     factory = Mock(return_value=base)
     matrix_wrapper = Mock(return_value=wrapped)
-    monkeypatch.setattr(train, "_ensure_patched", lambda: None)
-    monkeypatch.setattr(train, "make_pomapf", factory)
-    monkeypatch.setattr(train, "MatrixObservationWrapper", matrix_wrapper)
-    result = train.create_pogema_env(
+    monkeypatch.setattr(train_arpe, "_ensure_patched", lambda: None)
+    monkeypatch.setattr(train_arpe, "make_pomapf", factory)
+    monkeypatch.setattr(train_arpe, "MatrixObservationWrapper", matrix_wrapper)
+    result = train_arpe.create_pogema_env(
         "POMAPF-v0", cfg=cfg, env_config={"worker_index": worker_index}
     )
     expected_grid = environment.grid_config.copy(update={"num_agents": population})

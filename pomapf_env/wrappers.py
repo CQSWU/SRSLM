@@ -11,8 +11,8 @@ from gymnasium.spaces import Box
 from numpy import float32
 from pogema import GridConfig
 
-from pomapf_env.custom_maps import MAPS_REGISTRY
-from pomapf_env.stigmergic import AcoState
+from pomapf_env.maps import MAPS_REGISTRY
+from pomapf_env.trace import SharedTrace
 from pomapf_env.target_projection import get_square_target
 from learning.grid_memory import MultipleGridMemory
 
@@ -309,7 +309,7 @@ class TauObservationWrapper(gym.Wrapper):
                 "TauObservationWrapper requires a square odd-sized context observation."
             )
 
-        self.aco = AcoState(rho=rho)
+        self.aco = SharedTrace(rho=rho)
         self._trace_grid = None
         context_radius = height // 2
         self.tau_radius = context_radius if tau_radius is None else int(tau_radius)

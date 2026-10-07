@@ -1,5 +1,5 @@
 import unittest
-from planning.ao_replan_algo import planner
+from planning.aoreplan import planner
 
 INF = 1_000_000_000
 START = (0, 0)
