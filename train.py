@@ -124,32 +124,27 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
     env = MatrixObservationWrapper(env)
 
     if full_env_name == "POMAPF-EPOM-ST-v0":
-        is_trace_context = getattr(cfg, "encoder_custom", None) == "epom_trace_context"
         env = TauObservationWrapper(
             env,
             rho=environment_config.tau_rho,
             tau_radius=environment_config.tau_radius,
-            trace_variant=getattr(environment_config, "trace_variant", "real"),
-            raw_tau=bool(getattr(environment_config, "tau_raw", False)),
-            include_free_mask=is_trace_context,
         )
-        if is_trace_context:
 
-            def index(name):
-                value = (
-                    env_config.get(name, 0)
-                    if isinstance(env_config, dict)
-                    else getattr(env_config, name, 0)
-                )
-                return int(value or 0)
-
-            routing_seed = (
-                int(getattr(cfg, "seed", 0) or 0)
-                + 100003 * index("worker_index")
-                + 1009 * index("vector_index")
+        def index(name):
+            value = (
+                env_config.get(name, 0)
+                if isinstance(env_config, dict)
+                else getattr(env_config, name, 0)
             )
-            env = BonusRoutingObservation(env, routing_seed=routing_seed)
-            env = FailedMoveCredit(env)
+            return int(value or 0)
+
+        routing_seed = (
+            int(getattr(cfg, "seed", 0) or 0)
+            + 100003 * index("worker_index")
+            + 1009 * index("vector_index")
+        )
+        env = BonusRoutingObservation(env, routing_seed=routing_seed)
+        env = FailedMoveCredit(env)
 
     return env
 

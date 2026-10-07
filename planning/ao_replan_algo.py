@@ -14,12 +14,6 @@ else:
     importlib.import_module("cppimport.import_hook")
     from planning.planner import planner
 
-    if not hasattr(planner, "proposal_failed"):
-        raise ImportError(
-            "The installed planner extension predates randomized failure caching. "
-            "Rebuild planning/planner.cpp with cppimport before running AORePlan."
-        )
-
 INF = 1_000_000_000
 FAILURE_CACHE_PROBABILITY = 0.5
 _FAILURE_CACHE_SEED_SALT = 0xFA11CA
@@ -85,7 +79,7 @@ class AORePlanBase:
                 continue
 
             local_planner.plan_path(position, target)
-            path = self._get_next_node(local_planner)
+            path = local_planner.get_next_node(True)
             if path is None or path[1][0] >= INF:
                 local_planner.release_failed_actions()
                 actions.append(None)
@@ -97,13 +91,7 @@ class AORePlanBase:
             actions.append(_ACTION_BY_DELTA[delta])
         return actions
 
-    @staticmethod
-    def _get_next_node(local_planner):
-
-        return local_planner.get_next_node(True)
-
     def commit_proposals(self, executed_mask):
-
         if self.planner is None:
             raise RuntimeError("AORePlan must act before proposals can be committed.")
         if len(executed_mask) != len(self.planner):
@@ -115,8 +103,7 @@ class AORePlanBase:
                 self.planner[index].cancel_desired()
 
 
-def _local_cell_is_free(observation, action, moves=_MOVES):
-
+def _local_cell_is_free(observation, action):
     if action in (None, 0):
         return False
     try:
@@ -124,7 +111,7 @@ def _local_cell_is_free(observation, action, moves=_MOVES):
         agents = np.asarray(observation["agents"])
         center_i = obstacles.shape[0] // 2
         center_j = obstacles.shape[1] // 2
-        di, dj = moves[int(action)]
+        di, dj = _MOVES[int(action)]
         i = center_i + int(di)
         j = center_j + int(dj)
         return bool(
@@ -137,8 +124,7 @@ def _local_cell_is_free(observation, action, moves=_MOVES):
         return False
 
 
-def original_random_or_stay(observation, rnd, moves=_MOVES):
-
+def original_random_or_stay(observation, rnd):
     if rnd.random() <= 0.5:
         return 0
 
@@ -148,7 +134,7 @@ def original_random_or_stay(observation, rnd, moves=_MOVES):
     center_i = obstacles.shape[0] // 2
     center_j = obstacles.shape[1] // 2
     for action in actions:
-        di, dj = moves[int(action)]
+        di, dj = _MOVES[int(action)]
         if obstacles[center_i + int(di), center_j + int(dj)] == 0:
             return action
     return 0
@@ -206,8 +192,6 @@ class AORePlanWrapper:
         self.agent = agent
         self.rnd = agent.rnd
         self.static_astar = StaticAStarCheck(max_steps=max_steps)
-        self.moves = _MOVES
-
         self.previous_position = None
         self.last_target = None
         self.last_raw_dynamic_actions = None
@@ -229,21 +213,17 @@ class AORePlanWrapper:
         self.last_static_astar_invoked_mask[index] = True
         conflict = bool(
             raw_action not in (None, 0)
-            and not _local_cell_is_free(
-                observation,
-                raw_action,
-                moves=self.moves,
-            )
+            and not _local_cell_is_free(observation, raw_action)
         )
         if raw_action is None or conflict:
             return 0
         return int(raw_action)
 
-    def _returns_to_previous_position(self, position, action, previous):
-
+    @staticmethod
+    def _returns_to_previous_position(position, action, previous):
         if action in (None, 0) or previous is None:
             return False
-        dx, dy = self.moves[int(action)]
+        dx, dy = _MOVES[int(action)]
         return (
             position[0] + dx,
             position[1] + dy,
@@ -288,7 +268,6 @@ class AORePlanWrapper:
                 actions[index] = original_random_or_stay(
                     observation,
                     self.rnd,
-                    moves=self.moves,
                 )
                 self.last_dynamic_override_mask[index] = True
                 continue

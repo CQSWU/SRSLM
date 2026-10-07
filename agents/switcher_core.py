@@ -11,7 +11,6 @@ ARPE_BRANCH = 0
 AO_BRANCH = 1
 NUM_BRANCHES = 2
 NUM_PRIMITIVE_ACTIONS = 5
-SWITCHER_DECISION_SCOPE = "aoreplan_nonwait_only"
 SWITCHER_CROP_SIZE = 11
 SWITCHER_SPATIAL_SHAPE = (3, SWITCHER_CROP_SIZE, SWITCHER_CROP_SIZE)
 SWITCHER_COORD_DIM = 2
@@ -112,7 +111,6 @@ def build_switcher_state(
 
 @dataclass(frozen=True)
 class PreparedSwitcherStep:
-    observations: tuple
     arpe_actions: tuple[int, ...]
     aoreplan_step: object
     aoreplan_actions: tuple[int, ...]
@@ -120,28 +118,10 @@ class PreparedSwitcherStep:
     switcher_state: Mapping[str, np.ndarray]
 
 
-@dataclass(frozen=True)
-class ResolvedSwitcherStep:
-    actions: tuple[int, ...]
-    selected_branches: tuple[int, ...]
-    executed_ao_mask: tuple[bool, ...]
-    wait_bypass_mask: tuple[bool, ...]
-    commit_mask: tuple[bool, ...]
-
-
 class SwitcherController:
-    selector_kind = "ppo_two_branch_categorical"
-    decision_scope = SWITCHER_DECISION_SCOPE
-    wait_detection_enabled = True
-    learned_switcher_called = True
-    choice_error = (
-        "Switcher choices must match the number of non-wait AORePlan actions."
-    )
-
     def __init__(self, arpe, aoreplan):
         self.arpe = arpe
         self.aoreplan = aoreplan
-        self.env = None
         self._pending: PreparedSwitcherStep | None = None
         self.after_reset()
 
@@ -156,7 +136,6 @@ class SwitcherController:
         self.arpe.set_grid_config(grid_config)
 
     def set_env(self, env) -> None:
-        self.env = env
         self.arpe.set_env(env)
 
     def after_reset(self) -> None:
@@ -166,7 +145,6 @@ class SwitcherController:
         self.environment_step_count = 0
         self.total_action_count = 0
         self.switcher_choice_count = 0
-        self.selected_ao_count = 0
         self.executed_ao_count = 0
         self.wait_bypass_count = 0
         self.branch_switch_count = 0
@@ -194,7 +172,12 @@ class SwitcherController:
 
     @staticmethod
     def _validate_aoreplan_step(step, count: int):
-        fields = (step.actions, step.planned_mask, step.reverse_mask)
+        fields = (
+            step.actions,
+            step.planned_mask,
+            step.reverse_mask,
+            step.static_astar_invoked_mask,
+        )
         if any(len(values) != count for values in fields):
             raise RuntimeError("AORePlan returned the wrong number of actions.")
         actions = []
@@ -234,58 +217,34 @@ class SwitcherController:
         except Exception:
             self.aoreplan.commit([False] * count)
             raise
-        switch_allowed = self._switch_allowed_mask(aoreplan_actions)
         self._pending = PreparedSwitcherStep(
-            observations=raw_observations,
             arpe_actions=arpe_actions,
             aoreplan_step=step,
             aoreplan_actions=aoreplan_actions,
-            switch_allowed_mask=switch_allowed,
+            switch_allowed_mask=tuple(action != 0 for action in aoreplan_actions),
             switcher_state=switcher_state,
         )
         return self._pending
 
-    @staticmethod
-    def _switch_allowed_mask(
-        aoreplan_actions: Sequence[int],
-    ) -> tuple[bool, ...]:
-        return tuple(action != 0 for action in aoreplan_actions)
-
-    @staticmethod
-    def _mask(batch, name: str, count: int) -> tuple[bool, ...]:
-        values = getattr(batch, name, None)
-        if values is None:
-            return tuple(False for _ in range(count))
-        if len(values) != count:
-            raise RuntimeError(f"AORePlan field {name!r} has the wrong length.")
-        return tuple(bool(value) for value in values)
-
-    def _apply_selected_branches(
-        self,
-        selected: Sequence[int],
-        *,
-        switcher_choice_count: int,
-        selected_ao_count: int,
-        wait_bypass_mask: Sequence[bool],
-    ) -> ResolvedSwitcherStep:
+    def resolve_actions(self, branches: Sequence[int]) -> tuple[int, ...]:
         pending = self._pending
         if pending is None:
             raise RuntimeError(
                 "prepare_actions() must be called before resolve_actions()."
             )
         count = len(pending.arpe_actions)
-        selected = np.asarray(selected, dtype=np.int64).reshape(-1)
-        wait_bypass = np.asarray(wait_bypass_mask, dtype=bool).reshape(-1)
-        if selected.shape != (count,) or np.any(
-            (selected < 0) | (selected >= NUM_BRANCHES)
+        switch_allowed = np.asarray(pending.switch_allowed_mask, dtype=bool)
+        eligible_count = int(switch_allowed.sum())
+        requested = np.asarray(branches, dtype=np.int64).reshape(-1)
+        if requested.shape != (eligible_count,) or np.any(
+            (requested < 0) | (requested >= NUM_BRANCHES)
         ):
-            raise ValueError("Resolved branch choices must cover every agent.")
-        if wait_bypass.shape != (count,):
-            raise ValueError("Wait-bypass diagnostics must cover every agent.")
-        if not 0 <= switcher_choice_count <= count:
-            raise ValueError("Switcher choice count is outside the agent batch.")
-        if not 0 <= selected_ao_count <= switcher_choice_count:
-            raise ValueError("Switcher AO count exceeds Switcher choices.")
+            raise ValueError(
+                "Switcher choices must match the number of non-wait AORePlan actions."
+            )
+
+        selected = np.full(count, ARPE_BRANCH, dtype=np.int64)
+        selected[switch_allowed] = requested
         executed_ao = selected == AO_BRANCH
         final_actions = [
             pending.aoreplan_actions[index]
@@ -316,10 +275,9 @@ class SwitcherController:
 
         self.environment_step_count += 1
         self.total_action_count += count
-        self.switcher_choice_count += int(switcher_choice_count)
-        self.selected_ao_count += int(selected_ao_count)
+        self.switcher_choice_count += eligible_count
         self.executed_ao_count += int(executed_ao.sum())
-        self.wait_bypass_count += int(wait_bypass.sum())
+        self.wait_bypass_count += count - eligible_count
         self.branch_action_agreement_count += sum(
             left == right
             for left, right in zip(
@@ -331,47 +289,11 @@ class SwitcherController:
             bool(value) for value in pending.aoreplan_step.reverse_mask
         )
         self.static_astar_query_count += sum(
-            self._mask(
-                pending.aoreplan_step,
-                "static_astar_invoked_mask",
-                count,
-            )
+            pending.aoreplan_step.static_astar_invoked_mask
         )
         self.aoreplan_commit_count += sum(commit)
         self._pending = None
-        return ResolvedSwitcherStep(
-            actions=tuple(int(value) for value in final_actions),
-            selected_branches=tuple(int(value) for value in selected),
-            executed_ao_mask=tuple(bool(value) for value in executed_ao),
-            wait_bypass_mask=tuple(bool(value) for value in wait_bypass),
-            commit_mask=tuple(bool(value) for value in commit),
-        )
-
-    def resolve_actions(self, branches: Sequence[int]) -> ResolvedSwitcherStep:
-        pending = self._pending
-        if pending is None:
-            raise RuntimeError(
-                "prepare_actions() must be called before resolve_actions()."
-            )
-        count = len(pending.arpe_actions)
-        switch_allowed = np.asarray(pending.switch_allowed_mask, dtype=bool)
-        eligible_count = int(switch_allowed.sum())
-        requested = np.asarray(branches, dtype=np.int64).reshape(-1)
-        if requested.shape != (eligible_count,) or np.any(
-            (requested < 0) | (requested >= NUM_BRANCHES)
-        ):
-            raise ValueError(self.choice_error)
-
-        selected = np.full(count, ARPE_BRANCH, dtype=np.int64)
-        selected[switch_allowed] = requested
-        return self._apply_selected_branches(
-            selected,
-            switcher_choice_count=eligible_count,
-            selected_ao_count=int((requested == AO_BRANCH).sum()),
-            wait_bypass_mask=np.logical_and(
-                self.wait_detection_enabled, np.asarray(pending.aoreplan_actions) == 0
-            ),
-        )
+        return tuple(int(value) for value in final_actions)
 
     def after_step(self, dones: Sequence[bool]) -> None:
         flags = tuple(bool(value) for value in dones)
@@ -389,20 +311,16 @@ class SwitcherController:
 
     def get_stats(self) -> dict:
         return {
-            "selector_kind": self.selector_kind,
-            "switcher_decision_scope": self.decision_scope,
-            "wait_detection_enabled": self.wait_detection_enabled,
-            "learned_switcher_called": self.learned_switcher_called,
-            "joint_conflict_prediction_enabled": False,
+            "switcher_decision_scope": "aoreplan_nonwait_only",
             "environment_step_count": self.environment_step_count,
             "total_action_count": self.total_action_count,
             "switcher_choice_count": self.switcher_choice_count,
             "switcher_choice_rate": self._ratio(
                 self.switcher_choice_count, self.total_action_count
             ),
-            "selected_ao_count": self.selected_ao_count,
+            "selected_ao_count": self.executed_ao_count,
             "selected_ao_rate": self._ratio(
-                self.selected_ao_count, self.switcher_choice_count
+                self.executed_ao_count, self.switcher_choice_count
             ),
             "executed_ao_count": self.executed_ao_count,
             "executed_ao_rate": self._ratio(
@@ -427,7 +345,6 @@ class SwitcherController:
 __all__ = [
     "AO_BRANCH",
     "ARPE_BRANCH",
-    "SWITCHER_DECISION_SCOPE",
     "NUM_BRANCHES",
     "NUM_PRIMITIVE_ACTIONS",
     "SWITCHER_COORD_DIM",
@@ -436,7 +353,6 @@ __all__ = [
     "SWITCHER_SPATIAL_SHAPE",
     "SWITCHER_VECTOR_DIM",
     "PreparedSwitcherStep",
-    "ResolvedSwitcherStep",
     "SwitcherController",
     "build_switcher_state",
     "switcher_observation_space",

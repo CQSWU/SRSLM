@@ -34,26 +34,19 @@ def test_inference_gate_is_strict_and_uses_raw_correction():
     assert torch.count_nonzero(direct_gate) == 0
 
 
-@pytest.mark.parametrize("gate_mode", ["entropy", "always"])
-def test_native_training_gate_remains_separate_from_inference(gate_mode):
+def test_native_training_keeps_direct_and_all_action_correction():
     logits = torch.tensor([[100.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0]])
     raw = torch.tensor([[1.0, -1.0, 2.0, -2.0, 0.0]]).repeat(2, 1)
     pressure = torch.tensor([[0.0, 4.0, 1.0, 2.0, 3.0]]).repeat(2, 1)
     legal = torch.tensor([[0.0, 1.0, 1.0, 1.0, 1.0]]).repeat(2, 1)
     ranks = torch.arange(5).float().repeat(2, 2, 1)
     model = SimpleNamespace(
-        learned_gate_mode=gate_mode,
-        rule_scale=1.0,
         training=False,
         _base_entropy=EPOMTraceMultiplierActorCritic._base_entropy,
-        apply_paper_entropy_correction_rule=EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule,
     )
     apply = EPOMTraceMultiplierActorCritic._apply_configured_correction_rule
     native, _, gate, _ = apply(model, logits, raw, pressure, legal, ranks)
-    expected_gate = (
-        torch.ones(2, 1) if gate_mode == "always" else torch.tensor([[0.0], [1.0]])
-    )
-    assert torch.equal(gate, expected_gate)
+    assert torch.equal(gate, torch.ones(2, 1))
     route = select_top2_low_pressure(logits, pressure, legal, ranks)
     torch.testing.assert_close(
         native, logits + gate * route + gate * raw
@@ -63,7 +56,6 @@ def test_native_training_gate_remains_separate_from_inference(gate_mode):
     assert torch.equal(final[0], logits[0])
     assert torch.equal(delta[1], raw[1])
     assert not direct_gate.any()
-    assert model.learned_gate_mode == gate_mode and model.rule_scale == 1.0
     model.training = True
     with pytest.raises(RuntimeError, match="training"):
         apply(model, logits, raw, pressure, legal, ranks)
@@ -122,13 +114,13 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(
 
     assert second.switch_allowed_mask == (True,)
     assert not second.switcher_state["aoreplan_action"][:, 0].any()
-    assert controller.resolve_actions([branch]).actions == (expected_action,)
+    assert controller.resolve_actions([branch]) == (expected_action,)
     assert planner.committed == (branch == 1,)
     planner.action = 0
     third = controller.prepare_actions(_observations((0, 1)))
     assert third.switch_allowed_mask == (False,)
     assert third.switcher_state["aoreplan_action"][:, 0].all()
-    assert controller.resolve_actions([]).actions == (1,)
+    assert controller.resolve_actions([]) == (1,)
     assert planner.committed == (False,)
     stats = controller.get_stats()
     assert stats["total_action_count"] == 3
@@ -157,16 +149,17 @@ def test_training_and_deployment_share_wait_only_controller():
     assert "final_reverse_guard_enabled" not in SRSLMConfig.__fields__
 
 
-def test_final_manifest_and_training_example_have_distinct_gates():
+def test_final_manifest_only_selects_weights():
     mapping = json.loads((ROOT / "configs/arpe_final_candidate.json").read_text())
     artifact = ArpeCandidateArtifact.from_mapping(mapping, ROOT)
-    assert artifact.inference == InferenceCorrection()
+    assert ArpeCandidateArtifact.from_mapping(artifact.as_dict(), ROOT) == artifact
+    assert set(mapping) == {
+        "weights_path", "checkpoint_path", "base_weights_path", "base_checkpoint_path"
+    }
     assert not any("sha" in key.lower() for key in mapping)
     cfg = Experiment(
         **yaml.safe_load((ROOT / "learning/train_arpe_final.yaml").read_text())
     )
-    assert cfg.experiment_settings.trace_context_learned_gate == "always"
-    assert cfg.experiment_settings.trace_rule_scale == 1
     assert cfg.experiment_settings.train_for_env_steps == 1_000_000_000
 
 
@@ -194,7 +187,6 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
         milestone_checkpoint=str(artifact.checkpoint_path),
         base_weights_path=str(artifact.base_weights_path),
         base_checkpoint_path=str(artifact.base_checkpoint_path),
-        inference=artifact.inference.as_dict(),
     )
     policy = SRSLM(
         SRSLMConfig(
@@ -205,9 +197,8 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
         project_root=ROOT,
     )
     model = policy.candidate.ppo
-    assert model.learned_gate_mode == "always" and model.rule_scale == 1
     assert int(model.paper_entropy_gate_version) == 0
-    assert policy.candidate.policy.algo_cfg.action_sampling == "direct_numpy"
+    assert isinstance(model.inference_correction, InferenceCorrection)
     before = {key: value.clone() for key, value in model.state_dict().items()}
     config_before = deepcopy(model.cfg.full_config)
     batch = TensorDict(

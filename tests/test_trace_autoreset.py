@@ -43,7 +43,7 @@ def _grid(**changes):
 def environment_factory(monkeypatch):
     created = []
 
-    def factory(grid=None, *, auto_reset=True, raw_tau=False, trace_variant="real"):
+    def factory(grid=None, *, auto_reset=True):
         grid = _grid() if grid is None else grid
 
         monkeypatch.setattr(
@@ -62,8 +62,6 @@ def environment_factory(monkeypatch):
                     "grid_memory_obs_radius": 7,
                     "tau_rho": 0.1,
                     "tau_radius": 5,
-                    "tau_raw": raw_tau,
-                    "trace_variant": trace_variant,
                 }
             },
         )
@@ -95,11 +93,7 @@ def _assert_first_frame(trace, observations):
     reference.configure_from_obstacle_mask(obstacles, clear=True)
     reference.tau[:] = expected
     for observation, (row, col) in zip(observations, positions):
-        expected_crop = (
-            reference.extract_local_raw_tau(row, col, 5)
-            if trace.raw_tau
-            else reference.extract_local_tau(row, col, 5)
-        )
+        expected_crop = reference.extract_local_tau(row, col, 5)
         np.testing.assert_array_equal(observation["tau"][0], expected_crop)
         np.testing.assert_array_equal(
             observation["tau_free_mask"][0],
@@ -108,13 +102,10 @@ def _assert_first_frame(trace, observations):
 
 
 @pytest.mark.parametrize("collision_system", ["block_both", "soft"])
-@pytest.mark.parametrize("raw_tau", [False, True])
 def test_same_map_autoreset_starts_fresh_and_deposits_once(
-    environment_factory, collision_system, raw_tau
+    environment_factory, collision_system
 ):
-    env, trace = environment_factory(
-        _grid(collision_system=collision_system), raw_tau=raw_tau
-    )
+    env, trace = environment_factory(_grid(collision_system=collision_system))
     obs, _ = env.reset()
     _assert_first_frame(trace, obs)
     previous_grid = trace._grid()

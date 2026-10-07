@@ -7,7 +7,6 @@ from typing import Any
 import torch
 
 _PATCH_ATTRIBUTE = "_srslm_switcher_actor_mask_patch"
-_VALID_COUNT_ATTRIBUTE = "_srslm_valid_count_guard"
 _STD_MEAN_PATCH_LOCK = RLock()
 
 
@@ -170,7 +169,6 @@ def _build_switcher_calculate_losses(original: Callable) -> Callable:
         )
 
     setattr(patched, _PATCH_ATTRIBUTE, True)
-    setattr(patched, _VALID_COUNT_ATTRIBUTE, True)
     patched._srslm_original_calculate_losses = original
     return patched
 

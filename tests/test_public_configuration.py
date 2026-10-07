@@ -33,7 +33,6 @@ def test_training_recipe_can_use_custom_maps_populations_and_hardware():
     )
     config["experiment_settings"].update(learning_rate=0.0003, gamma=0.97)
     config["environment"]["training_num_agents_by_worker"] = [16, 32]
-    config["experiment_settings"].update(trace_rule_scale=2.5, trace_gate_threshold=0.1)
     saved = deepcopy(config)
     experiment = Experiment(**config)
     assert experiment.async_ppo.num_workers == 32
@@ -43,7 +42,7 @@ def test_training_recipe_can_use_custom_maps_populations_and_hardware():
 
 def test_arpe_freezes_base_parameters():
     model = torch.nn.Linear(2, 5)
-    artifact = SimpleNamespace(inference=None)
+    artifact = SimpleNamespace()
     adapter = ARPE(SimpleNamespace(ppo=model, device="cpu"), artifact)
     assert adapter.ppo is model
     assert not model.training

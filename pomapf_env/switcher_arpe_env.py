@@ -131,14 +131,14 @@ class ArpeSwitcherEnv(gym.Env):
             self._prepared.switch_allowed_mask,
             dtype=bool,
         )
-        decision = self.controller.resolve_actions(choices[switch_allowed])
+        actions = self.controller.resolve_actions(choices[switch_allowed])
         (
             observations,
             rewards,
             terminated,
             truncated,
             infos,
-        ) = self.base_env.step(list(decision.actions))
+        ) = self.base_env.step(list(actions))
         done = np.logical_or(
             np.asarray(terminated, dtype=np.bool_),
             np.asarray(truncated, dtype=np.bool_),

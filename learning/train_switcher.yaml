@@ -7,9 +7,6 @@ candidate_policy:
   checkpoint_path: weights/ARPE-Final-1B/checkpoint_p0/checkpoint_000244175_1000140800.pth
   base_weights_path: weights/EPOM-L
   base_checkpoint_path: weights/EPOM-L/checkpoint_p0/checkpoint_000024418_100016128.pth
-  inference:
-    entropy_threshold: 0.01
-    action_sampling: direct_numpy
 global_settings:
   train_dir: weights/switcher_training
   device: gpu
@@ -47,7 +44,6 @@ async_ppo:
   ppo_clip_ratio: 0.2
   exploration_loss_coeff: 0.005
   value_loss_coeff: 0.5
-  with_pbt: false
 environment:
   name: POMAPF-SRSLM-v0
   switcher_caar_device: auto

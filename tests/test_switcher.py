@@ -3,7 +3,6 @@ import pytest
 
 from agents.switcher_core import (
     AO_BRANCH,
-    ARPE_BRANCH,
     SwitcherController,
 )
 from planning.aoreplan_branch import AORePlanStep
@@ -68,9 +67,7 @@ def test_wait_actions_bypass_switcher_and_directly_use_arpe():
     prepared = controller.prepare_actions(observations(3))
     assert prepared.switch_allowed_mask == (False, True, False)
     result = controller.resolve_actions([AO_BRANCH])
-    assert result.actions == (1, 4, 3)
-    assert result.selected_branches == (ARPE_BRANCH, AO_BRANCH, ARPE_BRANCH)
-    assert result.wait_bypass_mask == (True, False, True)
+    assert result == (1, 4, 3)
     stats = controller.get_stats()
     assert stats["switcher_choice_count"] == 1
     assert stats["aoreplan_wait_bypass_count"] == 2
@@ -89,5 +86,19 @@ def test_wait_bypass_never_commits_aoreplan_wait():
     controller = SwitcherController(FakeARPE([1]), planner)
     controller.prepare_actions(observations(1))
     result = controller.resolve_actions([])
-    assert result.actions == (1,)
+    assert result == (1,)
     assert planner.commits == [(False,)]
+
+
+def test_same_actions_still_enter_switcher_and_commit_executed_planner_action():
+    planner = FakeAORePlan([4, 0])
+    controller = SwitcherController(FakeARPE([4, 0]), planner)
+    prepared = controller.prepare_actions(observations(2))
+    assert prepared.switch_allowed_mask == (True, False)
+    assert controller.resolve_actions([0]) == (4, 0)
+    assert planner.commits == [(True, True)]
+    stats = controller.get_stats()
+    assert stats["switcher_choice_count"] == 1
+    assert stats["executed_ao_count"] == 0
+    assert stats["branch_action_agreement_count"] == 2
+    assert stats["aoreplan_commit_count"] == 2

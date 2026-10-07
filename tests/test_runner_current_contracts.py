@@ -49,10 +49,34 @@ def test_public_cli_defaults_to_aoreplan_only():
     ]
 
 
-def test_learned_policies_are_always_episode_fresh():
-    for name in ("ARPE", "SRSLM"):
-        assert not runner.should_cache_algorithm(name, True)
-    assert runner.should_cache_algorithm("AORePlan", True)
+@pytest.mark.parametrize("algorithm", runner.SUPPORTED_ALGORITHMS)
+def test_policies_are_always_episode_fresh(algorithm):
+    task = {
+        "algorithm": algorithm,
+        "main_dir": ".",
+        "seed": 0,
+        "map_name": "test-map",
+        "max_steps": 16,
+        "num_agents": 4,
+        "animate": False,
+    }
+    first, second = object(), object()
+    with (
+        patch.object(runner, "build_algorithm", side_effect=[first, second]) as build,
+        patch.object(runner, "run_algorithm", return_value={}) as run,
+    ):
+        for _ in range(2):
+            result = runner.run_single_experiment(task)
+            assert "error" not in result
+    assert build.call_count == 2
+    assert [call.args[0] for call in run.call_args_list] == [first, second]
+
+
+@pytest.mark.parametrize("option", ["--cache-algorithms", "--no-save", "--works"])
+def test_retired_runner_switches_are_rejected(option):
+    with patch.object(sys, "argv", ["run_experiments.py", option]):
+        with pytest.raises(SystemExit):
+            runner.parse_args()
 
 
 def test_retired_direct_cli_variants_are_rejected():
@@ -75,8 +99,8 @@ def test_retired_direct_cli_variants_are_rejected():
 
 def _artifact():
     return SimpleNamespace(
-        weights_path=Path("weights/caar").resolve(),
-        checkpoint_path=Path("weights/caar/checkpoint_p0/model.pth").resolve(),
+        weights_path=Path("weights/arpe").resolve(),
+        checkpoint_path=Path("weights/arpe/checkpoint_p0/model.pth").resolve(),
     )
 
 
@@ -89,15 +113,14 @@ def test_arpe_loads_exact_frozen_candidate():
         runner.build_algorithm("ARPE", ".", 42, arpe_candidate_manifest="manifest.json")
     assert load.call_args.args[0] is artifact
     assert load.call_args.kwargs["seed"] == 42
-    assert load.call_args.kwargs["action_sampling"] == "direct_numpy"
+    assert load.call_args.kwargs["device"] == "auto"
 
 
 @pytest.mark.parametrize("collision", ["block_both", "soft"])
 def test_default_aoreplan_keeps_static_occupancy_check(collision):
     agent = AORePlan(AORePlanConfig())
     agent.set_grid_config(SimpleNamespace(collision_system=collision))
-    assert agent.WRAPPER_CLASS is AORePlanWrapper
-    wrapper = object.__new__(agent.WRAPPER_CLASS)
+    wrapper = object.__new__(AORePlanWrapper)
     wrapper.static_astar = SimpleNamespace(get_action=lambda _index, _observation: 4)
     wrapper.last_static_astar_invoked_mask = [False]
     wrapper.moves = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))

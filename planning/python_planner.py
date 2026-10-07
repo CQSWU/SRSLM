@@ -162,18 +162,16 @@ class planner:
         self._reset_search()
         self._compute_shortest_path()
 
-    def _selected_endpoint(self, use_best_node: bool) -> tuple[int, int]:
-        if self.goal in self._closed:
-            return self.goal
-        if use_best_node:
-            return self._best_node[0], self._best_node[1]
-        return INF, INF
-
     def get_next_node(
         self,
         use_best_node: bool = True,
     ) -> tuple[tuple[int, int], tuple[int, int]]:
-        next_node = self._selected_endpoint(bool(use_best_node))
+        if self.goal in self._closed:
+            next_node = self.goal
+        elif use_best_node:
+            next_node = self._best_node[0], self._best_node[1]
+        else:
+            next_node = (INF, INF)
         if next_node[0] < INF and next_node != self.start:
             while self._closed[next_node] != self.start:
                 next_node = self._closed[next_node]

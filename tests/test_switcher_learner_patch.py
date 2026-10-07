@@ -405,11 +405,6 @@ assert getattr(
     '_srslm_switcher_actor_mask_patch',
     False,
 )
-assert getattr(
-    Learner._calculate_losses,
-    '_srslm_valid_count_guard',
-    False,
-)
 """
     completed = subprocess.run(
         [sys.executable, "-c", code],

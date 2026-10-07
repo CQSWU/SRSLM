@@ -30,20 +30,14 @@ from train import register_custom_components, validate_config
 class SwitcherConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["Switcher"] = "Switcher"
     path_to_weights: str = "weights/SRSLM-Switcher-Final-1B"
-    checkpoint_kind: Literal["auto", "latest", "best"] = "auto"
-    deterministic: bool = False
 
 
 class Switcher:
-    expected_encoder_custom = "switcher"
-    policy_label = "Switcher"
-
     def __init__(self, cfg: SwitcherConfig):
         self.cfg = cfg
         path = Path(cfg.path_to_weights)
-        self.config_path = (path / "config.json").resolve()
         register_custom_components()
-        config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        config = json.loads((path / "config.json").read_text(encoding="utf-8"))
         full_config = deepcopy(config["full_config"])
         declaration = full_config.pop("candidate_policy", None)
         if declaration is not None and not isinstance(declaration, dict):
@@ -58,11 +52,8 @@ class Switcher:
         from learning.config import checkpoint_experiment_config
 
         _, flat_config = validate_config(checkpoint_experiment_config(full_config))
-        if flat_config.encoder_custom != self.expected_encoder_custom:
-            raise RuntimeError(
-                f"Checkpoint is not a {self.policy_label} policy: expected "
-                f"encoder_custom={self.expected_encoder_custom!r}."
-            )
+        if flat_config.encoder_custom != "switcher":
+            raise RuntimeError("Checkpoint is not a Switcher policy.")
         if bool(flat_config.use_rnn):
             raise RuntimeError("Switcher checkpoint must be feed-forward.")
 
@@ -80,10 +71,7 @@ class Switcher:
         actor.model_to_device(self.device)
 
         checkpoint_dir = join(str(path), f"checkpoint_p{flat_config.policy_index}")
-        checkpoint_path = self._resolve_checkpoint(
-            checkpoint_dir,
-            cfg.checkpoint_kind,
-        )
+        checkpoint_path = self._resolve_checkpoint(checkpoint_dir)
         self.checkpoint_path = checkpoint_path
         checkpoint = torch.load(
             checkpoint_path,
@@ -96,7 +84,7 @@ class Switcher:
             parameter.requires_grad_(False)
 
         self.ppo = actor
-        self.flat_config = flat_config
+        self.rnn_state_size = get_rnn_size(flat_config)
         self.candidate_artifact = candidate_artifact
         self.after_reset()
 
@@ -114,33 +102,15 @@ class Switcher:
         return torch.device("cpu")
 
     @staticmethod
-    def _resolve_checkpoint(checkpoint_dir, kind: str) -> Path:
+    def _resolve_checkpoint(checkpoint_dir) -> Path:
         directory = Path(checkpoint_dir)
-        if kind == "best":
-            candidates = sorted(directory.glob("best_*avg_throughput*.pth"))
-            if not candidates:
-                candidates = sorted(directory.glob("best_*.pth"))
-            if not candidates:
-                raise FileNotFoundError(f"No best Switcher checkpoint in {directory}.")
-            path = candidates[-1]
-            label = "best"
-        else:
-            candidates = Learner.get_checkpoints(str(directory))
-            if candidates:
-                path = Path(candidates[-1])
-                label = "latest"
-            elif kind == "auto":
-                best = sorted(directory.glob("best_*.pth"))
-                if not best:
-                    raise FileNotFoundError(f"No Switcher checkpoint in {directory}.")
-                path = best[-1]
-                label = "best"
-            else:
-                raise FileNotFoundError(
-                    f"No latest Switcher checkpoint in {directory}."
-                )
-        path = path.resolve()
-        log.info("Loading %s Switcher checkpoint: %s", label, path)
+        candidates = Learner.get_checkpoints(str(directory))
+        if not candidates:
+            candidates = sorted(directory.glob("best_*.pth"))
+        if not candidates:
+            raise FileNotFoundError(f"No Switcher checkpoint in {directory}.")
+        path = Path(candidates[-1]).resolve()
+        log.info("Loading Switcher checkpoint: %s", path)
         return path
 
     def after_reset(self) -> None:
@@ -185,7 +155,7 @@ class Switcher:
         if not np.all(arrays["aoreplan_action"][:, 0] == 0.0):
             raise ValueError("Only non-wait AORePlan states may enter Switcher.")
         rnn_states = torch.zeros(
-            (count, get_rnn_size(self.flat_config)),
+            (count, self.rnn_state_size),
             dtype=torch.float32,
             device=self.device,
         )
@@ -204,10 +174,7 @@ class Switcher:
             outputs = self.ppo(observations, rnn_states)
             logits = outputs["action_logits"]
             probabilities = torch.softmax(logits, dim=-1)
-            if self.cfg.deterministic:
-                actions = torch.argmax(probabilities, dim=-1)
-            else:
-                actions = outputs["actions"]
+            actions = outputs["actions"]
             result = actions.detach().cpu().numpy().astype(np.int64)
             ao_probabilities = probabilities[:, 1].detach().cpu().numpy()
 
@@ -225,7 +192,6 @@ class Switcher:
         else:
             mean_probability = p05 = p95 = 0.0
         result = {
-            "switcher_stochastic": not self.cfg.deterministic,
             "switcher_model_choice_count": self.total_choice_count,
             "switcher_model_selected_ao_count": self.ao_choice_count,
             "switcher_sampled_ao_rate": (

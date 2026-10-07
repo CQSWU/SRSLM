@@ -46,7 +46,6 @@ class AcoState:
         self,
         obs_batch,
         positions=None,
-        raw_tau=False,
         radius=None,
     ):
         self._ensure_runtime(obs_batch)
@@ -58,7 +57,6 @@ class AcoState:
         self.add_tau_observation(
             obs_batch,
             positions=positions,
-            raw_tau=raw_tau,
             radius=radius,
         )
 
@@ -66,7 +64,6 @@ class AcoState:
         self,
         obs_batch,
         positions=None,
-        raw_tau=False,
         radius=None,
     ):
         self._ensure_runtime(obs_batch)
@@ -75,7 +72,6 @@ class AcoState:
             self.reset_episode(
                 obs_batch,
                 positions=positions,
-                raw_tau=raw_tau,
                 radius=radius,
             )
             return
@@ -85,18 +81,12 @@ class AcoState:
         self.add_tau_observation(
             obs_batch,
             positions=positions,
-            raw_tau=raw_tau,
             radius=radius,
         )
 
     def extract_local_tau(self, x, y, radius):
         local, free_mask = self._local_tau_and_free_mask(x, y, int(radius))
         return self._relative_pressure(local, free_mask)
-
-    def extract_local_raw_tau(self, x, y, radius):
-        local, free_mask = self._local_tau_and_free_mask(x, y, int(radius))
-        local[~free_mask] = 0.0
-        return local
 
     def extract_local_free_mask(self, x, y, radius):
         _, free_mask = self._local_tau_and_free_mask(x, y, int(radius))
@@ -106,19 +96,17 @@ class AcoState:
         self,
         obs_batch,
         positions=None,
-        raw_tau=False,
         radius=None,
     ):
         self._ensure_runtime(obs_batch)
         positions = self._positions(positions)
-        extract = self.extract_local_raw_tau if raw_tau else self.extract_local_tau
 
         for obs, (x, y) in zip(obs_batch, positions):
             x, y = int(x), int(y)
             local_radius = (
                 self._observation_radius(obs) if radius is None else int(radius)
             )
-            tau_local = extract(x, y, local_radius)
+            tau_local = self.extract_local_tau(x, y, local_radius)
             obs["tau"] = tau_local[np.newaxis, ...].astype(
                 np.float32,
                 copy=False,

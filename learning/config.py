@@ -23,12 +23,6 @@ def checkpoint_experiment_config(config):
                 for key, value in normalized[section].items()
                 if key in model.__fields__
             }
-    settings = normalized.get("experiment_settings", {})
-    if settings.get("encoder_custom") != "epom_trace_context":
-        settings.pop("trace_context_architecture", None)
-        normalized.get("environment", {}).pop(
-            "trace_context_team_reward_coefficient", None
-        )
     grid = normalized.get("environment", {}).get("grid_config", {})
     if grid.get("map_name") == "maps/train_capacity_n600.yaml":
         grid["map_name"] = "maps/train.yaml"
@@ -108,28 +102,6 @@ class AsyncPPO(BaseModel, extra=Extra.forbid):
 
     actor_worker_gpus: List[int] = Field(default_factory=list)
 
-    with_pbt: bool = False
-
-    pbt_optimize_gamma: bool = True
-
-    pbt_mix_policies_in_one_env: bool = True
-
-    pbt_period_env_steps: int = 3_000_000
-
-    pbt_start_mutation: int = 20_000_000
-
-    pbt_replace_fraction: float = 0.3
-
-    pbt_mutation_rate: float = 0.15
-
-    pbt_replace_reward_gap: float = 0.05
-
-    pbt_replace_reward_gap_absolute: float = 1e-6
-
-    pbt_target_objective: str = "true_reward"
-
-    benchmark: bool = False
-
 
 class ExperimentSettings(BaseModel, extra=Extra.forbid):
     save_every_sec: int = 120
@@ -187,14 +159,6 @@ class ExperimentSettings(BaseModel, extra=Extra.forbid):
     pogema_encoder_num_res_blocks: int = Field(3, ge=0)
 
     epom_base_weights_path: str = "weights/EPOM-L"
-
-    trace_rule_scale: float = Field(1.0, ge=0.0)
-    trace_gate_threshold: float = Field(0.46371241)
-
-    trace_context_architecture: Literal["paper_entropy_fusion"] = "paper_entropy_fusion"
-    trace_context_learned_gate: Literal["entropy", "always"] = "entropy"
-
-    trace_encoder_input: Literal["real"] = "real"
 
     hidden_size: int = 512
 
@@ -263,9 +227,6 @@ class Environment(BaseModel, extra=Extra.forbid):
 
     tau_rho: float = Field(0.1, gt=0.0, le=1.0)
 
-    trace_variant: Literal["real"] = "real"
-    tau_raw: bool = Field(False)
-
     tau_radius: Optional[int] = Field(None, ge=1)
 
     grid_memory_obs_radius: int = Field(7, ge=1)
@@ -275,8 +236,6 @@ class Environment(BaseModel, extra=Extra.forbid):
     switcher_max_planning_steps: int = Field(10_000, gt=0)
 
     switcher_team_reward_coefficient: float = 1.0
-
-    trace_context_team_reward_coefficient: Literal[0.0] = 0.0
 
     def for_worker(self, env_config=None):
         if self.training_num_agents_by_worker is None:

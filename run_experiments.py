@@ -1,23 +1,13 @@
 import argparse
-
 import json
-
 import logging
-
 import multiprocessing
-
 import os
-
 import random
-
 import time
-
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
 from contextlib import suppress
-
 from datetime import datetime
-
 from pathlib import Path
 
 import numpy as np
@@ -51,8 +41,6 @@ ALGORITHM_COLUMN_WIDTH = max(
     13, *(len(algorithm) for algorithm in SUPPORTED_ALGORITHMS)
 )
 
-_worker_algo_cache = {}
-
 
 def canonical_algorithm_name(value):
 
@@ -67,30 +55,6 @@ def quiet_model_logs():
         from sample_factory.utils.utils import log
 
         log.setLevel(logging.ERROR)
-
-
-def _has_config(path):
-
-    return (path / "config.json").exists()
-
-
-def _has_checkpoints(path):
-
-    for d in path.glob("checkpoint_p*"):
-        if d.is_dir() and any(d.glob("*.pth")):
-            return True
-
-    return False
-
-
-def _find_switcher_weights(main_dir):
-    root = Path(main_dir).resolve()
-    candidate = root / "weights" / "SRSLM-Switcher-Final-1B"
-    if not _has_config(candidate) or not _has_checkpoints(candidate):
-        raise FileNotFoundError(
-            "The selected final 1B SRSLM Switcher checkpoint is missing."
-        )
-    return str(candidate)
 
 
 def _project_path(main_dir, value):
@@ -121,28 +85,6 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
     return artifact
 
 
-_EPISODE_FRESH_ALGORITHMS = frozenset(("ARPE", "SRSLM"))
-
-
-def should_cache_algorithm(algorithm, requested):
-    canonical = canonical_algorithm_name(algorithm) or algorithm
-    return bool(requested) and canonical not in _EPISODE_FRESH_ALGORITHMS
-
-
-def _ao_replan_cfg(
-    seed,
-    max_planning_steps=10000,
-):
-
-    from agents.ao_replan import AORePlanConfig
-
-    return AORePlanConfig(
-        name="AORePlan",
-        max_planning_steps=max_planning_steps,
-        seed=seed,
-    )
-
-
 def build_algorithm(
     algo_name,
     main_dir,
@@ -156,9 +98,9 @@ def build_algorithm(
         raise ValueError(f"Unsupported public algorithm: {algo_name}")
 
     if algo_name == "AORePlan":
-        from agents.ao_replan import AORePlan
+        from agents.ao_replan import AORePlan, AORePlanConfig
 
-        return AORePlan(_ao_replan_cfg(seed))
+        return AORePlan(AORePlanConfig(seed=seed))
 
     if algo_name == "SRSLM":
         from agents.srslm import SRSLM, SRSLMConfig
@@ -171,7 +113,6 @@ def build_algorithm(
             milestone_checkpoint=str(artifact.checkpoint_path),
             base_weights_path=str(artifact.base_weights_path),
             base_checkpoint_path=str(artifact.base_checkpoint_path),
-            inference=artifact.inference.as_dict() if artifact.inference else None,
         )
 
         policy = SRSLM(
@@ -181,12 +122,10 @@ def build_algorithm(
                     path_to_weights=str(
                         _project_path(
                             main_dir,
-                            switcher_weights_path or _find_switcher_weights(main_dir),
+                            switcher_weights_path or "weights/SRSLM-Switcher-Final-1B",
                         )
                     ),
-                    checkpoint_kind="auto",
                     device="auto",
-                    deterministic=False,
                 ),
                 seed=seed,
             ),
@@ -197,18 +136,12 @@ def build_algorithm(
     if algo_name == "ARPE":
         from agents.arpe import ARPE
 
-        manifest = arpe_candidate_manifest or str(
-            Path(main_dir).resolve() / "configs" / "arpe_final_candidate.json"
-        )
-        artifact = _load_arpe_candidate_artifact(main_dir, manifest)
+        artifact = _load_arpe_candidate_artifact(main_dir, arpe_candidate_manifest)
         return ARPE.load(
             artifact,
             seed=int(seed),
             device="auto",
-            action_sampling="direct_numpy",
         )
-
-    raise ValueError(f"Unsupported algorithm: {algo_name}")
 
 
 class _MoveFailureTracker:
@@ -700,32 +633,14 @@ def run_single_experiment(task):
     np.random.seed(seed)
     torch.manual_seed(seed)
 
-    use_cache = should_cache_algorithm(
-        algo_name,
-        task.get("cache_algorithms", False),
-    )
-
-    cache_key = (
-        algo_name,
-        str(Path(main_dir).resolve()),
-        seed,
-        task.get("arpe_candidate_manifest"),
-        task.get("switcher_weights_path"),
-    )
-
     try:
-        if use_cache and cache_key in _worker_algo_cache:
-            algo = _worker_algo_cache[cache_key]
-        else:
-            algo = build_algorithm(
-                algo_name,
-                main_dir,
-                seed,
-                arpe_candidate_manifest=task.get("arpe_candidate_manifest"),
-                switcher_weights_path=task.get("switcher_weights_path"),
-            )
-            if use_cache:
-                _worker_algo_cache[cache_key] = algo
+        algo = build_algorithm(
+            algo_name,
+            main_dir,
+            seed,
+            arpe_candidate_manifest=task.get("arpe_candidate_manifest"),
+            switcher_weights_path=task.get("switcher_weights_path"),
+        )
 
         start = time.time()
 
@@ -763,14 +678,6 @@ def run_single_experiment(task):
             "on_target": on_target,
             "run_time_seconds": run_time,
         }
-        if task.get("task_id") is not None:
-            result_record.update(
-                {
-                    "task_id": task["task_id"],
-                    "family_id": task["family_id"],
-                    "density_percent": task["density_percent"],
-                }
-            )
         result_record.update(
             {key: value for key, value in result.items() if key != "algorithm"}
         )
@@ -813,14 +720,6 @@ def run_single_experiment(task):
             "error": str(exc),
             "traceback": traceback.format_exc(),
         }
-        if task.get("task_id") is not None:
-            error_record.update(
-                {
-                    "task_id": task["task_id"],
-                    "family_id": task["family_id"],
-                    "density_percent": task["density_percent"],
-                }
-            )
         return error_record
 
 
@@ -976,13 +875,11 @@ def _translate_map_rows(rows):
     ]
 
 
-def load_map_text(path_or_url, trim_border=False):
+def load_map_text(path, trim_border=False):
 
-    path_or_url = str(path_or_url)
+    path = Path(path)
 
-    raw_text = Path(path_or_url).read_text()
-
-    source = str(Path(path_or_url).resolve())
+    raw_text = path.read_text()
 
     lines = raw_text.splitlines()
 
@@ -1000,22 +897,18 @@ def load_map_text(path_or_url, trim_border=False):
         rows = [row[1:-1] for row in rows[1:-1]]
 
     if not rows:
-        raise ValueError(f"Map source produced no rows: {path_or_url}")
+        raise ValueError(f"Map source produced no rows: {path}")
 
     width = len(rows[0])
 
     if width == 0 or any(len(row) != width for row in rows):
         raise ValueError(
-            f"Map source must contain a non-empty rectangular grid: {path_or_url}"
+            f"Map source must contain a non-empty rectangular grid: {path}"
         )
 
-    label = Path(path_or_url).name
-
     return {
-        "map_name": label or "custom-map",
+        "map_name": path.name or "custom-map",
         "map_text": "\n".join(rows),
-        "map_source": source,
-        "map_size": [len(rows[0]), len(rows)],
     }
 
 
@@ -1102,31 +995,25 @@ def build_tasks(
     map_items = (
         [
             (
-                "custom",
                 custom_map["map_name"],
                 custom_map["map_text"],
-                custom_map["map_source"],
             )
         ]
         if custom_map is not None
         else [
             (
-                map_type,
                 map_name,
                 map_texts.get(map_name) if map_texts is not None else None,
-                None,
             )
-            for map_type, map_name in maps.items()
+            for map_name in maps.values()
         ]
     )
 
     return [
         {
             "algorithm": algorithm,
-            "map_type": map_type,
             "map_name": map_name,
             "map_text": map_text,
-            "map_source": map_source,
             "num_agents": num_agents,
             "obs_radius": args.obs_radius,
             "max_steps": args.max_steps,
@@ -1135,15 +1022,11 @@ def build_tasks(
             "main_dir": args.main_dir,
             "on_target": args.on_target,
             "collision_system": args.collision_system,
-            "arpe_candidate_manifest": getattr(args, "arpe_candidate_manifest", None),
+            "arpe_candidate_manifest": args.arpe_candidate_manifest,
             "switcher_weights_path": args.switcher_weights_path,
-            "cache_algorithms": should_cache_algorithm(
-                algorithm,
-                args.cache_algorithms,
-            ),
         }
         for algorithm in algorithms
-        for map_type, map_name, map_text, map_source in map_items
+        for map_name, map_text in map_items
         for num_agents in agent_counts
         for seed in seeds
     ]
@@ -1180,12 +1063,12 @@ def run_experiments(tasks, workers):
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(run_single_experiment, task) for task in tasks]
 
-        for index, future in enumerate(as_completed(futures), start=len(results) + 1):
+        for index, future in enumerate(as_completed(futures), start=1):
             result = future.result()
 
             elapsed = time.time() - start_time
 
-            eta = elapsed / index * (total - index) if index else 0.0
+            eta = elapsed / index * (total - index)
 
             result["completed_index"] = index
 
@@ -1322,8 +1205,6 @@ def parse_args():
 
     parser.add_argument(
         "--workers",
-        "--works",
-        dest="workers",
         type=int,
         default=8,
         help="Parallel workers",
@@ -1334,12 +1215,6 @@ def parse_args():
         type=int,
         default=None,
         help="Override the local observation radius (default: environment configuration)",
-    )
-
-    parser.add_argument(
-        "--cache-algorithms",
-        action="store_true",
-        help="Reuse algorithm objects inside each worker. Faster, but less isolated between experiment tasks.",
     )
 
     parser.add_argument(
@@ -1391,18 +1266,9 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--no-trim-border",
-        dest="trim_border",
-        action="store_false",
-        help="Do not trim border from custom map",
-    )
-
-    parser.set_defaults(trim_border=None)
-
-    parser.add_argument(
         "--on-target",
         choices=("restart", "finish", "nothing"),
-        default=None,
+        default="restart",
         help="Override Pogema on_target mode",
     )
 
@@ -1444,18 +1310,6 @@ def parse_args():
         help="Output filename (default: experiments_TIMESTAMP.json)",
     )
 
-    parser.add_argument(
-        "--save",
-        dest="save",
-        action="store_true",
-        default=True,
-        help="Save JSON results",
-    )
-
-    parser.add_argument(
-        "--no-save", dest="save", action="store_false", help="Do not save JSON results"
-    )
-
     return parser.parse_args()
 
 
@@ -1480,15 +1334,6 @@ def main():
 
     if map_sources > 1:
         raise ValueError("--map-file and --map-list are mutually exclusive")
-
-    if args.on_target is None:
-        args.on_target = "restart"
-
-    if args.collision_system is None:
-        args.collision_system = "block_both"
-
-    if args.trim_border is None:
-        args.trim_border = False
 
     algorithms = args.algorithms
 
@@ -1571,8 +1416,7 @@ def main():
 
     print(f"\nTotal elapsed: {format_duration(elapsed)}")
 
-    if args.save:
-        save_results(results, metadata, args.output_dir, args.output)
+    save_results(results, metadata, args.output_dir, args.output)
 
     failed = [result for result in results if result.get("error")]
 

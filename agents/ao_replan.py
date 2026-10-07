@@ -14,13 +14,9 @@ class AORePlanConfig(AlgoBase, extra=Extra.forbid):
 
 
 class AORePlan:
-    WRAPPER_CLASS = AORePlanWrapper
-
     def __init__(self, cfg: AORePlanConfig):
         self.cfg = cfg
-        self.agent = None
         self._ao_wrapper = None
-        self._base = None
         self._reverse_counter = ExecutedPositionReverseCounter(GridConfig().MOVES)
         self._raw_plan_movement_count = 0
         self._static_astar_query_count = 0
@@ -35,12 +31,7 @@ class AORePlan:
         skip_agents=None,
     ):
         del rewards, dones, info
-        skip = (
-            list(skip_agents)
-            if skip_agents is not None
-            else [False] * len(observations)
-        )
-        actions = self.agent.act(observations, skip_agents=skip)
+        actions = self._ao_wrapper.act(observations, skip_agents=skip_agents)
         self._commit_current_actions(actions)
         self._reverse_counter.record(actions, observations)
         self._record_static_astar_metrics()
@@ -54,7 +45,7 @@ class AORePlan:
                 self._ao_wrapper.last_dynamic_override_mask,
             )
         ]
-        self._base.commit_proposals(base_mask)
+        self._ao_wrapper.agent.commit_proposals(base_mask)
 
     def _record_static_astar_metrics(self):
         raw_movement = tuple(
@@ -118,20 +109,17 @@ class AORePlan:
 
     def after_step(self, dones):
         if all(dones):
-            self.agent = None
             self._ao_wrapper = None
-            self._base = None
 
     def after_reset(self):
-        self._base = AORePlanBase(
+        base = AORePlanBase(
             max_steps=self.cfg.max_planning_steps,
             seed=self.cfg.seed,
         )
-        self._ao_wrapper = self.WRAPPER_CLASS(
-            self._base,
+        self._ao_wrapper = AORePlanWrapper(
+            base,
             max_steps=self.cfg.max_planning_steps,
         )
-        self.agent = self._ao_wrapper
         self._reverse_counter.reset()
         self._raw_plan_movement_count = 0
         self._static_astar_query_count = 0

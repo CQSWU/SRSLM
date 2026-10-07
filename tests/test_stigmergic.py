@@ -71,24 +71,6 @@ class TestOccupancyTrace(unittest.TestCase):
         self.assertEqual(tuple(observations[0]["tau"].shape), (1, 3, 3))
         self.assertGreater(float(observations[0]["tau"][0, 1, 1]), 0.0)
 
-    def test_raw_tau_observation_is_not_mean_centered(self):
-        observations = [
-            {
-                "obstacles": np.zeros((3, 3), dtype=np.float32),
-                "xy": np.array([2, 2], dtype=np.float32),
-            }
-        ]
-
-        self.state.reset_episode(
-            observations,
-            positions=[(2, 2)],
-            raw_tau=True,
-        )
-
-        tau = observations[0]["tau"][0]
-        self.assertEqual(float(tau[1, 1]), 1.0)
-        self.assertEqual(float(tau[0, 0]), 0.0)
-
     def test_local_channel_is_mean_centered_and_masks_obstacles(self):
         self.state.tau[2, 2] = 4.0
         self.state.tau[1, 2] = 1.0

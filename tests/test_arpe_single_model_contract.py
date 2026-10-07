@@ -23,13 +23,15 @@ def _recipe():
         ),
         ("trace_context_learned_gate", "all"),
         ("trace_encoder_input", "zero"),
+        ("trace_rule_scale", 1.0),
+        ("trace_gate_threshold", 0.46371241),
     ],
 )
-def test_retired_model_settings_are_rejected_even_for_saved_trace_configs(field, value):
+def test_new_recipes_reject_retired_model_settings(field, value):
     raw = _recipe()
     raw["experiment_settings"][field] = value
     with pytest.raises(ValidationError, match=field):
-        Experiment(**checkpoint_experiment_config(raw))
+        Experiment(**raw)
 
 
 @pytest.mark.parametrize(
@@ -38,25 +40,36 @@ def test_retired_model_settings_are_rejected_even_for_saved_trace_configs(field,
         ("trace_context_team_reward_coefficient", 1.0),
         ("trace_variant", "shuffled"),
         ("trace_variant", "zero"),
+        ("tau_raw", True),
     ],
 )
 def test_retired_environment_variants_are_rejected(field, value):
     raw = _recipe()
     raw["environment"][field] = value
     with pytest.raises(ValidationError, match=field):
-        Experiment(**checkpoint_experiment_config(raw))
+        Experiment(**raw)
 
 
-def test_only_inert_nontrace_serialized_defaults_are_removed():
-    raw = {
-        "experiment_settings": {
-            "encoder_custom": "switcher",
-            "trace_context_architecture": "context",
-        },
-        "environment": {"trace_context_team_reward_coefficient": 1.0},
+def test_saved_recipe_uses_current_fields_without_modifying_its_input():
+    raw = _recipe()
+    expected = Experiment(**raw).dict()
+    model_fields = {
+        "trace_context_architecture": "paper_entropy_fusion",
+        "trace_context_learned_gate": "always",
+        "trace_encoder_input": "raw",
+        "trace_rule_scale": 1.0,
+        "trace_gate_threshold": 0.46371241,
     }
+    environment_fields = {
+        "trace_context_team_reward_coefficient": 0.0,
+        "trace_variant": "full",
+        "tau_raw": True,
+    }
+    raw["experiment_settings"].update(model_fields)
+    raw["environment"].update(environment_fields)
     original = deepcopy(raw)
     normalized = checkpoint_experiment_config(raw)
     assert raw == original
-    assert "trace_context_architecture" not in normalized["experiment_settings"]
-    assert "trace_context_team_reward_coefficient" not in normalized["environment"]
+    assert model_fields.keys().isdisjoint(normalized["experiment_settings"])
+    assert environment_fields.keys().isdisjoint(normalized["environment"])
+    assert Experiment(**normalized).dict() == expected

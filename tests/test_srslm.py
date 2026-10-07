@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from agents.srslm import SRSLM, SRSLMConfig
-from agents.switcher import SwitcherConfig
+from agents.switcher import Switcher, SwitcherConfig
 
 
 class _FrozenPolicy:
@@ -76,3 +76,18 @@ def test_srslm_rejects_a_switcher_without_candidate_paths():
             switcher_factory=_MissingCandidateSwitcher,
             planner_factory=_FakePlanner,
         )
+
+
+@pytest.mark.parametrize("option,value", [("deterministic", True), ("checkpoint_kind", "best")])
+def test_switcher_has_no_variant_switches(option, value):
+    with pytest.raises(ValueError):
+        SwitcherConfig(**{option: value})
+
+
+def test_switcher_loads_latest_checkpoint_before_best(tmp_path):
+    best = tmp_path / "best_000001.pth"
+    best.touch()
+    assert Switcher._resolve_checkpoint(tmp_path) == best.resolve()
+    latest = tmp_path / "checkpoint_000002_000000200.pth"
+    latest.touch()
+    assert Switcher._resolve_checkpoint(tmp_path) == latest.resolve()

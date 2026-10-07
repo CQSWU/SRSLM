@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Mapping
@@ -19,7 +18,6 @@ class ArpeCandidateArtifact:
     checkpoint_path: Path
     base_weights_path: Path
     base_checkpoint_path: Path
-    inference: InferenceCorrection | None = None
 
     @classmethod
     def from_mapping(
@@ -39,11 +37,6 @@ class ArpeCandidateArtifact:
                     "base_checkpoint_path",
                 )
             },
-            inference=(
-                InferenceCorrection(**mapping["inference"])
-                if mapping.get("inference") is not None
-                else None
-            ),
         )
 
     @classmethod
@@ -68,8 +61,6 @@ class ArpeCandidateArtifact:
                 if path.is_relative_to(self.project_root)
                 else str(path)
             )
-        if self.inference is not None:
-            result["inference"] = self.inference.as_dict()
         return result
 
 
@@ -79,7 +70,6 @@ class ARPEConfig(AlgoBase, extra=Extra.forbid):
     milestone_checkpoint: str
     base_weights_path: str
     base_checkpoint_path: str
-    inference: dict | None = None
 
     def as_mapping(self) -> dict[str, object]:
         return {
@@ -87,7 +77,6 @@ class ARPEConfig(AlgoBase, extra=Extra.forbid):
             "checkpoint_path": self.milestone_checkpoint,
             "base_weights_path": self.base_weights_path,
             "base_checkpoint_path": self.base_checkpoint_path,
-            "inference": deepcopy(self.inference),
         }
 
 
@@ -102,8 +91,7 @@ class ARPE:
         self.ppo.eval()
         for parameter in self.ppo.parameters():
             parameter.requires_grad_(False)
-        if artifact.inference is not None:
-            self.ppo.inference_correction = artifact.inference
+        self.ppo.inference_correction = InferenceCorrection()
 
     @classmethod
     def load(
@@ -112,20 +100,13 @@ class ARPE:
         *,
         seed: int,
         device: str,
-        action_sampling: Literal["torch", "direct_numpy"] | None = None,
     ) -> "ARPE":
-        if action_sampling is None:
-            action_sampling = (
-                artifact.inference.action_sampling if artifact.inference else "torch"
-            )
         policy = EPOMTraceContext(
             EPOMTraceContextConfig(
                 path_to_weights=str(artifact.weights_path),
-                checkpoint_kind="milestone",
                 milestone_checkpoint=str(artifact.checkpoint_path),
                 seed=int(seed),
                 device=str(device),
-                action_sampling=action_sampling,
                 base_weights_path=str(artifact.base_weights_path),
                 base_checkpoint_path=str(artifact.base_checkpoint_path),
             )

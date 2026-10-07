@@ -1,5 +1,4 @@
 import json
-from os.path import join
 from pathlib import Path
 from typing import Literal
 from copy import deepcopy
@@ -7,7 +6,6 @@ from copy import deepcopy
 import numpy as np
 import torch
 from pydantic import Extra
-from sample_factory.algo.learning.learner import Learner
 from sample_factory.envs.create_env import create_env
 from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.utils.utils import log
@@ -21,7 +19,7 @@ from train import register_custom_components, validate_config
 class PolicyBackboneConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["PolicyBackbone"] = "PolicyBackbone"
     path_to_weights: str
-    checkpoint_kind: Literal["latest", "best"] = "latest"
+    milestone_checkpoint: str
     base_weights_path: str | None = None
     base_checkpoint_path: str | None = None
 
@@ -74,11 +72,7 @@ class PolicyBackbone:
             actor_critic.float()
         actor_critic.model_to_device(device)
 
-        policy_id = flat_config.policy_index
-        checkpoint_dir = join(path, f"checkpoint_p{policy_id}")
-        checkpoint = self._load_checkpoint(
-            checkpoint_dir, device, algo_cfg.checkpoint_kind
-        )
+        checkpoint = self._load_checkpoint(device)
         actor_critic.load_state_dict(checkpoint["model"], strict=True)
 
         self.ppo = actor_critic
@@ -89,56 +83,17 @@ class PolicyBackbone:
         self.aco = AcoState(rho=self.env_cfg.tau_rho)
         self.env = None
 
-    @staticmethod
-    def _checkpoint_map_location(device):
-        return "cpu" if device.type == "mps" else device
-
-    @staticmethod
-    def _latest_checkpoint_path(checkpoint_dir):
-        checkpoints = Learner.get_checkpoints(checkpoint_dir)
-        if not checkpoints:
-            raise FileNotFoundError(f"No checkpoints found in {checkpoint_dir}")
-        return Path(checkpoints[-1]).resolve()
-
-    @staticmethod
-    def _best_checkpoint_path(checkpoint_dir):
-        checkpoint_dir = Path(checkpoint_dir)
-        best_files = sorted(checkpoint_dir.glob("best_*avg_throughput*.pth"))
-        if not best_files:
-            best_files = sorted(checkpoint_dir.glob("best_*.pth"))
-        if not best_files:
-            raise FileNotFoundError(f"No best checkpoints found in {checkpoint_dir}")
-        return best_files[-1].resolve()
-
-    @classmethod
-    def _load_checkpoint_path(cls, checkpoint_path, device, label):
-        checkpoint_path = Path(checkpoint_path).resolve()
-        log.info("Loading %s checkpoint: %s", label, checkpoint_path)
-        checkpoint = torch.load(
-            checkpoint_path,
-            map_location=cls._checkpoint_map_location(device),
+    def _load_checkpoint(self, device):
+        candidate = Path(self.algo_cfg.milestone_checkpoint).expanduser()
+        if not candidate.is_absolute():
+            candidate = Path(__file__).resolve().parents[1] / candidate
+        self.checkpoint_path = candidate.resolve()
+        log.info("Loading checkpoint: %s", self.checkpoint_path)
+        return torch.load(
+            self.checkpoint_path,
+            map_location="cpu" if device.type == "mps" else device,
             weights_only=False,
         )
-        return checkpoint
-
-    def _load_checkpoint(self, checkpoint_dir, device, checkpoint_kind):
-        if checkpoint_kind == "latest":
-            checkpoint_path = self._latest_checkpoint_path(checkpoint_dir)
-            label = "latest"
-        elif checkpoint_kind == "best":
-            checkpoint_path = self._best_checkpoint_path(checkpoint_dir)
-            label = "best"
-        else:
-            raise ValueError(
-                f"Choose an explicit checkpoint kind, got {checkpoint_kind!r}."
-            )
-        self.checkpoint_path = checkpoint_path
-        checkpoint = self._load_checkpoint_path(
-            checkpoint_path,
-            device,
-            label,
-        )
-        return checkpoint
 
     def set_grid_config(self, grid_config):
         self.aco.configure_from_grid_config(grid_config, clear=True)

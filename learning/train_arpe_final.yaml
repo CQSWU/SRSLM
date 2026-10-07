@@ -21,10 +21,6 @@ experiment_settings:
   hidden_size: 512
   actor_critic_share_weights: true
   epom_base_weights_path: weights/EPOM-L
-  trace_rule_scale: 1.0
-  trace_gate_threshold: 0.46371241
-  trace_context_architecture: paper_entropy_fusion
-  trace_context_learned_gate: always
 async_ppo:
   async_rl: false
   num_workers: 8
@@ -42,15 +38,11 @@ async_ppo:
   exploration_loss_coeff: 0.0
   value_loss_coeff: 0.5
   with_vtrace: false
-  with_pbt: false
 environment:
   name: POMAPF-EPOM-ST-v0
   tau_rho: 0.1
   tau_radius: 5
-  tau_raw: false
-  trace_variant: real
   grid_memory_obs_radius: 7
-  trace_context_team_reward_coefficient: 0.0
   grid_config:
     on_target: restart
     collision_system: block_both

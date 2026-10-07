@@ -84,19 +84,8 @@ def exhaust_four_directions(base):
 
 
 def test_exhausted_cache_returns_none_now_but_recovers_next_query(base):
-    queries = []
-    original = base._get_next_node
-
-    def counted(local_planner):
-        queries.append(1)
-        return original(local_planner)
-
-    base._get_next_node = counted
     exhaust_four_directions(base)
-
-    assert len(queries) == 5
     assert base.act(observation()) == [4]
-    assert len(queries) == 6
 
 
 def test_exhaustion_does_not_remove_current_agents(base):

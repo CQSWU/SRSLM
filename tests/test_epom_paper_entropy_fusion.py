@@ -16,7 +16,6 @@ from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence
 from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
     EPOMTraceMultiplierActorCritic,
-    PAPER_ENTROPY_FUSION_ARCHITECTURE,
     select_top2_low_pressure,
 )
 from train import register_custom_components, validate_config
@@ -35,6 +34,13 @@ def _routing(batch_size):
     legal[:, 0] = 0
     ranks = torch.arange(5).repeat(batch_size, 2, 1).float()
     return pressure, legal, ranks
+
+
+@pytest.fixture
+def correction_model():
+    model = object.__new__(EPOMTraceMultiplierActorCritic)
+    nn.Module.__init__(model)
+    return model
 
 
 @pytest.fixture(scope="module")
@@ -67,13 +73,11 @@ def full_model():
 def test_config_locks_the_selected_arpe_contract():
     experiment = Experiment(**_load(FORMAL))
     settings, environment = experiment.experiment_settings, experiment.environment
-    assert settings.trace_context_architecture == PAPER_ENTROPY_FUSION_ARCHITECTURE
     assert settings.encoder_custom == "epom_trace_context"
     assert settings.hidden_size == 512
-    assert settings.trace_context_learned_gate == "always"
-    assert settings.trace_gate_threshold == pytest.approx(0.46371241)
+    assert settings.train_for_env_steps == 1_000_000_000
+    assert settings.epom_base_weights_path == "weights/EPOM-L"
     assert environment.tau_radius == 5
-    assert environment.tau_raw is False
     assert environment.grid_memory_obs_radius == 7
     assert environment.grid_config.map_name == "maps/train.yaml"
 
@@ -125,44 +129,41 @@ def test_fusion_input_is_trace32_h512_z5_and_detaches_frozen_epom():
     assert logits.grad is None
 
 
-def test_residual_keeps_raw_magnitude_and_mean():
+def test_residual_keeps_raw_magnitude_and_mean(correction_model):
     raw = torch.tensor([[20.62, -30.0, 0.0, 2.0, -1.0], [4.0] * 5], requires_grad=True)
     base = torch.zeros_like(raw)
     pressure, legal, ranks = _routing(2)
-    final, delta, _, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, pressure, legal, ranks, direct_bonus=0.0
+    final, delta, _, _ = correction_model._apply_configured_correction_rule(
+        base, raw, pressure, legal, ranks
     )
     assert torch.equal(delta, raw)
-    assert torch.equal(final, raw)
+    route = select_top2_low_pressure(base, pressure, legal, ranks)
+    assert torch.equal(final, raw + route)
     final.sum().backward()
     assert torch.equal(raw.grad, torch.ones_like(raw))
 
 
-def test_no_direct_rule_ignores_pressure_and_keeps_entropy_gated_learning():
-    base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
+def test_training_keeps_actor_gradient_for_all_rows_and_actions(correction_model):
+    base = torch.tensor(
+        [[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]],
+        requires_grad=True,
+    )
     raw = torch.tensor(
         [[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True
     )
     pressure, legal, ranks = _routing(2)
-    final, delta, gate, _ = (
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, raw, pressure, legal, ranks, direct_bonus=0.0
-        )
+    legal[0, 4] = 0
+    final, delta, gate, _ = correction_model._apply_configured_correction_rule(
+        base, raw, pressure, legal, ranks
     )
-    expected = base + gate * raw
+    route = select_top2_low_pressure(base, pressure, legal, ranks)
+    expected = base.detach() + route + raw
     torch.testing.assert_close(final, expected)
-    changed = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, raw, -100 * pressure, 1 - legal, ranks.flip(-1), direct_bonus=0.0
-    )[0]
-    torch.testing.assert_close(changed, final)
-    initial = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-        base, torch.zeros_like(base), pressure, legal, ranks, direct_bonus=0.0
-    )[0]
-    torch.testing.assert_close(initial, base, rtol=0, atol=0)
     F.cross_entropy(final, torch.tensor([1, 2]), reduction="sum").backward()
-    assert torch.count_nonzero(raw.grad[0]).item() == 5
-    torch.testing.assert_close(raw.grad[1], torch.zeros(5))
-    torch.testing.assert_close(delta, final - base)
+    assert torch.count_nonzero(raw.grad).item() == 10
+    assert base.grad is None
+    torch.testing.assert_close(gate, torch.ones(2, 1))
+    torch.testing.assert_close(delta, raw)
 
 
 def test_direct_rewards_low_pressure_of_top_two_legal_moves_only():
@@ -188,77 +189,31 @@ def test_stored_tie_ranks_make_repeated_ppo_forward_identical():
     torch.testing.assert_close(first[:, 0], torch.zeros(3))
 
 
-def test_zero_output_keeps_direct_bonus_and_closed_gate_keeps_base():
+def test_zero_output_keeps_direct_bonus_at_all_entropies(correction_model):
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     pressure, legal, ranks = _routing(2)
-    final, learned_delta, gate, _ = (
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, torch.zeros_like(base), pressure, legal, ranks
-        )
+    final, learned_delta, gate, _ = correction_model._apply_configured_correction_rule(
+        base, torch.zeros_like(base), pressure, legal, ranks
     )
     expected = base.clone()
-    expected[0, 2] += 1.0
+    expected[:, 2] += 1.0
     torch.testing.assert_close(final, expected)
     torch.testing.assert_close(learned_delta, torch.zeros_like(base))
-    torch.testing.assert_close(gate, torch.tensor([[1.0], [0.0]]))
+    torch.testing.assert_close(gate, torch.ones(2, 1))
 
 
-def test_formula_is_direct_plus_entropy_gated_raw_correction():
+def test_training_formula_is_direct_plus_raw_correction(correction_model):
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     raw = torch.tensor([[2.0, -1.0, 0.0, 4.0, -3.0], [1.0, 2.0, 3.0, 4.0, 5.0]])
     pressure, legal, ranks = _routing(2)
-    final, delta, gate, _ = (
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, raw, pressure, legal, ranks
-        )
+    final, delta, gate, _ = correction_model._apply_configured_correction_rule(
+        base, raw, pressure, legal, ranks
     )
-    expected = base.clone()
-    expected[0, 2] += 1.0
-    expected[0] += raw[0]
-    torch.testing.assert_close(gate, torch.tensor([[1.0], [0.0]]))
+    expected = base + raw
+    expected[:, 2] += 1.0
+    torch.testing.assert_close(gate, torch.ones(2, 1))
     torch.testing.assert_close(final, expected)
-    torch.testing.assert_close(delta, raw * gate)
-
-
-def test_entropy_closed_rows_have_no_actor_gradient_but_open_rows_adjust_all_actions():
-    base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
-    raw = torch.tensor(
-        [[0.4, -0.2, 0.1, 0.3, -0.1], [0.7, -0.4, 0.2, 0.1, -0.3]], requires_grad=True
-    )
-    pressure, legal, ranks = _routing(2)
-    legal[0, 4] = 0
-    final, delta, gate, _ = (
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, raw, pressure, legal, ranks
-        )
-    )
-    F.cross_entropy(final, torch.tensor([1, 2]), reduction="sum").backward()
-    torch.testing.assert_close(gate, torch.tensor([[1.0], [0.0]]))
-    assert torch.count_nonzero(raw.grad[0]).item() == 5
-    torch.testing.assert_close(raw.grad[1], torch.zeros(5))
-    assert delta[0, 0] != 0
-    assert delta[0, 4] != 0
-
-
-def test_explicit_training_gate_and_direct_bonus_are_configurable():
-    base = torch.tensor([[4.0, 0.0, 0.0, 0.0, 0.0]])
-    raw = torch.zeros_like(base)
-    pressure, legal, ranks = _routing(1)
-    default, _, gate, _ = (
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, raw, pressure, legal, ranks
-        )
-    )
-    assert not gate.any()
-    torch.testing.assert_close(default, base)
-    final, _, gate, _ = (
-        EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
-            base, raw, pressure, legal, ranks, entropy_threshold=0.1, direct_bonus=2.5
-        )
-    )
-    assert gate.all()
-    route = select_top2_low_pressure(base, pressure, legal, ranks)
-    torch.testing.assert_close(final, base + 2.5 * route)
+    torch.testing.assert_close(delta, raw)
 
 
 def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_model):
@@ -274,7 +229,7 @@ def test_actor_and_critic_have_independent_trace_gradients_and_frozen_base(full_
     fusion = model.compose_paper_entropy_fusion_input(actor_feature, hidden, logits)
     raw = model.trace_multiplier_head(model.trace_fusion_head(fusion))
     pressure, legal, ranks = _routing(4)
-    adjusted = model.apply_paper_entropy_correction_rule(
+    adjusted = model._apply_configured_correction_rule(
         logits.detach(), raw, pressure, legal, ranks
     )[0]
     values = model._critic_values(

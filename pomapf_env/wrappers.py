@@ -308,15 +308,8 @@ class TauObservationWrapper(gym.Wrapper):
         env,
         rho=0.1,
         tau_radius=None,
-        trace_variant="real",
-        raw_tau=False,
-        include_free_mask=False,
     ):
         super().__init__(env)
-        if trace_variant != "real":
-            raise ValueError("ARPE expects the real shared trace.")
-        self.raw_tau = bool(raw_tau)
-        self.include_free_mask = bool(include_free_mask)
         obs_space = self.env.observation_space
         channels, height, width = obs_space["obs"].shape
         if channels != 3:
@@ -343,13 +336,12 @@ class TauObservationWrapper(gym.Wrapper):
             shape=(1, tau_size, tau_size),
             dtype=np.float32,
         )
-        if self.include_free_mask:
-            spaces["tau_free_mask"] = Box(
-                low=0.0,
-                high=1.0,
-                shape=(1, tau_size, tau_size),
-                dtype=np.float32,
-            )
+        spaces["tau_free_mask"] = Box(
+            low=0.0,
+            high=1.0,
+            shape=(1, tau_size, tau_size),
+            dtype=np.float32,
+        )
         self.observation_space = gym.spaces.Dict(spaces)
         self.num_agents = self.env.num_agents
         self.is_multiagent = self.env.is_multiagent
@@ -375,26 +367,23 @@ class TauObservationWrapper(gym.Wrapper):
             self.aco.reset_episode(
                 observations,
                 positions=true_positions,
-                raw_tau=self.raw_tau,
                 radius=self.tau_radius,
             )
         else:
             self.aco.observe_for_inference(
                 observations,
                 positions=true_positions,
-                raw_tau=self.raw_tau,
                 radius=self.tau_radius,
             )
-        if self.include_free_mask:
-            for observation, (x, y) in zip(observations, true_positions):
-                free_mask = self.aco.extract_local_free_mask(
-                    int(x),
-                    int(y),
-                    self.tau_radius,
-                )
-                observation["tau_free_mask"] = free_mask[np.newaxis, ...].astype(
-                    np.float32, copy=False
-                )
+        for observation, (x, y) in zip(observations, true_positions):
+            free_mask = self.aco.extract_local_free_mask(
+                int(x),
+                int(y),
+                self.tau_radius,
+            )
+            observation["tau_free_mask"] = free_mask[np.newaxis, ...].astype(
+                np.float32, copy=False
+            )
 
     def _configure_trace(self, clear):
         grid = self._grid()

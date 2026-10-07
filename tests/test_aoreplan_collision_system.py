@@ -36,6 +36,11 @@ class FixedStatic:
         return self.action
 
 
+@pytest.fixture(autouse=True)
+def branch_base(monkeypatch):
+    monkeypatch.setattr("planning.aoreplan_branch.AORePlanBase", SequenceBase)
+
+
 def observation(position=(5, 5), occupied=False):
     agents = np.zeros((11, 11), dtype=np.int8)
     agents[5, 6] = int(occupied)
@@ -88,7 +93,7 @@ def test_default_wrapper_always_retains_local_check():
 
 @pytest.mark.parametrize("collision", ["block_both", "soft"])
 def test_branch_conservative_behavior_survives_reset(collision):
-    branch = AORePlanBranch(base_factory=SequenceBase)
+    branch = AORePlanBranch()
     controller = SwitcherController(Candidate(), branch)
     controller.set_grid_config(SimpleNamespace(collision_system=collision))
     for _ in range(2):
@@ -133,7 +138,7 @@ class Candidate:
 @pytest.mark.parametrize("collision", ["block_both", "soft"])
 def test_srslm_default_static_collision_uses_wait_bypass_under_both_rules(collision):
     candidate = Candidate()
-    planner = AORePlanBranch(base_factory=SequenceBase)
+    planner = AORePlanBranch()
     policy = SRSLM.__new__(SRSLM)
     policy.controller = SwitcherController(candidate, planner)
     config = SimpleNamespace(collision_system=collision)
@@ -147,7 +152,7 @@ def test_srslm_default_static_collision_uses_wait_bypass_under_both_rules(collis
     prepared = policy.controller.prepare_actions([observation((4, 5), occupied=True)])
     assert prepared.switch_allowed_mask == (False,)
     resolved = policy.controller.resolve_actions([])
-    assert resolved.actions == (3,)
+    assert resolved == (3,)
 
 
 @pytest.mark.parametrize("collision", ["block_both", "soft"])
@@ -161,9 +166,7 @@ def test_training_env_reset_uses_same_planner_rule_as_deployment(collision):
         grid_config=config,
         candidate_artifact=SimpleNamespace(),
         candidate_factory=lambda *_args, **_kwargs: Candidate(),
-        planner_factory=lambda **kwargs: AORePlanBranch(
-            base_factory=SequenceBase, **kwargs
-        ),
+        planner_factory=AORePlanBranch,
         base_env_factory=lambda **_kwargs: base_env,
     )
     for _ in range(2):
@@ -173,12 +176,12 @@ def test_training_env_reset_uses_same_planner_rule_as_deployment(collision):
         env.controller.resolve_actions([1])
         prepared = env.controller.prepare_actions([observation((4, 5), occupied=True)])
         assert prepared.switch_allowed_mask == (False,)
-        assert env.controller.resolve_actions([]).actions == (3,)
+        assert env.controller.resolve_actions([]) == (3,)
 
 
 def test_supported_pogema_collision_rules():
     policy = AORePlan(AORePlanConfig())
-    branch = AORePlanBranch(base_factory=SequenceBase)
+    branch = AORePlanBranch()
     controller = SwitcherController(Candidate(), branch)
     for owner in (policy, controller):
         for collision in ("block_both", "soft", "priority"):

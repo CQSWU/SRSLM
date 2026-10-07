@@ -48,7 +48,7 @@ def test_new_recipe_rejects_unused_dimensions_and_cap(field, value):
         Experiment(**raw)
 
 
-def test_checkpoint_only_migration_preserves_input_and_current_model_recipe():
+def test_checkpoint_filter_preserves_input_and_current_model_recipe():
     raw = _recipe()
     expected = Experiment(**raw).dict()
     raw["experiment_settings"].update(UNUSED_CONTEXT_FIELDS)

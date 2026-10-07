@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from unittest.mock import patch
 
 from planning.aoreplan_branch import AORePlanBranch
 
@@ -12,7 +13,10 @@ class SequenceBase:
 
     def act(self, observations, skip_agents=None):
         actions = list(next(self.sequences))
-        return [None if skip_agents[i] else action for i, action in enumerate(actions)]
+        return [
+            None if skip_agents is not None and skip_agents[i] else action
+            for i, action in enumerate(actions)
+        ]
 
     def commit_proposals(self, executed_mask):
         self.commits.append(tuple(bool(value) for value in executed_mask))
@@ -41,7 +45,8 @@ def obs(position=(5, 5)):
 
 def make_branch(sequences, static_action=3):
     base = SequenceBase(sequences)
-    branch = AORePlanBranch(base_factory=lambda **_kwargs: base)
+    with patch("planning.aoreplan_branch.AORePlanBase", return_value=base):
+        branch = AORePlanBranch()
     branch._wrapper.static_astar = FixedStaticAStar(static_action)
     return branch, base
 

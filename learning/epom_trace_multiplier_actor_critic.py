@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from pathlib import Path
 import torch
 from sample_factory.algo.utils.action_distributions import get_action_distribution
@@ -13,7 +12,6 @@ from torch.nn.utils.rnn import PackedSequence
 PRIMAL3_ENTROPY_THRESHOLD = 0.46371241
 PRIMAL3_ENTROPY_EPS = 1e-10
 MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
-PAPER_ENTROPY_FUSION_ARCHITECTURE = "paper_entropy_fusion"
 TIE_KEY = "bonus_tie_ranks"
 
 
@@ -155,7 +153,7 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         obs_shape: tuple[int, ...],
         tau_shape: tuple[int, ...],
         tau_free_mask_shape: tuple[int, ...] | None,
-    ) -> tuple[int, str]:
+    ) -> None:
 
         if tau_shape != (1, 11, 11):
             raise ValueError(
@@ -171,17 +169,8 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
                 "Paper ARPE requires an odd square EPOM observation of at "
                 f"least 11x11, got {obs_shape}."
             )
-        obs_size = int(obs_shape[-1])
-        if tau_free_mask_shape is not None:
-            if tau_free_mask_shape != tau_shape:
-                raise ValueError("tau_free_mask must match the 11x11 trace crop.")
-            return obs_size, "tau_free_mask"
-        if obs_size != 11:
-            raise ValueError(
-                "A separate 11x11 tau_free_mask is required when EPOM's internal "
-                f"observation is {obs_size}x{obs_size}."
-            )
-        return obs_size, "obs"
+        if tau_free_mask_shape != tau_shape:
+            raise ValueError("tau_free_mask must match the 11x11 trace crop.")
 
     def __init__(self, model_factory, obs_space, action_space, cfg):
         if not cfg.actor_critic_share_weights:
@@ -202,19 +191,10 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
             if "tau_free_mask" in obs_space.spaces
             else None
         )
-        _, self.free_mask_source = self._validate_spatial_contract(
+        self._validate_spatial_contract(
             tuple(obs_space["obs"].shape), tuple(obs_space["tau"].shape), mask_shape
         )
         self.core_out_size = int(self.core.get_out_size())
-        self.rule_scale = float(settings.get("trace_rule_scale", 1.0))
-        self.entropy_threshold = float(
-            settings.get("trace_gate_threshold", PRIMAL3_ENTROPY_THRESHOLD)
-        )
-        self.learned_gate_mode = str(
-            settings.get("trace_context_learned_gate", "entropy")
-        )
-        if self.learned_gate_mode not in {"entropy", "always"}:
-            raise ValueError("ARPE training gate must be entropy or always.")
 
         self.actor_trace_encoder = _PaperTraceEncoder(cfg)
         if self.core_out_size != 512:
@@ -245,13 +225,11 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         self._load_and_freeze_base(settings)
         self.register_buffer(
             "fixed_entropy_threshold",
-            torch.tensor(self.entropy_threshold, dtype=torch.float64),
+            torch.tensor(PRIMAL3_ENTROPY_THRESHOLD, dtype=torch.float64),
         )
         self.register_buffer(
             "paper_entropy_gate_version",
-            torch.tensor(
-                1 if self.learned_gate_mode == "entropy" else 0, dtype=torch.int64
-            ),
+            torch.tensor(0, dtype=torch.int64),
         )
         self.register_buffer(
             "independent_critic_version", torch.tensor(1, dtype=torch.int64)
@@ -273,10 +251,7 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
             base_context = self.encoder(normalized_obs_dict)
         tau = normalized_obs_dict["tau"].float()
         centred_trace = self.centered_trace_candidates(tau)
-        if self.free_mask_source == "tau_free_mask":
-            free = normalized_obs_dict["tau_free_mask"].detach()
-        else:
-            free = (normalized_obs_dict["obs"][:, 0:1].detach() < 0.5).to(tau.dtype)
+        free = normalized_obs_dict["tau_free_mask"].detach()
         legal = (self.centered_trace_candidates(free) > 0.5).to(tau.dtype)
         actor_trace = self.actor_trace_encoder(tau)
         critic_trace = self.critic_trace_encoder(tau)
@@ -376,43 +351,6 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
             [trace_feature, frozen_hidden.detach(), base_logits.detach()], dim=-1
         )
 
-    @classmethod
-    def apply_paper_entropy_correction_rule(
-        cls,
-        base_logits: torch.Tensor,
-        raw_correction: torch.Tensor,
-        pressure: torch.Tensor,
-        legal: torch.Tensor,
-        tie_ranks: torch.Tensor,
-        *,
-        direct_bonus: float = 1.0,
-        entropy_threshold: float = PRIMAL3_ENTROPY_THRESHOLD,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-
-        if (
-            base_logits.ndim != 2
-            or base_logits.shape[-1] != cls.NUM_ACTIONS
-            or raw_correction.shape != base_logits.shape
-        ):
-            raise ValueError(
-                "base_logits and raw_correction must both have shape [B,5]."
-            )
-        if not math.isfinite(direct_bonus) or direct_bonus < 0:
-            raise ValueError("direct_bonus must be finite and non-negative")
-        if not math.isfinite(entropy_threshold) or entropy_threshold < 0:
-            raise ValueError("entropy_threshold must be finite and non-negative")
-        base_logits = base_logits.detach()
-        entropy = cls._base_entropy(base_logits)
-        gate = (entropy > entropy_threshold).to(base_logits.dtype).unsqueeze(-1)
-        route = (
-            select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
-            if direct_bonus
-            else torch.zeros_like(base_logits)
-        )
-        learned_delta = gate * raw_correction
-        final_logits = base_logits + direct_bonus * gate * route + learned_delta
-        return final_logits, learned_delta, gate, entropy
-
     def _apply_configured_correction_rule(
         self,
         base_logits,
@@ -433,28 +371,12 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
                 raw_correction,
                 self._base_entropy(base_logits),
             )
-        if self.learned_gate_mode == "entropy":
-            return self.apply_paper_entropy_correction_rule(
-                base_logits,
-                raw_correction,
-                pressure,
-                legal,
-                tie_ranks,
-                direct_bonus=self.rule_scale,
-                entropy_threshold=getattr(
-                    self, "entropy_threshold", PRIMAL3_ENTROPY_THRESHOLD
-                ),
-            )
         base_logits = base_logits.detach()
         entropy = self._base_entropy(base_logits)
         gate = torch.ones_like(base_logits[:, :1])
-        route = (
-            select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
-            if self.rule_scale
-            else torch.zeros_like(base_logits)
-        )
+        route = select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
         return (
-            base_logits + self.rule_scale * route + raw_correction,
+            base_logits + route + raw_correction,
             raw_correction,
             gate,
             entropy,

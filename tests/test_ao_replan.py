@@ -87,8 +87,17 @@ def test_production_api_has_no_retired_boolean_switches():
 
 def test_dynamic_planner_requests_exact_path_then_best_move():
     calls = []
-    fake = SimpleNamespace(get_next_node=lambda value: calls.append(value) or None)
-    assert AORePlanBase._get_next_node(fake) is None
+    fake = SimpleNamespace(
+        get_next_node=lambda value: calls.append(value) or None,
+        update_obstacles=lambda *_args: None,
+        proposal_failed=lambda *_args: False,
+        observe_position=lambda *_args: None,
+        plan_path=lambda *_args: None,
+        release_failed_actions=lambda: None,
+    )
+    base = AORePlanBase(seed=0)
+    base.planner = [fake]
+    assert base.act(observation()) == [None]
     assert calls == [True]
 
 
@@ -145,9 +154,9 @@ def test_goal_returns_explicit_wait_not_no_path():
 
 def test_standalone_metrics_use_new_names_and_denominators():
     algorithm = AORePlan(AORePlanConfig())
-    algorithm.agent = ActionSequence([0])
-    algorithm._base = SimpleNamespace(commit_proposals=lambda _mask: None)
     algorithm._ao_wrapper = SimpleNamespace(
+        act=ActionSequence([0]).act,
+        agent=SimpleNamespace(commit_proposals=lambda _mask: None),
         last_dynamic_override_mask=[True],
         last_raw_dynamic_actions=[1],
         last_static_astar_invoked_mask=[True],

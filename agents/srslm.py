@@ -47,7 +47,6 @@ class SRSLM:
         switcher_factory: Callable = Switcher,
         controller_factory: Callable = SwitcherController,
     ):
-        self.cfg = cfg
         switcher_cfg = cfg.switcher.copy(
             deep=True,
             update={"seed": cfg.seed},
@@ -98,7 +97,7 @@ class SRSLM:
             branches = self.switcher.choose(active_state)
         else:
             branches = np.empty(0, dtype=np.int64)
-        return list(self.controller.resolve_actions(branches).actions)
+        return list(self.controller.resolve_actions(branches))
 
     def get_switch_stats(self):
         result = self.controller.get_stats()

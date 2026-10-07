@@ -2,9 +2,5 @@
   "weights_path": "weights/ARPE-Final-1B",
   "checkpoint_path": "weights/ARPE-Final-1B/checkpoint_p0/checkpoint_000244175_1000140800.pth",
   "base_weights_path": "weights/EPOM-L",
-  "base_checkpoint_path": "weights/EPOM-L/checkpoint_p0/checkpoint_000024418_100016128.pth",
-  "inference": {
-    "entropy_threshold": 0.01,
-    "action_sampling": "direct_numpy"
-  }
+  "base_checkpoint_path": "weights/EPOM-L/checkpoint_p0/checkpoint_000024418_100016128.pth"
 }
