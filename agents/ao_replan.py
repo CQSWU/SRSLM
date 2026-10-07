@@ -1,9 +1,7 @@
 from typing import Literal
 
-from pogema import GridConfig
 from pydantic import Extra, Field
 
-from agents.reverse_metrics import ExecutedPositionReverseCounter
 from agents.utils_agents import AlgoBase, SUPPORTED_COLLISION_SYSTEMS
 from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper
 
@@ -17,10 +15,6 @@ class AORePlan:
     def __init__(self, cfg: AORePlanConfig):
         self.cfg = cfg
         self._ao_wrapper = None
-        self._reverse_counter = ExecutedPositionReverseCounter(GridConfig().MOVES)
-        self._raw_plan_movement_count = 0
-        self._static_astar_query_count = 0
-        self._no_path_fallback_count = 0
 
     def act(
         self,
@@ -33,8 +27,6 @@ class AORePlan:
         del rewards, dones, info
         actions = self._ao_wrapper.act(observations, skip_agents=skip_agents)
         self._commit_current_actions(actions)
-        self._reverse_counter.record(actions, observations)
-        self._record_static_astar_metrics()
         return actions
 
     def _commit_current_actions(self, actions):
@@ -47,23 +39,6 @@ class AORePlan:
         ]
         self._ao_wrapper.agent.commit_proposals(base_mask)
 
-    def _record_static_astar_metrics(self):
-        raw_movement = tuple(
-            action not in (None, 0)
-            for action in self._ao_wrapper.last_raw_dynamic_actions
-        )
-        self._raw_plan_movement_count += sum(raw_movement)
-        self._static_astar_query_count += sum(
-            bool(invoked) and movement
-            for invoked, movement in zip(
-                self._ao_wrapper.last_static_astar_invoked_mask,
-                raw_movement,
-            )
-        )
-        self._no_path_fallback_count += sum(
-            bool(value) for value in self._ao_wrapper.last_no_path_fallback_mask
-        )
-
     def set_grid_config(self, grid_config):
         collision_system = getattr(grid_config, "collision_system", None)
         if collision_system not in SUPPORTED_COLLISION_SYSTEMS:
@@ -72,40 +47,6 @@ class AORePlan:
                 f"received collision_system={collision_system!r}, supported "
                 f"{SUPPORTED_COLLISION_SYSTEMS}."
             )
-
-    @property
-    def reverse_action_rate(self):
-        return self._reverse_counter.rate
-
-    @property
-    def reverse_action_count(self):
-        return self._reverse_counter.reverse_count
-
-    @property
-    def reverse_action_denominator(self):
-        return self._reverse_counter.movement_count
-
-    @property
-    def reverse_metric_version(self):
-        return self._reverse_counter.METRIC_VERSION
-
-    @property
-    def static_astar_query_count(self):
-        return self._static_astar_query_count
-
-    @property
-    def static_astar_query_denominator(self):
-        return self._raw_plan_movement_count
-
-    @property
-    def static_astar_query_rate(self):
-        if self._raw_plan_movement_count == 0:
-            return 0.0
-        return self._static_astar_query_count / self._raw_plan_movement_count
-
-    @property
-    def no_path_fallback_count(self):
-        return self._no_path_fallback_count
 
     def after_step(self, dones):
         if all(dones):
@@ -120,7 +61,3 @@ class AORePlan:
             base,
             max_steps=self.cfg.max_planning_steps,
         )
-        self._reverse_counter.reset()
-        self._raw_plan_movement_count = 0
-        self._static_astar_query_count = 0
-        self._no_path_fallback_count = 0

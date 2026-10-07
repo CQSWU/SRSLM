@@ -194,10 +194,6 @@ class AORePlanWrapper:
         self.static_astar = StaticAStarCheck(max_steps=max_steps)
         self.previous_position = None
         self.last_target = None
-        self.last_raw_dynamic_actions = None
-        self.last_static_astar_invoked_mask = None
-        self.last_no_path_fallback_mask = None
-        self.last_reverse_mask = None
         self.last_dynamic_override_mask = None
 
     def _ensure_state(self, count):
@@ -210,7 +206,6 @@ class AORePlanWrapper:
 
     def _static_astar_action(self, index, observation):
         raw_action = self.static_astar.get_action(index, observation)
-        self.last_static_astar_invoked_mask[index] = True
         conflict = bool(
             raw_action not in (None, 0)
             and not _local_cell_is_free(observation, raw_action)
@@ -229,22 +224,14 @@ class AORePlanWrapper:
             position[1] + dy,
         ) == previous
 
-    def _reset_diagnostics(self, actions):
-        count = len(actions)
-        self.last_raw_dynamic_actions = list(actions)
-        self.last_static_astar_invoked_mask = [False] * count
-        self.last_no_path_fallback_mask = [False] * count
-        self.last_reverse_mask = [False] * count
-        self.last_dynamic_override_mask = [False] * count
-
     def act(self, observations, skip_agents=None):
         actions = list(self.agent.act(observations, skip_agents=skip_agents))
         self._ensure_state(len(actions))
 
         self.static_astar.observe(observations)
-        self._reset_diagnostics(actions)
+        self.last_dynamic_override_mask = [False] * len(actions)
 
-        for index, raw_action in enumerate(self.last_raw_dynamic_actions):
+        for index, raw_action in enumerate(tuple(actions)):
             observation = observations[index]
             target = tuple(int(value) for value in observation["target_xy"])
             if self.last_target[index] != target:
@@ -264,7 +251,6 @@ class AORePlanWrapper:
                 continue
 
             if raw_action is None:
-                self.last_no_path_fallback_mask[index] = True
                 actions[index] = original_random_or_stay(
                     observation,
                     self.rnd,
@@ -280,7 +266,6 @@ class AORePlanWrapper:
                 raw_action,
                 previous,
             )
-            self.last_reverse_mask[index] = reverse
             if not reverse:
                 continue
 

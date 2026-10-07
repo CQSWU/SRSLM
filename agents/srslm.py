@@ -34,9 +34,6 @@ class SRSLM:
     def after_step(self, dones):
         self.controller.after_step(dones)
 
-    def get_additional_info(self):
-        return self.get_switch_stats()
-
     def __init__(
         self,
         cfg: SRSLMConfig,
@@ -98,11 +95,6 @@ class SRSLM:
         else:
             branches = np.empty(0, dtype=np.int64)
         return list(self.controller.resolve_actions(branches))
-
-    def get_switch_stats(self):
-        result = self.controller.get_stats()
-        result.update(self.switcher.get_stats())
-        return result
 
 
 __all__ = [

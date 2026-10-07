@@ -81,7 +81,6 @@ class _Candidate:
 
 class _Planner:
     action = 4
-    reverse = False
 
     def reset(self):
         pass
@@ -90,8 +89,6 @@ class _Planner:
         return AORePlanStep(
             actions=(self.action,),
             planned_mask=(True,),
-            reverse_mask=(self.reverse,),
-            static_astar_invoked_mask=(self.reverse,),
         )
 
     def commit(self, selected):
@@ -108,7 +105,6 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(
     assert first.switch_allowed_mask == (True,)
     controller.resolve_actions([1])
     planner.action = 3
-    planner.reverse = True
     second = controller.prepare_actions(_observations((0, 1)))
 
     assert second.switch_allowed_mask == (True,)
@@ -121,14 +117,7 @@ def test_wait_only_controller_leaves_reverse_actions_to_switcher(
     assert third.switcher_state["aoreplan_action"][:, 0].all()
     assert controller.resolve_actions([]) == (1,)
     assert planner.committed == (False,)
-    stats = controller.get_stats()
-    assert stats["total_action_count"] == 3
-    assert stats["switcher_choice_count"] == 2
-    assert stats["aoreplan_wait_bypass_count"] == 1
-    assert stats["switcher_decision_scope"] == "aoreplan_nonwait_only"
-    assert "final_reverse_arpe_bypass_count" not in stats
     controller.after_reset()
-    assert controller.get_stats()["total_action_count"] == 0
     planner.action = 3
     assert controller.prepare_actions(_observations((0, 1))).switch_allowed_mask == (
         True,

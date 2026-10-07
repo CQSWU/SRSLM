@@ -10,8 +10,6 @@ from planning.ao_replan_algo import AORePlanBase, AORePlanWrapper, INF
 class AORePlanStep:
     actions: tuple[int | None, ...]
     planned_mask: tuple[bool, ...]
-    reverse_mask: tuple[bool, ...]
-    static_astar_invoked_mask: tuple[bool, ...]
 
 
 class AORePlanBranch:
@@ -48,20 +46,12 @@ class AORePlanBranch:
             )
         count = len(observations)
         actions = self._wrapper.act(observations, skip_agents=skip_agents)
-        fields = (
-            self._wrapper.last_reverse_mask,
-            self._wrapper.last_static_astar_invoked_mask,
-        )
-        if len(actions) != count or any(
-            values is None or len(values) != count for values in fields
-        ):
+        if len(actions) != count:
             raise RuntimeError("AORePlan returned an inconsistent candidate batch.")
 
         batch = AORePlanStep(
             actions=tuple(actions),
             planned_mask=tuple(action is not None for action in actions),
-            reverse_mask=tuple(bool(value) for value in fields[0]),
-            static_astar_invoked_mask=tuple(bool(value) for value in fields[1]),
         )
         self._pending = batch
         return batch

@@ -174,7 +174,6 @@ def test_default_aoreplan_keeps_static_occupancy_check(collision):
     agent.set_grid_config(SimpleNamespace(collision_system=collision))
     wrapper = object.__new__(AORePlanWrapper)
     wrapper.static_astar = SimpleNamespace(get_action=lambda _index, _observation: 4)
-    wrapper.last_static_astar_invoked_mask = [False]
     wrapper.moves = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
     agents = np.zeros((11, 11), dtype=int)
     agents[5, 6] = 1

@@ -115,9 +115,6 @@ class Switcher:
 
     def after_reset(self) -> None:
         torch.manual_seed(int(self.cfg.seed or 0))
-        self.total_choice_count = 0
-        self.ao_choice_count = 0
-        self._ao_probability_samples = []
 
     def choose(self, state: Mapping[str, np.ndarray]) -> np.ndarray:
         expected = SWITCHER_FIELD_SHAPES
@@ -172,37 +169,8 @@ class Switcher:
             )
             observations = prepare_and_normalize_obs(self.ppo, observations)
             outputs = self.ppo(observations, rnn_states)
-            logits = outputs["action_logits"]
-            probabilities = torch.softmax(logits, dim=-1)
             actions = outputs["actions"]
             result = actions.detach().cpu().numpy().astype(np.int64)
-            ao_probabilities = probabilities[:, 1].detach().cpu().numpy()
-
-        self.total_choice_count += count
-        self.ao_choice_count += int(np.sum(result == 1))
-        self._ao_probability_samples.append(ao_probabilities)
-        return result
-
-    def get_stats(self) -> dict:
-        if self._ao_probability_samples:
-            probabilities = np.concatenate(self._ao_probability_samples)
-            mean_probability = float(probabilities.mean())
-            p05 = float(np.quantile(probabilities, 0.05))
-            p95 = float(np.quantile(probabilities, 0.95))
-        else:
-            mean_probability = p05 = p95 = 0.0
-        result = {
-            "switcher_model_choice_count": self.total_choice_count,
-            "switcher_model_selected_ao_count": self.ao_choice_count,
-            "switcher_sampled_ao_rate": (
-                self.ao_choice_count / self.total_choice_count
-                if self.total_choice_count
-                else 0.0
-            ),
-            "switcher_ao_probability_mean": mean_probability,
-            "switcher_ao_probability_p05": p05,
-            "switcher_ao_probability_p95": p95,
-        }
         return result
 
 

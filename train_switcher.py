@@ -64,7 +64,6 @@ def prepare_switcher_config(config: dict) -> tuple[object, object]:
         raise ValueError(f"Switcher requires environment {ENV_NAME!r}.")
     if bool(flat_config.use_rnn):
         raise ValueError("Switcher must remain feed-forward.")
-    flat_config.full_config = deepcopy(flat_config.full_config)
     flat_config.full_config["candidate_policy"] = artifact.as_dict()
     flat_config.candidate_policy = artifact.as_dict()
     flat_config.population_curriculum = curriculum

@@ -1,4 +1,5 @@
 import sys
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -121,33 +122,35 @@ def test_observed_walls_are_private_to_each_agent(backend):
 def test_non_probe_steps_accumulate_walls_before_first_reverse(backend):
 
     wrapper = ao.AORePlanWrapper(SequenceBase([3] * 5 + [2, 1]), max_steps=MAX_STEPS)
+    wrapper.static_astar.get_action = Mock(wraps=wrapper.static_astar.get_action)
     for col in range(5, -1, -1):
         assert wrapper.act([observation((-1, col))]) == [3 if col else 2]
-        assert wrapper.last_static_astar_invoked_mask == [False]
+        wrapper.static_astar.get_action.assert_not_called()
     assert wrapper.act([observation()]) == [2]
-    assert wrapper.last_reverse_mask == [True]
-    assert wrapper.last_static_astar_invoked_mask == [True]
+    assert wrapper.static_astar.get_action.call_count == 1
     assert fresh_action(observation()) == 1
 
 
 @pytest.mark.parametrize("inactive", ["skip", "goal"])
 def test_skipped_and_at_goal_steps_still_observe_walls(backend, inactive):
     wrapper = ao.AORePlanWrapper(IdleBase(), max_steps=MAX_STEPS)
+    wrapper.static_astar.get_action = Mock(wraps=wrapper.static_astar.get_action)
     old = observation(HISTORY, HISTORY if inactive == "goal" else GOAL)
     wrapper.act([old], skip_agents=[inactive == "skip"])
-    assert wrapper.last_static_astar_invoked_mask == [False]
+    wrapper.static_astar.get_action.assert_not_called()
     wrapper.act([observation()], skip_agents=[False])
     assert wrapper.static_astar.get_action(0, observation()) == 2
 
 
 def test_target_changes_preserve_static_memory(backend):
     wrapper = ao.AORePlanWrapper(IdleBase(), max_steps=MAX_STEPS)
+    wrapper.static_astar.get_action = Mock(wraps=wrapper.static_astar.get_action)
     wrapper.act([observation(HISTORY, (0, 8))])
     original_planner = wrapper.static_astar._planners[0]
     for target in ((0, -3), GOAL):
         wrapper.act([observation(target=target)])
         assert wrapper.static_astar._planners[0] is original_planner
-        assert wrapper.last_static_astar_invoked_mask == [False]
+        wrapper.static_astar.get_action.assert_not_called()
     assert wrapper.static_astar.get_action(0, observation()) == 2
 
 

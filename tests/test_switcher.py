@@ -41,8 +41,6 @@ class FakeAORePlan:
         return AORePlanStep(
             actions=self.actions,
             planned_mask=(True,) * count,
-            reverse_mask=(False,) * count,
-            static_astar_invoked_mask=(False,) * count,
         )
 
     def commit(self, mask):
@@ -68,10 +66,7 @@ def test_wait_actions_bypass_switcher_and_directly_use_arpe():
     assert prepared.switch_allowed_mask == (False, True, False)
     result = controller.resolve_actions([AO_BRANCH])
     assert result == (1, 4, 3)
-    stats = controller.get_stats()
-    assert stats["switcher_choice_count"] == 1
-    assert stats["aoreplan_wait_bypass_count"] == 2
-    assert stats["executed_ao_count"] == 1
+    assert planner.commits == [(False, True, False)]
 
 
 def test_switcher_choice_count_must_equal_nonwait_count():
@@ -97,8 +92,39 @@ def test_same_actions_still_enter_switcher_and_commit_executed_planner_action():
     assert prepared.switch_allowed_mask == (True, False)
     assert controller.resolve_actions([0]) == (4, 0)
     assert planner.commits == [(True, True)]
-    stats = controller.get_stats()
-    assert stats["switcher_choice_count"] == 1
-    assert stats["executed_ao_count"] == 0
-    assert stats["branch_action_agreement_count"] == 2
-    assert stats["aoreplan_commit_count"] == 2
+
+
+def test_agent_count_cannot_change_without_reset():
+    candidate = FakeARPE([1])
+    planner = FakeAORePlan([4])
+    controller = SwitcherController(candidate, planner)
+    controller.prepare_actions(observations(1))
+    controller.resolve_actions([AO_BRANCH])
+    candidate.actions = [1, 1]
+    planner.actions = (4, 4)
+    controller.prepare_actions(observations(2))
+    with pytest.raises(RuntimeError, match="Agent count changed"):
+        controller.resolve_actions([AO_BRANCH, AO_BRANCH])
+
+    controller.after_reset()
+    controller.prepare_actions(observations(2))
+    assert controller.resolve_actions([AO_BRANCH, AO_BRANCH]) == (4, 4)
+
+
+def test_done_mask_must_match_resolved_agent_count():
+    controller = SwitcherController(FakeARPE([1]), FakeAORePlan([4]))
+    controller.prepare_actions(observations(1))
+    controller.resolve_actions([AO_BRANCH])
+    with pytest.raises(RuntimeError, match="Done mask and agent count differ"):
+        controller.after_step([False, False])
+    controller.after_step([True])
+
+
+def test_pending_decision_must_be_resolved_before_next_proposal():
+    controller = SwitcherController(FakeARPE([1]), FakeAORePlan([4]))
+    with pytest.raises(RuntimeError, match="prepare_actions"):
+        controller.resolve_actions([AO_BRANCH])
+    controller.prepare_actions(observations(1))
+    with pytest.raises(RuntimeError, match="previous switch decision"):
+        controller.prepare_actions(observations(1))
+    assert controller.resolve_actions([AO_BRANCH]) == (4,)

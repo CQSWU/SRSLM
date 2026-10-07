@@ -16,7 +16,6 @@ from pomapf_env.trace_routing import TIE_KEY, bonus_rng, draw_tie_ranks
 from pomapf_env.wrappers import MatrixObservationWrapper
 
 TRACE_RADIUS = 5
-TRACE_SIZE = 2 * TRACE_RADIUS + 1
 
 
 class EPOMTraceContextConfig(PolicyBackboneConfig, extra=Extra.forbid):
@@ -112,5 +111,4 @@ __all__ = [
     "EPOMTraceContext",
     "EPOMTraceContextConfig",
     "TRACE_RADIUS",
-    "TRACE_SIZE",
 ]

@@ -1,11 +1,14 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 
+from agents import switcher as switcher_module
 from agents.srslm import SRSLM, SRSLMConfig
 from agents.switcher import Switcher, SwitcherConfig
+from agents.switcher_core import SWITCHER_FIELD_SHAPES
 
 
 class _FrozenPolicy:
@@ -91,3 +94,66 @@ def test_switcher_loads_latest_checkpoint_before_best(tmp_path):
     latest = tmp_path / "checkpoint_000002_000000200.pth"
     latest.touch()
     assert Switcher._resolve_checkpoint(tmp_path) == latest.resolve()
+
+
+def test_switcher_uses_sampled_actor_actions_and_preserves_reset_seed(monkeypatch):
+    count = 16
+    state = {
+        key: np.zeros((count, *shape), dtype=np.float32)
+        for key, shape in SWITCHER_FIELD_SHAPES.items()
+    }
+    state["caar_action"][:, 1] = 1.0
+    state["aoreplan_action"][:, 4] = 1.0
+
+    def actor(observations, rnn_states):
+        assert torch.all(observations["switch_allowed"] == 1.0)
+        assert rnn_states.shape == (count, 0)
+        return {"actions": torch.randint(2, (count,))}
+
+    switcher = Switcher.__new__(Switcher)
+    switcher.cfg = SwitcherConfig(seed=42)
+    switcher.device = torch.device("cpu")
+    switcher.rnn_state_size = 0
+    switcher.ppo = actor
+    monkeypatch.setattr(
+        switcher_module, "prepare_and_normalize_obs", lambda _actor, obs: obs
+    )
+
+    torch.manual_seed(42)
+    expected_first = torch.randint(2, (count,)).numpy()
+    expected_second = torch.randint(2, (count,)).numpy()
+    switcher.after_reset()
+    np.testing.assert_array_equal(switcher.choose(state), expected_first)
+    np.testing.assert_array_equal(switcher.choose(state), expected_second)
+    switcher.after_reset()
+    np.testing.assert_array_equal(switcher.choose(state), expected_first)
+
+
+@pytest.mark.parametrize("allowed", [(False, True, False), (False, False, False)])
+def test_srslm_only_sends_nonwait_rows_to_switcher(allowed):
+    features = {"obs": np.arange(3, dtype=np.float32)[:, None]}
+    prepared = SimpleNamespace(switch_allowed_mask=allowed, switcher_state=features)
+    selected_batches = []
+    resolved_branches = []
+
+    def choose(state):
+        selected_batches.append(state["obs"])
+        return np.ones(len(state["obs"]), dtype=np.int64)
+
+    def resolve(branches):
+        resolved_branches.append(tuple(branches))
+        return (1, 4, 3)
+
+    algorithm = SRSLM.__new__(SRSLM)
+    algorithm.switcher = SimpleNamespace(choose=choose)
+    algorithm.controller = SimpleNamespace(
+        prepare_actions=lambda *_args: prepared,
+        resolve_actions=resolve,
+    )
+    assert algorithm.act([{}, {}, {}]) == [1, 4, 3]
+    assert resolved_branches == [(1,) if any(allowed) else ()]
+    if any(allowed):
+        assert len(selected_batches) == 1
+        np.testing.assert_array_equal(selected_batches[0], features["obs"][[1]])
+    else:
+        assert selected_batches == []

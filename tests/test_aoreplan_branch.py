@@ -57,8 +57,6 @@ def test_branch_has_one_fixed_policy_and_minimal_step_fields():
     assert set(step.__dataclass_fields__) == {
         "actions",
         "planned_mask",
-        "reverse_mask",
-        "static_astar_invoked_mask",
     }
     branch.commit([False])
 
@@ -70,8 +68,6 @@ def test_static_replacement_is_not_committed_to_dynamic_planner():
     branch.commit([True])
     second = branch.propose([obs((4, 5))])
     assert second.actions == (3,)
-    assert second.reverse_mask == (True,)
-    assert second.static_astar_invoked_mask == (True,)
     branch.commit([True])
     assert base.commits == [(True,), (False,)]
 

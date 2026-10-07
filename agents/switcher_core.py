@@ -112,7 +112,6 @@ def build_switcher_state(
 @dataclass(frozen=True)
 class PreparedSwitcherStep:
     arpe_actions: tuple[int, ...]
-    aoreplan_step: object
     aoreplan_actions: tuple[int, ...]
     switch_allowed_mask: tuple[bool, ...]
     switcher_state: Mapping[str, np.ndarray]
@@ -142,17 +141,7 @@ class SwitcherController:
         self.arpe.after_reset()
         self.aoreplan.reset()
         self._pending = None
-        self.environment_step_count = 0
-        self.total_action_count = 0
-        self.switcher_choice_count = 0
-        self.executed_ao_count = 0
-        self.wait_bypass_count = 0
-        self.branch_switch_count = 0
-        self.branch_action_agreement_count = 0
-        self.reverse_count = 0
-        self.static_astar_query_count = 0
-        self.aoreplan_commit_count = 0
-        self._last_executed_ao: list[bool | None] | None = None
+        self._agent_count: int | None = None
 
     @staticmethod
     def _coerce_arpe_actions(actions, count: int) -> tuple[int, ...]:
@@ -175,8 +164,6 @@ class SwitcherController:
         fields = (
             step.actions,
             step.planned_mask,
-            step.reverse_mask,
-            step.static_astar_invoked_mask,
         )
         if any(len(values) != count for values in fields):
             raise RuntimeError("AORePlan returned the wrong number of actions.")
@@ -219,7 +206,6 @@ class SwitcherController:
             raise
         self._pending = PreparedSwitcherStep(
             arpe_actions=arpe_actions,
-            aoreplan_step=step,
             aoreplan_actions=aoreplan_actions,
             switch_allowed_mask=tuple(action != 0 for action in aoreplan_actions),
             switcher_state=switcher_state,
@@ -263,83 +249,18 @@ class SwitcherController:
             self._pending = None
             raise
 
-        if self._last_executed_ao is None:
-            self._last_executed_ao = [None] * count
-        elif len(self._last_executed_ao) != count:
+        if self._agent_count is None:
+            self._agent_count = count
+        elif self._agent_count != count:
             raise RuntimeError("Agent count changed without an environment reset.")
-        self.branch_switch_count += sum(
-            previous is not None and bool(previous) != bool(current)
-            for previous, current in zip(self._last_executed_ao, executed_ao)
-        )
-        self._last_executed_ao = [bool(value) for value in executed_ao]
-
-        self.environment_step_count += 1
-        self.total_action_count += count
-        self.switcher_choice_count += eligible_count
-        self.executed_ao_count += int(executed_ao.sum())
-        self.wait_bypass_count += count - eligible_count
-        self.branch_action_agreement_count += sum(
-            left == right
-            for left, right in zip(
-                pending.arpe_actions,
-                pending.aoreplan_actions,
-            )
-        )
-        self.reverse_count += sum(
-            bool(value) for value in pending.aoreplan_step.reverse_mask
-        )
-        self.static_astar_query_count += sum(
-            pending.aoreplan_step.static_astar_invoked_mask
-        )
-        self.aoreplan_commit_count += sum(commit)
         self._pending = None
         return tuple(int(value) for value in final_actions)
 
     def after_step(self, dones: Sequence[bool]) -> None:
         flags = tuple(bool(value) for value in dones)
         self.arpe.after_step(flags)
-        if self._last_executed_ao is not None:
-            if len(flags) != len(self._last_executed_ao):
-                raise RuntimeError("Done mask and agent count differ.")
-            for index, done in enumerate(flags):
-                if done:
-                    self._last_executed_ao[index] = None
-
-    @staticmethod
-    def _ratio(numerator: int, denominator: int) -> float:
-        return float(numerator / denominator) if denominator else 0.0
-
-    def get_stats(self) -> dict:
-        return {
-            "switcher_decision_scope": "aoreplan_nonwait_only",
-            "environment_step_count": self.environment_step_count,
-            "total_action_count": self.total_action_count,
-            "switcher_choice_count": self.switcher_choice_count,
-            "switcher_choice_rate": self._ratio(
-                self.switcher_choice_count, self.total_action_count
-            ),
-            "selected_ao_count": self.executed_ao_count,
-            "selected_ao_rate": self._ratio(
-                self.executed_ao_count, self.switcher_choice_count
-            ),
-            "executed_ao_count": self.executed_ao_count,
-            "executed_ao_rate": self._ratio(
-                self.executed_ao_count, self.total_action_count
-            ),
-            "executed_caar_count": (self.total_action_count - self.executed_ao_count),
-            "aoreplan_wait_bypass_count": self.wait_bypass_count,
-            "aoreplan_wait_bypass_rate": self._ratio(
-                self.wait_bypass_count, self.total_action_count
-            ),
-            "branch_switch_count": self.branch_switch_count,
-            "branch_action_agreement_count": self.branch_action_agreement_count,
-            "branch_action_agreement_rate": self._ratio(
-                self.branch_action_agreement_count, self.total_action_count
-            ),
-            "reverse_count": self.reverse_count,
-            "static_astar_query_count": self.static_astar_query_count,
-            "aoreplan_commit_count": self.aoreplan_commit_count,
-        }
+        if self._agent_count is not None and len(flags) != self._agent_count:
+            raise RuntimeError("Done mask and agent count differ.")
 
 
 __all__ = [

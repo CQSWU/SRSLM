@@ -105,13 +105,12 @@ def test_no_path_uses_original_wait_or_obstacle_only_random_fallback():
     wait_wrapper = AORePlanWrapper(ActionSequence([None], coin=0.5))
     wait_wrapper.static_astar = FixedStaticAStar(4)
     assert wait_wrapper.act(observation()) == [0]
-    assert wait_wrapper.last_no_path_fallback_mask == [True]
-    assert wait_wrapper.last_static_astar_invoked_mask == [False]
+    assert wait_wrapper.static_astar.calls == 0
 
     random_wrapper = AORePlanWrapper(ActionSequence([None], coin=0.500001))
     random_wrapper.static_astar = FixedStaticAStar(4)
     assert random_wrapper.act(observation(agent_actions=(1,))) == [1]
-    assert random_wrapper.last_static_astar_invoked_mask == [False]
+    assert random_wrapper.static_astar.calls == 0
 
 
 def test_reverse_uses_previous_timestep_and_wait_cannot_repeat():
@@ -120,9 +119,9 @@ def test_reverse_uses_previous_timestep_and_wait_cannot_repeat():
     wrapper.static_astar = static_astar
     assert wrapper.act(observation(position=(5, 5))) == [1]
     assert wrapper.act(observation(position=(4, 5))) == [0]
-    assert wrapper.last_reverse_mask == [True]
+    assert static_astar.calls == 1
     assert wrapper.act(observation(position=(4, 5))) == [2]
-    assert wrapper.last_reverse_mask == [False]
+    assert static_astar.calls == 1
     assert wrapper.act(observation(position=(4, 5))) == [2]
     assert static_astar.calls == 1
 
@@ -132,7 +131,7 @@ def test_static_astar_first_step_is_locally_collision_checked():
     wrapper.static_astar = FixedStaticAStar(4)
     assert wrapper.act(observation(position=(5, 5))) == [1]
     assert wrapper.act(observation(position=(4, 5), agent_actions=(4,))) == [0]
-    assert wrapper.last_static_astar_invoked_mask == [True]
+    assert wrapper.static_astar.calls == 1
     assert wrapper.last_dynamic_override_mask == [True]
 
 
@@ -141,7 +140,7 @@ def test_static_astar_same_reverse_keeps_dynamic_feedback():
     wrapper.static_astar = FixedStaticAStar(2)
     assert wrapper.act(observation(position=(5, 5))) == [1]
     assert wrapper.act(observation(position=(4, 5))) == [2]
-    assert wrapper.last_static_astar_invoked_mask == [True]
+    assert wrapper.static_astar.calls == 1
     assert wrapper.last_dynamic_override_mask == [False]
 
 
@@ -149,22 +148,16 @@ def test_goal_returns_explicit_wait_not_no_path():
     wrapper = AORePlanWrapper(ActionSequence([None]))
     wrapper.static_astar = FixedStaticAStar(4)
     assert wrapper.act(observation(position=(5, 5), target=(5, 5))) == [0]
-    assert wrapper.last_no_path_fallback_mask == [False]
+    assert wrapper.static_astar.calls == 0
 
 
-def test_standalone_metrics_use_new_names_and_denominators():
+def test_standalone_does_not_commit_replaced_dynamic_actions():
+    commits = []
     algorithm = AORePlan(AORePlanConfig())
     algorithm._ao_wrapper = SimpleNamespace(
         act=ActionSequence([0]).act,
-        agent=SimpleNamespace(commit_proposals=lambda _mask: None),
+        agent=SimpleNamespace(commit_proposals=lambda mask: commits.append(mask)),
         last_dynamic_override_mask=[True],
-        last_raw_dynamic_actions=[1],
-        last_static_astar_invoked_mask=[True],
-        last_no_path_fallback_mask=[False],
     )
-    algorithm.act(observation())
-    assert algorithm.static_astar_query_count == 1
-    assert algorithm.static_astar_query_denominator == 1
-    assert algorithm.static_astar_query_rate == 1.0
-    assert algorithm.no_path_fallback_count == 0
-    assert not hasattr(algorithm, "probe_invocation_rate")
+    assert algorithm.act(observation()) == [0]
+    assert commits == [[False]]

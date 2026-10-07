@@ -28,11 +28,13 @@ class SequenceBase:
 class FixedStatic:
     def __init__(self, action):
         self.action = action
+        self.calls = 0
 
     def observe(self, observations):
         pass
 
     def get_action(self, _index, _observation):
+        self.calls += 1
         return self.action
 
 
@@ -67,7 +69,7 @@ def test_default_static_action_into_visible_agent_waits_under_both_rules(collisi
     wrapper.static_astar = FixedStatic(4)
     assert wrapper.act([observation()]) == [1]
     assert wrapper.act([observation((4, 5), occupied=True)]) == [0]
-    assert wrapper.last_static_astar_invoked_mask == [True]
+    assert wrapper.static_astar.calls == 1
 
 
 @pytest.mark.parametrize(

@@ -109,18 +109,6 @@ class ArpeSwitcherEnv(gym.Env):
         observations, infos = self.base_env.reset()
         return self._start_policy_episode(observations, infos), infos
 
-    def _append_episode_stats(self, infos) -> None:
-        stats = self.controller.get_stats()
-        episode_stats = {
-            "switch_selected_ao_rate": stats["selected_ao_rate"],
-            "switch_executed_ao_rate": stats["executed_ao_rate"],
-            "switch_wait_bypass_rate": stats["aoreplan_wait_bypass_rate"],
-            "branch_action_agreement_rate": stats["branch_action_agreement_rate"],
-        }
-        for info in infos:
-            target = info.setdefault("episode_extra_stats", {})
-            target.update(episode_stats)
-
     def step(self, selector_actions):
         if self._prepared is None:
             raise RuntimeError("reset() must be called before step().")
@@ -151,8 +139,6 @@ class ArpeSwitcherEnv(gym.Env):
 
         episode_finished = bool(done.size and np.all(done))
         if episode_finished:
-            self._append_episode_stats(infos)
-
             next_features = self._start_policy_episode(observations, infos)
         else:
             self._prepared = self.controller.prepare_actions(
