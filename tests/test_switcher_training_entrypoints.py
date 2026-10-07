@@ -21,7 +21,7 @@ def test_training_example_uses_current_candidate_and_wait_only_controller():
     manifest = json.loads((root / "configs/arpe_final_candidate.json").read_text())
     assert config["candidate_policy"] == manifest
     original = deepcopy(config)
-    _, flat = train_switcher.prepare_switcher_config(config)
+    flat = train_switcher.prepare_switcher_config(config)
     assert config == original
     assert flat.env == train_switcher.ENV_NAME
     assert flat.encoder_custom == "switcher"

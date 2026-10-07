@@ -4,6 +4,7 @@ import inspect
 from contextlib import nullcontext
 from types import SimpleNamespace
 
+import pytest
 import torch
 
 from learning.switcher_learner_patch import _build_switcher_calculate_losses
@@ -375,9 +376,10 @@ def test_guard_executes_the_actual_sample_factory_advantage_path_for_singleton()
     assert torch.isfinite(losses[5])
 
 
-def test_non_switcher_zero_valid_rows_are_rejected_before_loss_evaluation():
+@pytest.mark.parametrize("encoder_custom", ["switcher", "epom_trace_context"])
+def test_zero_valid_rows_are_rejected_before_loss_evaluation(encoder_custom):
     learner = _FakeLearner()
-    learner.cfg.encoder_custom = "epom_trace_context"
+    learner.cfg.encoder_custom = encoder_custom
     batch = _batch(
         actions=[1, 2, 3],
         advantages=[1.0, 2.0, 3.0],

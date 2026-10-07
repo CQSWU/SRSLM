@@ -49,7 +49,7 @@ def register_switcher_components() -> None:
     global_env_registry()[ENV_NAME] = create_switcher_env
 
 
-def prepare_switcher_config(config: dict) -> tuple[object, object]:
+def prepare_switcher_config(config: dict):
     payload = deepcopy(config)
     curriculum = payload.pop("population_curriculum", None)
     declaration = payload.pop("candidate_policy", None)
@@ -57,7 +57,7 @@ def prepare_switcher_config(config: dict) -> tuple[object, object]:
         raise ValueError("Switcher config requires candidate_policy.")
     artifact = ArpeCandidateArtifact.from_mapping(declaration, PROJECT_ROOT)
 
-    experiment, flat_config = base_train.validate_config(payload)
+    _, flat_config = base_train.validate_config(payload)
     if flat_config.encoder_custom != "switcher":
         raise ValueError("Switcher requires encoder_custom='switcher'.")
     if flat_config.env != ENV_NAME:
@@ -67,7 +67,7 @@ def prepare_switcher_config(config: dict) -> tuple[object, object]:
     flat_config.full_config["candidate_policy"] = artifact.as_dict()
     flat_config.candidate_policy = artifact.as_dict()
     flat_config.population_curriculum = curriculum
-    return experiment, flat_config
+    return flat_config
 
 
 def population_stages(curriculum, total_steps):
@@ -175,7 +175,7 @@ def main(argv=None) -> int:
         environment["training_num_agents_by_worker"] = [args.training_population] * int(
             config["async_ppo"]["num_workers"]
         )
-    _, flat_config = prepare_switcher_config(config)
+    flat_config = prepare_switcher_config(config)
     flat_config.use_env_info_cache = False
     flat_config.restart_behavior = "resume"
     if args.validate_only:

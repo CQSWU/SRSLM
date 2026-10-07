@@ -154,10 +154,22 @@ def test_goal_returns_explicit_wait_not_no_path():
 def test_standalone_does_not_commit_replaced_dynamic_actions():
     commits = []
     algorithm = AORePlan(AORePlanConfig())
-    algorithm._ao_wrapper = SimpleNamespace(
-        act=ActionSequence([0]).act,
-        agent=SimpleNamespace(commit_proposals=lambda mask: commits.append(mask)),
-        last_dynamic_override_mask=[True],
-    )
+    base = ActionSequence([None], coin=0.5)
+    base.commit_proposals = lambda mask: commits.append(mask)
+    algorithm._ao_wrapper = AORePlanWrapper(base)
+    algorithm._ao_wrapper.static_astar = FixedStaticAStar(4)
     assert algorithm.act(observation()) == [0]
     assert commits == [[False]]
+
+
+def test_wrapper_commits_only_executed_unreplaced_proposals():
+    commits = []
+    wrapper = AORePlanWrapper(
+        SimpleNamespace(
+            rnd=FixedRng(0.5),
+            commit_proposals=lambda mask: commits.append(mask),
+        )
+    )
+    wrapper.last_dynamic_override_mask = [False, True, False, True]
+    wrapper.commit_proposals([True, True, False, False])
+    assert commits == [[True, False, False, False]]

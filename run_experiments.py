@@ -31,11 +31,7 @@ DEFAULT_MAPS = {
 
 SUPPORTED_ALGORITHMS = ("AORePlan", "ARPE", "SRSLM")
 DEFAULT_ALGORITHMS = ("AORePlan",)
-ALGORITHM_ALIASES = {
-    "aoreplan": "AORePlan",
-    "arpe": "ARPE",
-    "srslm": "SRSLM",
-}
+ALGORITHM_ALIASES = {name.lower(): name for name in SUPPORTED_ALGORITHMS}
 
 def canonical_algorithm_name(value):
 
@@ -73,11 +69,10 @@ def _load_arpe_candidate_artifact(main_dir, manifest_path):
         raise ValueError("ARPE candidate manifest must be a JSON object.")
     from agents.arpe import ArpeCandidateArtifact
 
-    artifact = ArpeCandidateArtifact.from_mapping(
+    return ArpeCandidateArtifact.from_mapping(
         payload,
         Path(main_dir).resolve(),
     )
-    return artifact
 
 
 def build_algorithm(
@@ -100,19 +95,11 @@ def build_algorithm(
     if algo_name == "SRSLM":
         from agents.srslm import SRSLM, SRSLMConfig
         from agents.switcher import SwitcherConfig
-        from agents.arpe import ARPEConfig
 
         artifact = _load_arpe_candidate_artifact(main_dir, arpe_candidate_manifest)
-        candidate = ARPEConfig(
-            path_to_weights=str(artifact.weights_path),
-            milestone_checkpoint=str(artifact.checkpoint_path),
-            base_weights_path=str(artifact.base_weights_path),
-            base_checkpoint_path=str(artifact.base_checkpoint_path),
-        )
 
-        policy = SRSLM(
+        return SRSLM(
             SRSLMConfig(
-                candidate=candidate,
                 switcher=SwitcherConfig(
                     path_to_weights=str(
                         _project_path(
@@ -124,9 +111,8 @@ def build_algorithm(
                 ),
                 seed=seed,
             ),
-            project_root=Path(main_dir).resolve(),
+            candidate=artifact,
         )
-        return policy
 
     if algo_name == "ARPE":
         from agents.arpe import ARPE

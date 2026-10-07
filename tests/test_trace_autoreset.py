@@ -48,9 +48,9 @@ def environment_factory(monkeypatch):
 
         monkeypatch.setattr(
             train,
-            "make_env",
-            lambda env_cfg: make_pomapf(
-                grid_config=env_cfg.grid_config, auto_reset=auto_reset
+            "make_pomapf",
+            lambda *, grid_config: make_pomapf(
+                grid_config=grid_config, auto_reset=auto_reset
             ),
         )
         cfg = SimpleNamespace(

@@ -25,7 +25,7 @@ class planner:
 
         self._open: list[tuple[int, int, int, int]] = []
         self._closed: dict[tuple[int, int], tuple[int, int]] = {}
-        self._best_node = (INF, INF, 0, 0)
+        self._best_node = (INF, INF, 0)
 
     def _has_desired_position(self) -> bool:
         return self.desired_position[0] < INF
@@ -67,7 +67,6 @@ class planner:
         self._best_node = (
             self.start[0],
             self.start[1],
-            0,
             start_h,
         )
 
@@ -78,8 +77,8 @@ class planner:
             _f, g, i, j = heapq.heappop(self._open)
             current = i, j
             current_h = self._heuristic(current)
-            if current_h < self._best_node[3]:
-                self._best_node = (i, j, g, current_h)
+            if current_h < self._best_node[2]:
+                self._best_node = (i, j, current_h)
             steps += 1
 
             for neighbor in self._neighbors(current):

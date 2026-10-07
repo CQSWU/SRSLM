@@ -21,6 +21,7 @@ class _FrozenPolicy:
 
 class _FakeCandidate:
     def __init__(self, _artifact, *, seed, device):
+        self.artifact = _artifact
         self.seed = seed
         self.device = torch.device("cpu")
         self.ppo = _FrozenPolicy()
@@ -79,6 +80,18 @@ def test_srslm_rejects_a_switcher_without_candidate_paths():
             switcher_factory=_MissingCandidateSwitcher,
             planner_factory=_FakePlanner,
         )
+
+
+def test_srslm_uses_explicit_arpe_paths_without_a_configuration_roundtrip():
+    artifact = object()
+    algorithm = SRSLM(
+        _config(),
+        candidate=artifact,
+        candidate_factory=_FakeCandidate,
+        switcher_factory=_MissingCandidateSwitcher,
+        planner_factory=_FakePlanner,
+    )
+    assert algorithm.candidate.artifact is artifact
 
 
 @pytest.mark.parametrize("option,value", [("deterministic", True), ("checkpoint_kind", "best")])

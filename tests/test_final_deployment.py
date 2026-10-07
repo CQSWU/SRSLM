@@ -161,7 +161,6 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
     ):
         pytest.skip("Final model weights are distributed separately")
     from agents.srslm import SRSLM, SRSLMConfig
-    from agents.arpe import ARPEConfig
     from agents.switcher import SwitcherConfig
     from agents.switcher_core import build_switcher_state
     from pomapf_env.trace_routing import TIE_KEY
@@ -170,19 +169,12 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
 
     source_config = artifact.weights_path / "config.json"
     source_bytes = source_config.read_bytes()
-    candidate_cfg = ARPEConfig(
-        path_to_weights=str(artifact.weights_path),
-        milestone_checkpoint=str(artifact.checkpoint_path),
-        base_weights_path=str(artifact.base_weights_path),
-        base_checkpoint_path=str(artifact.base_checkpoint_path),
-    )
     policy = SRSLM(
         SRSLMConfig(
             device="cpu",
-            candidate=candidate_cfg,
             switcher=SwitcherConfig(path_to_weights=str(switcher_dir), device="cpu"),
         ),
-        project_root=ROOT,
+        candidate=artifact,
     )
     model = policy.candidate.ppo
     assert int(model.paper_entropy_gate_version) == 0

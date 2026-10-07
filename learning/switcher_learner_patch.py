@@ -109,7 +109,6 @@ def _build_switcher_calculate_losses(original: Callable) -> Callable:
 
         actor_valids = full_valids & switch_allowed
         full_num_invalids = _invalid_count(full_valids)
-        full_sample_count = int(full_valids.sum().item())
         actor_num_invalids = _invalid_count(actor_valids)
         actor_sample_count = int(actor_valids.sum().item())
 
@@ -136,16 +135,15 @@ def _build_switcher_calculate_losses(original: Callable) -> Callable:
             loss_summaries,
         ) = losses
 
-        if full_sample_count:
-            values = loss_summaries["values"].squeeze(-1)
-            value_loss = self._value_loss(
-                values,
-                mb["values"],
-                mb.returns,
-                self.cfg.ppo_clip_value,
-                full_valids,
-                full_num_invalids,
-            )
+        values = loss_summaries["values"].squeeze(-1)
+        value_loss = self._value_loss(
+            values,
+            mb["values"],
+            mb.returns,
+            self.cfg.ppo_clip_value,
+            full_valids,
+            full_num_invalids,
+        )
 
         if actor_sample_count < 2:
             zero = loss_summaries["values"].sum() * 0.0

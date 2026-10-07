@@ -26,18 +26,8 @@ class AORePlan:
     ):
         del rewards, dones, info
         actions = self._ao_wrapper.act(observations, skip_agents=skip_agents)
-        self._commit_current_actions(actions)
+        self._ao_wrapper.commit_proposals([action is not None for action in actions])
         return actions
-
-    def _commit_current_actions(self, actions):
-        base_mask = [
-            action is not None and not bool(overridden)
-            for action, overridden in zip(
-                actions,
-                self._ao_wrapper.last_dynamic_override_mask,
-            )
-        ]
-        self._ao_wrapper.agent.commit_proposals(base_mask)
 
     def set_grid_config(self, grid_config):
         collision_system = getattr(grid_config, "collision_system", None)

@@ -6,10 +6,9 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 import torch
-from pydantic import ValidationError
 
 import agents.arpe as arpe_module
-from agents.arpe import ARPE, ARPEConfig, ArpeCandidateArtifact
+from agents.arpe import ARPE, ArpeCandidateArtifact
 from learning.epom_trace_multiplier_actor_critic import InferenceCorrection
 from pomapf_env.trace_routing import draw_tie_ranks
 
@@ -85,14 +84,8 @@ def arpe_runtime(tmp_path, monkeypatch):
     ],
 )
 def test_retired_inference_overrides_are_not_accepted(field, value):
-    with pytest.raises(ValidationError, match=field):
-        ARPEConfig(
-            path_to_weights="unused",
-            milestone_checkpoint="missing.pth",
-            base_weights_path="base",
-            base_checkpoint_path="base.pth",
-            **{field: value},
-        )
+    with pytest.raises(TypeError, match=field):
+        ARPE(None, seed=0, device="cpu", **{field: value})
 
 
 def test_checkpoint_selection_never_silently_falls_back_to_best(arpe_runtime):
@@ -110,12 +103,15 @@ def test_checkpoint_selection_never_silently_falls_back_to_best(arpe_runtime):
     runtime.env.close.assert_called_once_with()
 
 
-def test_checkpoint_path_is_required():
-    with pytest.raises(ValidationError, match="milestone_checkpoint"):
-        ARPEConfig(
-            path_to_weights="unused",
-            base_weights_path="base",
-            base_checkpoint_path="base.pth",
+def test_checkpoint_path_is_required(tmp_path):
+    with pytest.raises(KeyError, match="checkpoint_path"):
+        ArpeCandidateArtifact.from_mapping(
+            {
+                "weights_path": "unused",
+                "base_weights_path": "base",
+                "base_checkpoint_path": "base.pth",
+            },
+            tmp_path,
         )
 
 

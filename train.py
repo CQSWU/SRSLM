@@ -91,12 +91,6 @@ _patch_checkpoint_loading()
 patch_switcher_learner_losses()
 
 
-def make_env(env_cfg: Environment | None = None):
-    if env_cfg is None:
-        env_cfg = Environment()
-    return make_pomapf(grid_config=env_cfg.grid_config)
-
-
 def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None):
     del render_mode
 
@@ -112,7 +106,7 @@ def create_pogema_env(full_env_name, cfg=None, env_config=None, render_mode=None
         env_config
     )
 
-    env = make_env(environment_config)
+    env = make_pomapf(grid_config=environment_config.grid_config)
 
     if full_env_name == "POMAPF-EPOM-ST-v0":
         environment = cfg.full_config["environment"]
@@ -371,7 +365,7 @@ def main():
             params.training_population
         ] * worker_count
 
-    exp, flat_config = validate_config(config)
+    _, flat_config = validate_config(config)
 
     if params.training_population is not None:
         flat_config.training_population = params.training_population

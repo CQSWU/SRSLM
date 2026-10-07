@@ -1,12 +1,15 @@
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 import yaml
 from pydantic import ValidationError
 
+import train
 from learning.config import (
+    Environment,
     Experiment,
     checkpoint_experiment_config,
 )
@@ -25,6 +28,29 @@ UNUSED_CONTEXT_FIELDS = {
 def _recipe():
     path = Path(__file__).resolve().parents[1] / "learning/train_arpe_final.yaml"
     return yaml.safe_load(path.read_text())
+
+
+@pytest.mark.parametrize("worker_index,population", [(0, 50), (1, 100), (2, 200)])
+def test_environment_factory_uses_worker_grid_without_modifying_recipe(
+    monkeypatch, worker_index, population
+):
+    environment = Environment(training_num_agents_by_worker=[50, 100, 200])
+    cfg = SimpleNamespace(full_config={"environment": environment.dict()})
+    original = deepcopy(cfg.full_config)
+    base, wrapped = object(), object()
+    factory = Mock(return_value=base)
+    matrix_wrapper = Mock(return_value=wrapped)
+    monkeypatch.setattr(train, "_ensure_patched", lambda: None)
+    monkeypatch.setattr(train, "make_pomapf", factory)
+    monkeypatch.setattr(train, "MatrixObservationWrapper", matrix_wrapper)
+    result = train.create_pogema_env(
+        "POMAPF-v0", cfg=cfg, env_config={"worker_index": worker_index}
+    )
+    expected_grid = environment.grid_config.copy(update={"num_agents": population})
+    factory.assert_called_once_with(grid_config=expected_grid)
+    matrix_wrapper.assert_called_once_with(base)
+    assert result is wrapped
+    assert cfg.full_config == original
 
 
 @pytest.mark.parametrize("kind", ["epom_trace", "epom_finetune", "nonexistent_trace"])

@@ -224,6 +224,16 @@ class AORePlanWrapper:
             position[1] + dy,
         ) == previous
 
+    def commit_proposals(self, executed_mask):
+        self.agent.commit_proposals(
+            [
+                bool(executed) and not overridden
+                for executed, overridden in zip(
+                    executed_mask, self.last_dynamic_override_mask
+                )
+            ]
+        )
+
     def act(self, observations, skip_agents=None):
         actions = list(self.agent.act(observations, skip_agents=skip_agents))
         self._ensure_state(len(actions))

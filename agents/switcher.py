@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from os.path import join
 from pathlib import Path
 from typing import Literal, Mapping
 
@@ -70,11 +69,11 @@ class Switcher:
         self.device = resolve_device(str(cfg.device).lower())
         actor.model_to_device(self.device)
 
-        checkpoint_dir = join(str(path), f"checkpoint_p{flat_config.policy_index}")
-        checkpoint_path = self._resolve_checkpoint(checkpoint_dir)
-        self.checkpoint_path = checkpoint_path
+        self.checkpoint_path = self._resolve_checkpoint(
+            path / f"checkpoint_p{flat_config.policy_index}"
+        )
         checkpoint = torch.load(
-            checkpoint_path,
+            self.checkpoint_path,
             map_location=self.device,
             weights_only=False,
         )
@@ -104,10 +103,9 @@ class Switcher:
         torch.manual_seed(int(self.cfg.seed or 0))
 
     def choose(self, state: Mapping[str, np.ndarray]) -> np.ndarray:
-        expected = SWITCHER_FIELD_SHAPES
         arrays = {}
         count = None
-        for key, trailing_shape in expected.items():
+        for key, trailing_shape in SWITCHER_FIELD_SHAPES.items():
             if key not in state:
                 raise ValueError(f"Switcher state is missing {key!r}.")
             array = np.asarray(state[key], dtype=np.float32)

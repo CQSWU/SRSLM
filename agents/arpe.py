@@ -4,11 +4,10 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Mapping
+from typing import Mapping
 
 import numpy as np
 import torch
-from pydantic import Extra
 from sample_factory.algo.utils.rl_utils import prepare_and_normalize_obs
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.envs.create_env import create_env
@@ -16,7 +15,7 @@ from sample_factory.model.actor_critic import create_actor_critic
 from sample_factory.model.model_utils import get_rnn_size
 from sample_factory.utils.utils import log
 
-from agents.utils_agents import AlgoBase, resolve_device
+from agents.utils_agents import resolve_device
 from learning.config import Environment, checkpoint_experiment_config
 from learning.epom_trace_multiplier_actor_critic import InferenceCorrection
 from learning.grid_memory import MultipleGridMemory
@@ -56,14 +55,6 @@ class ArpeCandidateArtifact:
             },
         )
 
-    @classmethod
-    def from_config(
-        cls,
-        config: "ARPEConfig",
-        project_root: Path,
-    ) -> "ArpeCandidateArtifact":
-        return cls.from_mapping(config.as_mapping(), project_root)
-
     def as_dict(self) -> dict[str, object]:
         result = {}
         for field in (
@@ -79,22 +70,6 @@ class ArpeCandidateArtifact:
                 else str(path)
             )
         return result
-
-
-class ARPEConfig(AlgoBase, extra=Extra.forbid):
-    name: Literal["ARPE"] = "ARPE"
-    path_to_weights: str
-    milestone_checkpoint: str
-    base_weights_path: str
-    base_checkpoint_path: str
-
-    def as_mapping(self) -> dict[str, object]:
-        return {
-            "weights_path": self.path_to_weights,
-            "checkpoint_path": self.milestone_checkpoint,
-            "base_weights_path": self.base_weights_path,
-            "base_checkpoint_path": self.base_checkpoint_path,
-        }
 
 
 class ARPE:
@@ -249,5 +224,4 @@ class ARPE:
 __all__ = [
     "ArpeCandidateArtifact",
     "ARPE",
-    "ARPEConfig",
 ]

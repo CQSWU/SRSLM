@@ -74,13 +74,7 @@ class AORePlanBranch:
         ):
             raise ValueError("A missing AORePlan proposal cannot be committed.")
 
-        base_mask = [
-            bool(matched) and not replaced
-            for matched, replaced in zip(
-                executed_mask, self._wrapper.last_dynamic_override_mask
-            )
-        ]
-        self._wrapper.agent.commit_proposals(base_mask)
+        self._wrapper.commit_proposals(executed_mask)
         self._pending = None
 
 

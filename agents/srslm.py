@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Callable, Literal
 
 import numpy as np
@@ -9,7 +8,6 @@ from pydantic import Extra, Field
 from agents.switcher import Switcher, SwitcherConfig
 from agents.arpe import (
     ARPE,
-    ARPEConfig,
     ArpeCandidateArtifact,
 )
 from agents.switcher_core import SwitcherController
@@ -21,7 +19,6 @@ class SRSLMConfig(AlgoBase, extra=Extra.forbid):
     name: Literal["SRSLM"] = "SRSLM"
     switcher: SwitcherConfig = SwitcherConfig()
     max_planning_steps: int = Field(10_000, gt=0)
-    candidate: ARPEConfig | None = None
 
 
 class SRSLM:
@@ -38,7 +35,7 @@ class SRSLM:
         self,
         cfg: SRSLMConfig,
         *,
-        project_root: Path | None = None,
+        candidate: ArpeCandidateArtifact | None = None,
         candidate_factory: Callable = ARPE,
         planner_factory: Callable = AORePlanBranch,
         switcher_factory: Callable = Switcher,
@@ -49,12 +46,8 @@ class SRSLM:
             update={"seed": cfg.seed},
         )
         self.switcher = switcher_factory(switcher_cfg)
-        candidate = getattr(self.switcher, "candidate_artifact", None)
-        if cfg.candidate is not None:
-            candidate = ArpeCandidateArtifact.from_config(
-                cfg.candidate,
-                project_root or Path(__file__).resolve().parents[1],
-            )
+        if candidate is None:
+            candidate = self.switcher.candidate_artifact
         if candidate is None:
             raise RuntimeError(
                 "Switcher checkpoint does not contain ARPE candidate paths."
