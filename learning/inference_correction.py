@@ -7,7 +7,6 @@ import torch
 @dataclass(frozen=True)
 class InferenceCorrection:
     entropy_threshold: float = 0.01
-    residual_scale: float = 12.0
     action_sampling: str = "direct_numpy"
 
     def __post_init__(self):
@@ -15,8 +14,6 @@ class InferenceCorrection:
             raise ValueError(
                 "Inference entropy_threshold must be finite and nonnegative."
             )
-        if not math.isfinite(self.residual_scale) or self.residual_scale < 0:
-            raise ValueError("Inference residual_scale must be finite and nonnegative.")
         if self.action_sampling not in {"torch", "direct_numpy"}:
             raise ValueError("Unsupported inference action_sampling.")
 
@@ -24,12 +21,12 @@ class InferenceCorrection:
         return (entropy > self.entropy_threshold).unsqueeze(-1)
 
     def apply(self, base_logits, residual, entropy):
-        scale = self.gate(entropy).to(base_logits) * self.residual_scale
-        learned_delta = scale * residual
+        gate = self.gate(entropy).to(base_logits)
+        learned_delta = gate * residual
         return (
             base_logits + learned_delta,
             learned_delta,
-            torch.zeros_like(scale),
+            torch.zeros_like(gate),
             entropy,
         )
 

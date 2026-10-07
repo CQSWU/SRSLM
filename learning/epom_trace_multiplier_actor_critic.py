@@ -14,15 +14,7 @@ PRIMAL3_ENTROPY_THRESHOLD = 0.46371241
 PRIMAL3_ENTROPY_EPS = 1e-10
 MOVES = ((0, 0), (-1, 0), (1, 0), (0, -1), (0, 1))
 PAPER_ENTROPY_FUSION_ARCHITECTURE = "paper_entropy_fusion"
-RESIDUAL_SCALE = 0.5
 TIE_KEY = "bonus_tie_ranks"
-
-
-def bounded_centered_residual(raw: torch.Tensor) -> torch.Tensor:
-    if raw.ndim != 2 or raw.shape[-1] != 5:
-        raise ValueError("raw correction must have shape [B,5]")
-    bounded = RESIDUAL_SCALE * torch.tanh(raw)
-    return bounded - bounded.mean(dim=-1, keepdim=True)
 
 
 def select_top2_low_pressure(logits, pressure, legal, tie_ranks):
@@ -412,13 +404,12 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         base_logits = base_logits.detach()
         entropy = cls._base_entropy(base_logits)
         gate = (entropy > entropy_threshold).to(base_logits.dtype).unsqueeze(-1)
-        residual = bounded_centered_residual(raw_correction)
         route = (
             select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
             if direct_bonus
             else torch.zeros_like(base_logits)
         )
-        learned_delta = gate * residual
+        learned_delta = gate * raw_correction
         final_logits = base_logits + direct_bonus * gate * route + learned_delta
         return final_logits, learned_delta, gate, entropy
 
@@ -439,7 +430,7 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
             base_logits = base_logits.detach()
             return inference.apply(
                 base_logits,
-                bounded_centered_residual(raw_correction),
+                raw_correction,
                 self._base_entropy(base_logits),
             )
         if self.learned_gate_mode == "entropy":
@@ -457,13 +448,17 @@ class EPOMTraceMultiplierActorCritic(_FrozenEPOMActorCritic):
         base_logits = base_logits.detach()
         entropy = self._base_entropy(base_logits)
         gate = torch.ones_like(base_logits[:, :1])
-        residual = bounded_centered_residual(raw_correction)
         route = (
             select_top2_low_pressure(base_logits, pressure, legal, tie_ranks)
             if self.rule_scale
             else torch.zeros_like(base_logits)
         )
-        return base_logits + self.rule_scale * route + residual, residual, gate, entropy
+        return (
+            base_logits + self.rule_scale * route + raw_correction,
+            raw_correction,
+            gate,
+            entropy,
+        )
 
     def forward_tail(self, core_output, values_only: bool, sample_actions: bool):
         if isinstance(core_output, PackedSequence):

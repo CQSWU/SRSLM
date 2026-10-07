@@ -13,7 +13,6 @@ from agents.switcher_core import SwitcherController
 from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
     EPOMTraceMultiplierActorCritic,
-    bounded_centered_residual,
     select_top2_low_pressure,
 )
 from learning.inference_correction import InferenceCorrection
@@ -22,17 +21,16 @@ from planning.aoreplan_branch import AORePlanStep
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_inference_gate_is_strict_and_scales_after_centering():
+def test_inference_gate_is_strict_and_uses_raw_correction():
     profile = InferenceCorrection()
     entropy = torch.tensor([0.0, 0.01, 0.010001, 1.0], dtype=torch.float64)
     logits = torch.arange(20, dtype=torch.float64).reshape(4, 5)
     raw = logits / 3
-    residual = bounded_centered_residual(raw)
-    final, learned, direct_gate, _ = profile.apply(logits, residual, entropy)
+    final, learned, direct_gate, _ = profile.apply(logits, raw, entropy)
     assert profile.gate(entropy).flatten().tolist() == [False, False, True, True]
     assert torch.equal(final[:2], logits[:2])
-    assert torch.equal(learned[2:], 12 * residual[2:])
-    assert torch.equal(final[2:], logits[2:] + 12 * residual[2:])
+    assert torch.equal(learned[2:], raw[2:])
+    assert torch.equal(final[2:], logits[2:] + raw[2:])
     assert torch.count_nonzero(direct_gate) == 0
 
 
@@ -58,12 +56,12 @@ def test_native_training_gate_remains_separate_from_inference(gate_mode):
     assert torch.equal(gate, expected_gate)
     route = select_top2_low_pressure(logits, pressure, legal, ranks)
     torch.testing.assert_close(
-        native, logits + gate * route + gate * bounded_centered_residual(raw)
+        native, logits + gate * route + gate * raw
     )
     model.inference_correction = InferenceCorrection()
     final, delta, direct_gate, _ = apply(model, logits, raw, pressure, legal, ranks)
     assert torch.equal(final[0], logits[0])
-    assert torch.equal(delta[1], 12 * bounded_centered_residual(raw)[1])
+    assert torch.equal(delta[1], raw[1])
     assert not direct_gate.any()
     assert model.learned_gate_mode == gate_mode and model.rule_scale == 1.0
     model.training = True
@@ -220,8 +218,25 @@ def test_final_weight_loading_and_small_cpu_forward_when_available():
         tau_free_mask=torch.ones(2, 1, 11, 11),
     )
     batch[TIE_KEY] = torch.arange(5).float().repeat(2, 2, 1)
-    with torch.no_grad():
-        result = model(batch, torch.zeros(2, get_rnn_size(policy.candidate.policy.cfg)))
+    captured = {}
+    hooks = [
+        model.action_parameterization.register_forward_hook(
+            lambda _module, _inputs, output: captured.update(base=output[0].detach())
+        ),
+        model.trace_multiplier_head.register_forward_hook(
+            lambda _module, _inputs, output: captured.update(raw=output.detach())
+        ),
+    ]
+    try:
+        with torch.no_grad():
+            result = model(batch, torch.zeros(2, get_rnn_size(policy.candidate.policy.cfg)))
+    finally:
+        for hook in hooks:
+            hook.remove()
+    gate = (model._base_entropy(captured["base"]) > 0.01).unsqueeze(-1)
+    torch.testing.assert_close(
+        result["action_logits"], captured["base"] + gate * captured["raw"], rtol=0, atol=0
+    )
     assert result["action_logits"].shape == (2, 5)
     assert torch.isfinite(result["action_logits"]).all()
     for key, value in model.state_dict().items():

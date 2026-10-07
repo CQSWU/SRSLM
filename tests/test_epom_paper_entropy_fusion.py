@@ -17,8 +17,6 @@ from learning.config import Experiment
 from learning.epom_trace_multiplier_actor_critic import (
     EPOMTraceMultiplierActorCritic,
     PAPER_ENTROPY_FUSION_ARCHITECTURE,
-    RESIDUAL_SCALE,
-    bounded_centered_residual,
     select_top2_low_pressure,
 )
 from train import register_custom_components, validate_config
@@ -127,16 +125,17 @@ def test_fusion_input_is_trace32_h512_z5_and_detaches_frozen_epom():
     assert logits.grad is None
 
 
-def test_residual_uses_tanh_then_five_action_mean_not_raw_subtraction():
-    raw = torch.tensor([[20.62, -30.0, 0.0, 2.0, -1.0], [4.0] * 5])
-    bounded = 0.5 * torch.tanh(raw)
-    expected = bounded - bounded.mean(dim=-1, keepdim=True)
-    actual = bounded_centered_residual(raw)
-    assert RESIDUAL_SCALE == 0.5
-    torch.testing.assert_close(actual, expected)
-    torch.testing.assert_close(actual.mean(dim=-1), torch.zeros(2), atol=1e-7, rtol=0)
-    assert actual.abs().max().item() <= 0.8 + 1e-7
-    assert not torch.allclose(actual, -raw)
+def test_residual_keeps_raw_magnitude_and_mean():
+    raw = torch.tensor([[20.62, -30.0, 0.0, 2.0, -1.0], [4.0] * 5], requires_grad=True)
+    base = torch.zeros_like(raw)
+    pressure, legal, ranks = _routing(2)
+    final, delta, _, _ = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
+        base, raw, pressure, legal, ranks, direct_bonus=0.0
+    )
+    assert torch.equal(delta, raw)
+    assert torch.equal(final, raw)
+    final.sum().backward()
+    assert torch.equal(raw.grad, torch.ones_like(raw))
 
 
 def test_no_direct_rule_ignores_pressure_and_keeps_entropy_gated_learning():
@@ -150,7 +149,7 @@ def test_no_direct_rule_ignores_pressure_and_keeps_entropy_gated_learning():
             base, raw, pressure, legal, ranks, direct_bonus=0.0
         )
     )
-    expected = base + gate * bounded_centered_residual(raw)
+    expected = base + gate * raw
     torch.testing.assert_close(final, expected)
     changed = EPOMTraceMultiplierActorCritic.apply_paper_entropy_correction_rule(
         base, raw, -100 * pressure, 1 - legal, ranks.flip(-1), direct_bonus=0.0
@@ -204,7 +203,7 @@ def test_zero_output_keeps_direct_bonus_and_closed_gate_keeps_base():
     torch.testing.assert_close(gate, torch.tensor([[1.0], [0.0]]))
 
 
-def test_v2_formula_is_direct_plus_entropy_gated_bounded_centered_residual():
+def test_formula_is_direct_plus_entropy_gated_raw_correction():
     base = torch.tensor([[0.0, 0.4, 0.3, 0.2, 0.1], [20.0, 0.4, 0.3, 0.2, 0.1]])
     raw = torch.tensor([[2.0, -1.0, 0.0, 4.0, -3.0], [1.0, 2.0, 3.0, 4.0, 5.0]])
     pressure, legal, ranks = _routing(2)
@@ -213,14 +212,12 @@ def test_v2_formula_is_direct_plus_entropy_gated_bounded_centered_residual():
             base, raw, pressure, legal, ranks
         )
     )
-    residual = 0.5 * torch.tanh(raw)
-    residual -= residual.mean(dim=-1, keepdim=True)
     expected = base.clone()
     expected[0, 2] += 1.0
-    expected[0] += residual[0]
+    expected[0] += raw[0]
     torch.testing.assert_close(gate, torch.tensor([[1.0], [0.0]]))
     torch.testing.assert_close(final, expected)
-    torch.testing.assert_close(delta, residual * gate)
+    torch.testing.assert_close(delta, raw * gate)
 
 
 def test_entropy_closed_rows_have_no_actor_gradient_but_open_rows_adjust_all_actions():

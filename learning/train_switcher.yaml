@@ -9,7 +9,6 @@ candidate_policy:
   base_checkpoint_path: weights/EPOM-L/checkpoint_p0/checkpoint_000024418_100016128.pth
   inference:
     entropy_threshold: 0.01
-    residual_scale: 12.0
     action_sampling: direct_numpy
 global_settings:
   train_dir: weights/switcher_training
